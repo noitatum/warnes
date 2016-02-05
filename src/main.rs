@@ -40,7 +40,7 @@ struct CPU{
 
 impl fmt::Display for CPU {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{{ A:{}, X:{}, Y:{}, P:{}, SP:{}, PC:{}  }}",
+        write!(f, "{{ A: {}, X: {}, Y: {}, P: {}, SP: {}, PC: {} }}",
                self.A, self.X, self.Y, self.P, self.SP, self.PC)
     }
 }
