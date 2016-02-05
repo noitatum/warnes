@@ -1,3 +1,4 @@
+#[allow(non_snake_case)]
 #[derive(Default, Debug)]
 struct CPU{
     A : u8,  // Accumulator
