@@ -4,9 +4,9 @@ struct CPU{
     A : u8,  // Accumulator
     X : u8,  // Indexes
     Y : u8,  
-    S : u8,  // Stack pointer
     P : u8,  // Status
-    PC: u8,  // Program counter
+    SP: u8,  // Stack pointer
+    PC: u16, // Program counter
 }
 
 
