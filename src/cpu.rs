@@ -24,8 +24,8 @@ impl CPU {
             A : 0,
             X : 0,
             Y : 0,
-            P : 0,
-            SP : 0,
+            P : 0x24, 
+            SP : 0xfd,
             PC : 0,
         }
     }
