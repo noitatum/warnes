@@ -1,20 +1,25 @@
 use std::fmt;
 use mem;
 
+// TODO: Separate into multiple arrays
+const opcode_space : usize = 2;
+const opcode_table : [fn(&CPU, &mem::Memory) -> (); opcode_space] = [
+   CPU::brk,
+   CPU::invalid,
+  ];
+
 #[allow(non_snake_case)]
-pub struct CPU{
+pub struct CPU {
     A : u8,  // Accumulator
     X : u8,  // Indexes
     Y : u8,  
     P : u8,  // Status
     SP: u8,  // Stack pointer
     PC: u16, // Program counter
-
-    mem : mem::Memory,
 }
 
 impl CPU {
-    pub fn new(memory: mem::Memory) -> CPU {
+    pub fn new() -> CPU {
         CPU {
             A : 0,
             X : 0,
@@ -22,10 +27,21 @@ impl CPU {
             P : 0,
             SP : 0,
             PC : 0,
-            
-            mem : memory,  
         }
-    } 
+    }
+
+    pub fn execute(&self, memory: &mem::Memory) -> () {
+
+    }
+
+    fn invalid(&self, memory: &mem::Memory) -> () {
+
+    }
+
+    fn brk(&self, memory: &mem::Memory) -> () {
+        
+    }
+
 }
 
 impl fmt::Display for CPU {
