@@ -10,11 +10,11 @@ pub struct CPU{
     SP: u8,  // Stack pointer
     PC: u16, // Program counter
 
-    mem : Box<mem::Memory>,
+    mem : mem::Memory,
 }
 
-impl Default for CPU {
-    fn default() -> CPU {
+impl CPU {
+    pub fn new(memory: mem::Memory) -> CPU {
         CPU {
             A : 0,
             X : 0,
@@ -22,8 +22,8 @@ impl Default for CPU {
             P : 0,
             SP : 0,
             PC : 0,
-
-            mem : Box::new(mem::Memory::default()),
+            
+            mem : memory,  
         }
     } 
 }

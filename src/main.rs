@@ -3,6 +3,7 @@ mod cpu;
 mod mem;
 
 fn main() {
-    let c = cpu::CPU::default();
-    println!("{}", c);
+    let memory = mem::Memory::default();
+    let cpu = cpu::CPU::new(memory);
+    println!("{}", cpu);
 }
