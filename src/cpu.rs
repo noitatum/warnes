@@ -1,14 +1,15 @@
 use std::fmt;
-use mem;
+use mem::Memory as Mem;
+use std::num::Wrapping as W;
 
-const OP_SPECIAL_TABLE : [fn(&CPU, &mem::Memory) -> (); 4] = [
+const OP_SPECIAL_TABLE : [fn(&mut CPU, &mut Mem) -> (); 4] = [
     CPU::brk,
     CPU::invalid,
     CPU::rti,
     CPU::rts,
 ];
 
-const OP_BRANCH_TABLE : [fn(&CPU, &mem::Memory, i8) -> (); 8] = [
+const OP_BRANCH_TABLE : [fn(&mut CPU, &mut Mem, i8) -> (); 8] = [
     CPU::bpl,
     CPU::bmi,
     CPU::bvc,
@@ -19,7 +20,7 @@ const OP_BRANCH_TABLE : [fn(&CPU, &mem::Memory, i8) -> (); 8] = [
     CPU::beq,
 ];
 
-const OP_IMPLIED_TABLE : [fn(&CPU, &mem::Memory) -> (); 32] = [
+const OP_IMPLIED_TABLE : [fn(&mut CPU, &mut Mem) -> (); 32] = [
     CPU::php,
     CPU::asl_a,
     CPU::clc,
@@ -54,7 +55,7 @@ const OP_IMPLIED_TABLE : [fn(&CPU, &mem::Memory) -> (); 32] = [
     CPU::invalid,
 ];
 
-const OP_COMMON_TABLE : [fn(&CPU, &mem::Memory, u8) -> (); 32] = [
+const OP_COMMON_TABLE : [fn(&mut CPU, &mut Mem, u8) -> (); 32] = [
     CPU::invalid_c,
     CPU::ora,
     CPU::asl,
@@ -99,60 +100,83 @@ const OP_IMPLIED_MASK  : u8 = 0x1F;
 const OP_IMPLIED       : u8 = 0x08;
 const OP_JSR           : u8 = 0x20;
 
+const STACK_PAGE       : u16 = 0x0100;
+
 #[allow(non_snake_case)]
 pub struct CPU {
-    A : u8,  // Accumulator
-    X : u8,  // Indexes
-    Y : u8,  
-    P : u8,  // Status
-    SP: u8,  // Stack pointer
-    PC: u16, // Program counter
+    A : W<u8>,  // Accumulator
+    X : W<u8>,  // Indexes
+    Y : W<u8>,  
+    P : W<u8>,  // Status
+    SP: W<u8>,  // Stack pointer
+    PC: W<u16>, // Program counter
 }
 
-fn load_word(memory: &mem::Memory, address: u16) -> u16 () {
-    let mut ret : u16 = memory.load(address) as u16;
-    ret <<= 8;
-    ret |= memory.load(address + 1) as u16;
-    return ret;
+fn load_word(memory: &mut Mem, address: W<u16>) -> u16 {
+    let low = memory.load(address.0) as u16;
+    (memory.load((address + W(1)).0) as u16) << 8 | low
+}
+
+fn write_word(memory: &mut Mem, address: W<u16>, word: u16) {
+    memory.write(address.0, (word >> 8) as u8);
+    memory.write((address + W(1)).0, word as u8);
 }
 
 impl CPU {
     pub fn new() -> CPU {
         CPU {
-            A : 0,
-            X : 0,
-            Y : 0,
-            P : 0x24, 
-            SP : 0xfd,
-            PC : 0,
+            A : W(0),
+            X : W(0),
+            Y : W(0),
+            P : W(0x24), 
+            SP : W(0xff),
+            PC : W(0),
         }
     }
 
-    pub fn execute(&self, memory: &mem::Memory) -> () {
+    fn pop(&mut self, memory: &mut Mem) -> u8 {
+        self.SP = self.SP + W(1);
+        memory.load(STACK_PAGE | (self.SP.0 as u16))
+    }
+
+    fn push(&mut self, memory: &mut Mem, byte: u8) {
+        memory.write(STACK_PAGE | (self.SP.0 as u16), byte);
+        self.SP = self.SP - W(1);
+    }
+
+    fn push_word(&mut self, memory: &mut Mem, word: u16) {
+        self.push(memory, (word >> 8) as u8);
+        self.push(memory, word as u8);
+    }
+
+    fn pop_word(&mut self, memory: &mut Mem) -> u16 {
+        let low = self.pop(memory) as u16; 
+        (self.pop(memory) as u16) << 8 | low
+    }
+
+    pub fn execute(&mut self, memory: &mut Mem) {
         let mut pc = self.PC;
-        let opcode = memory.load(pc);
-        pc += 1;
+        let opcode = memory.load(pc.0);
+        pc = pc + W(1);
         if opcode & OP_JUMP_MASK == OP_JUMP {
             /* JMP */
             let mut address = load_word(memory, pc); 
             if opcode & !OP_JUMP_MASK > 0 {
                 // Indirect Jump, +2 Cycles
-                address = load_word(memory, address);
+                address = load_word(memory, W(address));
             } 
             self.jmp(memory, address);
         } else if opcode & OP_SPECIAL_MASK == OP_SPECIAL {
             /* Special */
             if opcode == OP_JSR {
-                // TODO: Check PC
-                let address = load_word(memory, pc);
-                self.jsr(memory, address);
+                self.jsr(memory);
             } else {
                 let index = (opcode >> 5) & 0x3;
                 OP_SPECIAL_TABLE[index as usize](self, memory);
             }
         } else if opcode & OP_BRANCH_MASK == OP_BRANCH {
             /* Branch */
-            let mut offset = memory.load(pc) as i8;
+            let mut offset = memory.load(pc.0) as i8;
             // To sign-magnitude
             if offset < 0 { 
                 offset = -(offset & 0x7F);
@@ -178,259 +202,262 @@ impl CPU {
 
     // Special
 
-    fn invalid(&self, memory: &mem::Memory) -> () {
+    fn invalid(&mut self, memory: &mut Mem) -> () {
 
     }
 
-    fn brk(&self, memory: &mem::Memory) -> () {
+    fn brk(&mut self, memory: &mut Mem) -> () {
         
     }
 
-    fn rti(&self, memory: &mem::Memory) -> () {
+    fn rti(&mut self, memory: &mut Mem) -> () {
         
     }
 
-    fn rts(&self, memory: &mem::Memory) -> () {
+    fn rts(&mut self, memory: &mut Mem) -> () {
         
     }
 
     // Jumps
 
-    fn jmp(&self, memory: &mem::Memory, address: u16) {
-
+    fn jmp(&mut self, memory: &mut Mem, address: u16) {
+        
     }
 
-    fn jsr(&self, memory: &mem::Memory, address: u16) {
-
+    fn jsr(&mut self, memory: &mut Mem) {
+        let pc = self.PC + W(1);
+        let address = load_word(memory, pc);
+        self.push_word(memory, (pc + W(2)).0);
+        self.PC = W(address);
     }
 
     // Branches
 
-    fn bpl (&self, memory: &mem::Memory, offset: i8) {
+    fn bpl (&mut self, memory: &mut Mem, offset: i8) {
 
     }
 
-    fn bmi (&self, memory: &mem::Memory, offset: i8) {
+    fn bmi (&mut self, memory: &mut Mem, offset: i8) {
 
     }
 
-    fn bvc (&self, memory: &mem::Memory, offset: i8) {
+    fn bvc (&mut self, memory: &mut Mem, offset: i8) {
 
     }
 
-    fn bvs (&self, memory: &mem::Memory, offset: i8) {
+    fn bvs (&mut self, memory: &mut Mem, offset: i8) {
 
     }
 
-    fn bcc (&self, memory: &mem::Memory, offset: i8) {
+    fn bcc (&mut self, memory: &mut Mem, offset: i8) {
 
     }
 
-    fn bcs (&self, memory: &mem::Memory, offset: i8) {
+    fn bcs (&mut self, memory: &mut Mem, offset: i8) {
 
     }
 
-    fn bne (&self, memory: &mem::Memory, offset: i8) {
+    fn bne (&mut self, memory: &mut Mem, offset: i8) {
 
     }
 
-    fn beq (&self, memory: &mem::Memory, offset: i8) {
+    fn beq (&mut self, memory: &mut Mem, offset: i8) {
 
     }
     
     // Implied
 
-    fn php (&self, memory: &mem::Memory) {
+    fn php (&mut self, memory: &mut Mem) {
 
     }
 
-    fn asl_a (&self, memory: &mem::Memory) {
+    fn asl_a (&mut self, memory: &mut Mem) {
 
     }
 
-    fn clc (&self, memory: &mem::Memory) {
+    fn clc (&mut self, memory: &mut Mem) {
 
     }
 
-    fn plp (&self, memory: &mem::Memory) {
+    fn plp (&mut self, memory: &mut Mem) {
 
     }
 
-    fn rol_a (&self, memory: &mem::Memory) {
+    fn rol_a (&mut self, memory: &mut Mem) {
 
     }
 
-    fn sec (&self, memory: &mem::Memory) {
+    fn sec (&mut self, memory: &mut Mem) {
 
     }
 
-    fn pha (&self, memory: &mem::Memory) {
+    fn pha (&mut self, memory: &mut Mem) {
 
     }
 
-    fn lsr_a (&self, memory: &mem::Memory) {
+    fn lsr_a (&mut self, memory: &mut Mem) {
 
     }
 
-    fn cli (&self, memory: &mem::Memory) {
+    fn cli (&mut self, memory: &mut Mem) {
 
     }
 
-    fn pla (&self, memory: &mem::Memory) {
+    fn pla (&mut self, memory: &mut Mem) {
 
     }
 
-    fn ror_a (&self, memory: &mem::Memory) {
+    fn ror_a (&mut self, memory: &mut Mem) {
 
     }
 
-    fn sei (&self, memory: &mem::Memory) {
+    fn sei (&mut self, memory: &mut Mem) {
 
     }
 
-    fn dey (&self, memory: &mem::Memory) {
+    fn dey (&mut self, memory: &mut Mem) {
 
     }
 
-    fn txa (&self, memory: &mem::Memory) {
+    fn txa (&mut self, memory: &mut Mem) {
 
     }
 
-    fn tya (&self, memory: &mem::Memory) {
+    fn tya (&mut self, memory: &mut Mem) {
 
     }
 
-    fn txs (&self, memory: &mem::Memory) {
+    fn txs (&mut self, memory: &mut Mem) {
 
     }
 
-    fn tay (&self, memory: &mem::Memory) {
+    fn tay (&mut self, memory: &mut Mem) {
 
     }
 
-    fn tax (&self, memory: &mem::Memory) {
+    fn tax (&mut self, memory: &mut Mem) {
 
     }
 
-    fn clv (&self, memory: &mem::Memory) {
+    fn clv (&mut self, memory: &mut Mem) {
 
     }
 
-    fn tsx (&self, memory: &mem::Memory) {
+    fn tsx (&mut self, memory: &mut Mem) {
 
     }
 
-    fn iny (&self, memory: &mem::Memory) {
+    fn iny (&mut self, memory: &mut Mem) {
 
     }
 
-    fn dex (&self, memory: &mem::Memory) {
+    fn dex (&mut self, memory: &mut Mem) {
 
     }
 
-    fn cld (&self, memory: &mem::Memory) {
+    fn cld (&mut self, memory: &mut Mem) {
 
     }
 
-    fn inx (&self, memory: &mem::Memory) {
+    fn inx (&mut self, memory: &mut Mem) {
 
     }
 
-    fn nop (&self, memory: &mem::Memory) {
+    fn nop (&mut self, memory: &mut Mem) {
 
     }
 
-    fn sed (&self, memory: &mem::Memory) {
+    fn sed (&mut self, memory: &mut Mem) {
 
     }
 
     // Common
 
-    fn invalid_c(&self, memory: &mem::Memory, addressing: u8) -> () {
+    fn invalid_c(&mut self, memory: &mut Mem, addressing: u8) -> () {
 
     }
 
-    fn ora (&self, memory: &mem::Memory, addressing: u8) {
+    fn ora (&mut self, memory: &mut Mem, addressing: u8) {
 
     }
 
-    fn asl (&self, memory: &mem::Memory, addressing: u8) {
+    fn asl (&mut self, memory: &mut Mem, addressing: u8) {
 
     }
 
-    fn bit (&self, memory: &mem::Memory, addressing: u8) {
+    fn bit (&mut self, memory: &mut Mem, addressing: u8) {
 
     }
 
-    fn and (&self, memory: &mem::Memory, addressing: u8) {
+    fn and (&mut self, memory: &mut Mem, addressing: u8) {
 
     }
 
-    fn rol (&self, memory: &mem::Memory, addressing: u8) {
+    fn rol (&mut self, memory: &mut Mem, addressing: u8) {
 
     }
 
-    fn eor (&self, memory: &mem::Memory, addressing: u8) {
+    fn eor (&mut self, memory: &mut Mem, addressing: u8) {
 
     }
 
-    fn lsr (&self, memory: &mem::Memory, addressing: u8) {
+    fn lsr (&mut self, memory: &mut Mem, addressing: u8) {
 
     }
 
-    fn adc (&self, memory: &mem::Memory, addressing: u8) {
+    fn adc (&mut self, memory: &mut Mem, addressing: u8) {
 
     }
 
-    fn ror (&self, memory: &mem::Memory, addressing: u8) {
+    fn ror (&mut self, memory: &mut Mem, addressing: u8) {
 
     }
 
-    fn sty (&self, memory: &mem::Memory, addressing: u8) {
+    fn sty (&mut self, memory: &mut Mem, addressing: u8) {
 
     }
 
-    fn sta (&self, memory: &mem::Memory, addressing: u8) {
+    fn sta (&mut self, memory: &mut Mem, addressing: u8) {
 
     }
 
-    fn stx (&self, memory: &mem::Memory, addressing: u8) {
+    fn stx (&mut self, memory: &mut Mem, addressing: u8) {
 
     }
 
-    fn ldy (&self, memory: &mem::Memory, addressing: u8) {
+    fn ldy (&mut self, memory: &mut Mem, addressing: u8) {
 
     }
 
-    fn lda (&self, memory: &mem::Memory, addressing: u8) {
+    fn lda (&mut self, memory: &mut Mem, addressing: u8) {
 
     }
 
-    fn ldx (&self, memory: &mem::Memory, addressing: u8) {
+    fn ldx (&mut self, memory: &mut Mem, addressing: u8) {
 
     }
 
-    fn cpy (&self, memory: &mem::Memory, addressing: u8) {
+    fn cpy (&mut self, memory: &mut Mem, addressing: u8) {
 
     }
 
-    fn cmp (&self, memory: &mem::Memory, addressing: u8) {
+    fn cmp (&mut self, memory: &mut Mem, addressing: u8) {
 
     }
 
-    fn dec (&self, memory: &mem::Memory, addressing: u8) {
+    fn dec (&mut self, memory: &mut Mem, addressing: u8) {
 
     }
 
-    fn cpx (&self, memory: &mem::Memory, addressing: u8) {
+    fn cpx (&mut self, memory: &mut Mem, addressing: u8) {
 
     }
 
-    fn sbc (&self, memory: &mem::Memory, addressing: u8) {
+    fn sbc (&mut self, memory: &mut Mem, addressing: u8) {
 
     }
    
-    fn inc (&self, memory: &mem::Memory, addressing: u8) {
+    fn inc (&mut self, memory: &mut Mem, addressing: u8) {
 
     }
 }
@@ -438,6 +465,6 @@ impl CPU {
 impl fmt::Display for CPU {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{{ A: {}, X: {}, Y: {}, P: {}, SP: {}, PC: {} }}",
-               self.A, self.X, self.Y, self.P, self.SP, self.PC)
+               self.A.0 , self.X.0 , self.Y.0 , self.P.0 , self.SP.0 , self.PC.0)
     }
 }

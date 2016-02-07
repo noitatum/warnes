@@ -7,6 +7,6 @@ fn main() {
     let mut cpu = cpu::CPU::new();
     let mut ppu = ppu::Ppu::new();
     let mut memory = mem::Memory::new(ppu);
-    cpu.execute(&memory);
+    cpu.execute(&mut memory);
     println!("{}", cpu);
 }
