@@ -1,4 +1,3 @@
-
 pub struct Ppu {
     pub ppuctrl     : u8,
     pub ppumask     : u8,
@@ -9,7 +8,6 @@ pub struct Ppu {
     pub ppuaddr     : u8,
     pub ppudata     : u8,
 }
-
 
 impl Ppu {
     pub fn new () -> Ppu {
