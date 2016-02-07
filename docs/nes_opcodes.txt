@@ -1,0 +1,163 @@
+Jumps 
+
+01W01100
+
+XYZ | OP
+----+----
+  0 | JMP (ABS)
+  1 | JMP (IND)
+
+========
+
+Special instructions
+
+0WW00000
+
+WW | OP
+---+----
+ 0 | BRK
+ 1 | JSR (ABS)
+ 2 | RTI
+ 3 | RTS
+
+========
+
+Branch Instructions
+
+WWW10000
+
+WWW | OP
+----+----
+  0 | BPL
+  1 | BMI
+  2 | BVC
+  3 | BVS
+  4 | BCC
+  5 | BCS
+  6 | BNE
+  7 | BEQ
+
+All relative
+
+========
+
+Implied instructions
+
+WWW01000
+
+WWW | OP
+----+----
+  0 | PHP
+  1 | PLP
+  2 | PHA
+  3 | PLA
+  4 | DEY
+  5 | TAY
+  6 | INY
+  7 | INX
+
+WWW01010
+
+WWW | OP
+----+----
+  0 | ASL A
+  1 | ROL A
+  2 | LSR A
+  3 | ROR A
+  4 | TXA
+  5 | TAX
+  6 | DEX
+  7 | NOP
+
+WWW11000
+
+WWW | OP
+----+----
+  0 | CLC
+  1 | SEC
+  2 | CLI
+  3 | SEI
+  4 | TYA
+  5 | CLV
+  6 | CLD
+  7 | SED
+
+WWW11010
+  
+WWW | OP
+----+----
+  0 | ___
+  1 | ___
+  2 | ___
+  3 | ___
+  4 | TXS 
+  5 | TSX
+  6 | ___
+  7 | ___
+
+========
+
+Opcode Addressing
+
+___XYZ__ (Mostly)
+
+XYZ | TYPE    
+----+---------
+  0 | (IND, X)
+  1 | ZPG     
+  2 | IMM     
+  3 | ABS     
+  4 | (IND), Y
+  5 | ZPG, X  
+  6 | ABS, Y 
+  7 | ABS, X 
+
+========
+
+WWWXYZ01
+
+WWW | OP
+----+----
+  0 | ORA
+  1 | AND
+  2 | EOR
+  3 | ADC
+  4 | STA (No IMM)
+  5 | LDA 
+  6 | CMP 
+  7 | SBC 
+
+========
+
+WWWXYZ10
+Z = 1
+
+WWW | OP
+----+----
+  0 | ASL (2)
+  1 | ROL (2)
+  2 | LSR (2)
+  3 | ROR (2)
+  4 | STX (No ABS, X)
+  5 | LDX (1) 
+  6 | DEC
+  7 | INC
+
+========
+
+WWWXYZ00 
+X = 0, Z = 1
+
+WWW | OP
+----+----
+  0 | ___ 
+  1 | BIT 
+  2 | ___ 
+  3 | ___ 
+  4 | STY (Has XYZ = 5)
+  5 | LDY (1) (X may be 1)
+  6 | CPY (1)
+  7 | CPX (1)
+
+(1): IMM load at Z = 0
+(2): Operates on A at XYZ = 2 
