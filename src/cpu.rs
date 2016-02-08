@@ -353,44 +353,36 @@ impl CPU {
 // Branch conditions
 
 impl CPU {
-    #[allow(non_snake_case)]
-    fn bpl (Flags: u8) -> bool {
-        Flags & FLAG_SIGN_MASK == 0
+    fn bpl (flags: u8) -> bool {
+        flags & FLAG_SIGN_MASK == 0
     }
 
-    #[allow(non_snake_case)]
-    fn bmi (Flags: u8) -> bool {
-        Flags & FLAG_SIGN_MASK != 0
+    fn bmi (flags: u8) -> bool {
+        flags & FLAG_SIGN_MASK != 0
     }
 
-    #[allow(non_snake_case)]
-    fn bvc (Flags: u8) -> bool {
-        Flags & FLAG_OVER_MASK == 0
+    fn bvc (flags: u8) -> bool {
+        flags & FLAG_OVER_MASK == 0
     }
 
-    #[allow(non_snake_case)]
-    fn bvs (Flags: u8) -> bool {
-        Flags & FLAG_OVER_MASK != 0
+    fn bvs (flags: u8) -> bool {
+        flags & FLAG_OVER_MASK != 0
     }
 
-    #[allow(non_snake_case)]
-    fn bcc (Flags: u8) -> bool {
-        Flags & FLAG_CARRY_MASK == 0
+    fn bcc (flags: u8) -> bool {
+        flags & FLAG_CARRY_MASK == 0
     }
 
-    #[allow(non_snake_case)]
-    fn bcs (Flags: u8) -> bool {
-        Flags & FLAG_CARRY_MASK != 0
+    fn bcs (flags: u8) -> bool {
+        flags & FLAG_CARRY_MASK != 0
     }
 
-    #[allow(non_snake_case)]
-    fn bne (Flags: u8) -> bool {
-        Flags & FLAG_ZERO_MASK == 0
+    fn bne (flags: u8) -> bool {
+        flags & FLAG_ZERO_MASK == 0
     }
 
-    #[allow(non_snake_case)]
-    fn beq (Flags: u8) -> bool {
-        Flags & FLAG_ZERO_MASK != 0
+    fn beq (flags: u8) -> bool {
+        flags & FLAG_ZERO_MASK != 0
     }
 
 }
