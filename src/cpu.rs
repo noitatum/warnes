@@ -2,61 +2,87 @@ use std::fmt;
 use mem::Memory as Mem;
 use std::num::Wrapping as W;
 
+const FLAG_CARRY_MASK   : u8 = 0x01;
+const FLAG_ZERO_MASK    : u8 = 0x02;
+const FLAG_INT_MASK     : u8 = 0x04;
+const FLAG_DEC_MASK     : u8 = 0x08;
+const FLAG_BRK_MASK     : u8 = 0x10;
+const FLAG_UNUSED_MASK  : u8 = 0x20;
+const FLAG_OVER_MASK    : u8 = 0x40;
+const FLAG_SIGN_MASK    : u8 = 0x80;
+
 macro_rules! set_overflow {
-    ($flags:expr) => ($flags = $flags | (1 << 6));
+    ($flags:expr) => ($flags |= FLAG_OVER_MASK);
 }
 
 macro_rules! unset_overflow {
-    ($flags:expr) => ($flags = $flags & !(1 << 6));
+    ($flags:expr) => ($flags &= !FLAG_OVER_MASK);
+}
+
+macro_rules! set_sign {
+    ($flags:expr) => ($flags |= FLAG_SIGN_MASK);
+}
+
+macro_rules! unset_sign { 
+    ($flags:expr) => ($flags &= !FLAG_SIGN_MASK);
+}
+
+macro_rules! set_break {
+    ($flags:expr) => ($flags |= FLAG_BRK_MASK);
+}
+
+macro_rules! unset_break {
+    ($flags:expr) => ($flags &= !FLAG_BRK_MASK);
+}
+
+macro_rules! set_decimal {
+    ($flags:expr) => ($flags |= FLAG_DEC_MASK);
+}
+
+macro_rules! unset_decimal {
+    ($flags:expr) => ($flags &= !FLAG_DEC_MASK);
+}
+
+macro_rules! set_interrupt {
+    ($flags:expr) => ($flags |= FLAG_INT_MASK);
+}
+
+macro_rules! unset_interrupt {
+    ($flags:expr) => ($flags &= !FLAG_INT_MASK);
+}
+
+macro_rules! set_zero {
+    ($flags:expr) => ($flags |= FLAG_ZERO_MASK);
+}
+
+macro_rules! unset_zero {
+    ($flags:expr) => ($flags &= !FLAG_ZERO_MASK);
+}
+
+macro_rules! set_carry {
+    ($flags:expr) => ($flags |= FLAG_CARRY_MASK);
+}
+
+macro_rules! unset_carry {
+    ($flags:expr) => ($flags &= !FLAG_CARRY_MASK);
 }
 
 macro_rules! uset_negative {
     ($flags:expr, $val:expr) => ( 
         if ($val & W(1 << 7)) == W(0) {
-            $flags = $flags & !(1 << 7)
-        }else{
-            $flags = $flags | (1 << 7)
+            unset_sign!($flags);
+        } else {
+            set_sign!($flags);
         });
 }
 
-macro_rules! set_break {
-    ($flags:expr) => ($flags = $flags | (1 << 4));
-}
-
-macro_rules! unset_break {
-    ($flags:expr) => ($flags = $flags & !(1 << 4));
-}
-
-macro_rules! set_decimal {
-    ($flags:expr) => ($flags = $flags | (1 << 3));
-}
-
-macro_rules! unset_decimal {
-    ($flags:expr) => ($flags = $flags & !(1 << 3));
-}
-
-macro_rules! set_interrupt {
-    ($flags:expr) => ($flags = $flags | (1 << 2));
-}
-
-macro_rules! unset_interrupt {
-    ($flags:expr) => ($flags = $flags & !(1 << 2));
-}
-
-macro_rules! set_zero {
-    ($flags:expr) => ($flags = $flags | (1 << 1));
-}
-
-macro_rules! unset_zero {
-    ($flags:expr) => ($flags = $flags & !(1 << 1));
-}
-
-macro_rules! set_carry {
-    ($flags:expr) => ($flags = $flags | (1));
-}
-
-macro_rules! unset_carry {
-    ($flags:expr) => ($flags = $flags & !(1));
+macro_rules! uset_zero {
+    ($flags:expr, $val:expr) => (
+        if $val == W(0) {
+            set_zero!($flags);
+        } else {
+            unset_zero!($flags);
+        });
 }
 
 const OP_SPECIAL_TABLE : [fn(&mut CPU, &mut Mem) -> u32; 4] = [
@@ -174,15 +200,6 @@ const OP_COMMON_B       : u8 = 0x02;
 const STACK_PAGE        : u16 = 0x0100;
 const PAGE_MASK         : u16 = 0xFF00;
 
-const FLAG_CARRY_MASK   : u8 = 0x01;
-const FLAG_ZERO_MASK    : u8 = 0x02;
-const FLAG_INT_MASK     : u8 = 0x04;
-const FLAG_DEC_MASK     : u8 = 0x08;
-const FLAG_BRK_MASK     : u8 = 0x10;
-const FLAG_UNUSED_MASK  : u8 = 0x20;
-const FLAG_OF_MASK      : u8 = 0x40;
-const FLAG_SIGN_MASK    : u8 = 0x80;
-
 /* Cycle cost */
 
 /* Jumps */
@@ -209,7 +226,7 @@ pub struct CPU {
     A       : W<u8>,  // Accumulator
     X       : W<u8>,  // Indexes
     Y       : W<u8>,  
-    Flags   : u8,  // Status
+    Flags   : u8,     // Status
     SP      : W<u8>,  // Stack pointer
     PC      : W<u16>, // Program counter
 }
@@ -348,12 +365,12 @@ impl CPU {
 
     #[allow(non_snake_case)]
     fn bvc (Flags: u8) -> bool {
-        Flags & FLAG_OF_MASK == 0
+        Flags & FLAG_OVER_MASK == 0
     }
 
     #[allow(non_snake_case)]
     fn bvs (Flags: u8) -> bool {
-        Flags & FLAG_OF_MASK != 0
+        Flags & FLAG_OVER_MASK != 0
     }
 
     #[allow(non_snake_case)]
@@ -492,12 +509,8 @@ impl CPU {
 
     fn iny (&mut self, memory: &mut Mem) {
         self.Y = self.Y + W(1);
-        if self.Y == W(0){
-            set_zero!(self.Flags);
-        }else{
-            unset_zero!(self.Flags);
-        }
-        uset_negative!(self.Flags, self.Y)
+        uset_zero!(self.Flags, self.Y);
+        uset_negative!(self.Flags, self.Y);
     }
 
     fn dex (&mut self, memory: &mut Mem) {
@@ -510,12 +523,8 @@ impl CPU {
 
     fn inx (&mut self, memory: &mut Mem) {
         self.X = self.X + W(1);
-        if self.X == W(0){
-            set_zero!(self.Flags);
-        }else{
-            unset_zero!(self.Flags);
-        }
-        uset_negative!(self.Flags, self.X)
+        uset_zero!(self.Flags, self.X);
+        uset_negative!(self.Flags, self.X);
     }
 
     fn nop (&mut self, memory: &mut Mem) {
