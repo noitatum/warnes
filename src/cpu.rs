@@ -2,87 +2,37 @@ use std::fmt;
 use mem::Memory as Mem;
 use std::num::Wrapping as W;
 
-const FLAG_CARRY_MASK   : u8 = 0x01;
-const FLAG_ZERO_MASK    : u8 = 0x02;
-const FLAG_INT_MASK     : u8 = 0x04;
-const FLAG_DEC_MASK     : u8 = 0x08;
-const FLAG_BRK_MASK     : u8 = 0x10;
-const FLAG_UNUSED_MASK  : u8 = 0x20;
-const FLAG_OVER_MASK    : u8 = 0x40;
-const FLAG_SIGN_MASK    : u8 = 0x80;
+const FLAG_CARRY   : u8 = 0x01;
+const FLAG_ZERO    : u8 = 0x02;
+const FLAG_INT     : u8 = 0x04;
+const FLAG_DEC     : u8 = 0x08;
+const FLAG_BRK     : u8 = 0x10;
+const FLAG_UNUSED  : u8 = 0x20;
+const FLAG_OVER    : u8 = 0x40;
+const FLAG_SIGN    : u8 = 0x80;
 
-macro_rules! set_overflow {
-    ($flags:expr) => ($flags |= FLAG_OVER_MASK);
+macro_rules! set_flag {
+    ($flags:expr, $val:expr) => ($flags |= $val);
 }
 
-macro_rules! unset_overflow {
-    ($flags:expr) => ($flags &= !FLAG_OVER_MASK);
+macro_rules! unset_flag {
+    ($flags:expr, $val:expr) => ($flags &= !$val);
+}
+
+macro_rules! is_flag_set {
+    ($flags:expr, $val:expr) => ($flags & $val != 0);
 }
 
 macro_rules! set_sign {
-    ($flags:expr) => ($flags |= FLAG_SIGN_MASK);
-}
-
-macro_rules! unset_sign { 
-    ($flags:expr) => ($flags &= !FLAG_SIGN_MASK);
-}
-
-macro_rules! set_break {
-    ($flags:expr) => ($flags |= FLAG_BRK_MASK);
-}
-
-macro_rules! unset_break {
-    ($flags:expr) => ($flags &= !FLAG_BRK_MASK);
-}
-
-macro_rules! set_decimal {
-    ($flags:expr) => ($flags |= FLAG_DEC_MASK);
-}
-
-macro_rules! unset_decimal {
-    ($flags:expr) => ($flags &= !FLAG_DEC_MASK);
-}
-
-macro_rules! set_interrupt {
-    ($flags:expr) => ($flags |= FLAG_INT_MASK);
-}
-
-macro_rules! unset_interrupt {
-    ($flags:expr) => ($flags &= !FLAG_INT_MASK);
+    ($flags:expr, $val:expr) => ( 
+        $flags = $flags & !FLAG_SIGN | $val & FLAG_SIGN;
+    );
 }
 
 macro_rules! set_zero {
-    ($flags:expr) => ($flags |= FLAG_ZERO_MASK);
-}
-
-macro_rules! unset_zero {
-    ($flags:expr) => ($flags &= !FLAG_ZERO_MASK);
-}
-
-macro_rules! set_carry {
-    ($flags:expr) => ($flags |= FLAG_CARRY_MASK);
-}
-
-macro_rules! unset_carry {
-    ($flags:expr) => ($flags &= !FLAG_CARRY_MASK);
-}
-
-macro_rules! uset_negative {
-    ($flags:expr, $val:expr) => ( 
-        if ($val & W(1 << 7)) == W(0) {
-            unset_sign!($flags);
-        } else {
-            set_sign!($flags);
-        });
-}
-
-macro_rules! uset_zero {
     ($flags:expr, $val:expr) => (
-        if $val == W(0) {
-            set_zero!($flags);
-        } else {
-            unset_zero!($flags);
-        });
+        set_flag!($flags, (($val == 0) as u8) << 1);
+    );
 }
 
 const OP_SPECIAL_TABLE : [fn(&mut CPU, &mut Mem) -> u32; 4] = [
@@ -354,37 +304,36 @@ impl CPU {
 
 impl CPU {
     fn bpl (flags: u8) -> bool {
-        flags & FLAG_SIGN_MASK == 0
+        !is_flag_set!(flags, FLAG_SIGN)
     }
 
     fn bmi (flags: u8) -> bool {
-        flags & FLAG_SIGN_MASK != 0
+        is_flag_set!(flags, FLAG_SIGN)
     }
 
     fn bvc (flags: u8) -> bool {
-        flags & FLAG_OVER_MASK == 0
+        !is_flag_set!(flags, FLAG_OVER)
     }
 
     fn bvs (flags: u8) -> bool {
-        flags & FLAG_OVER_MASK != 0
+        is_flag_set!(flags, FLAG_OVER)
     }
 
     fn bcc (flags: u8) -> bool {
-        flags & FLAG_CARRY_MASK == 0
+        !is_flag_set!(flags, FLAG_CARRY)
     }
 
     fn bcs (flags: u8) -> bool {
-        flags & FLAG_CARRY_MASK != 0
+        is_flag_set!(flags, FLAG_CARRY)
     }
 
     fn bne (flags: u8) -> bool {
-        flags & FLAG_ZERO_MASK == 0
+        !is_flag_set!(flags, FLAG_ZERO)
     }
 
     fn beq (flags: u8) -> bool {
-        flags & FLAG_ZERO_MASK != 0
+        is_flag_set!(flags, FLAG_ZERO)
     }
-
 }
 
 // Instructions
@@ -501,8 +450,8 @@ impl CPU {
 
     fn iny (&mut self, memory: &mut Mem) {
         self.Y = self.Y + W(1);
-        uset_zero!(self.Flags, self.Y);
-        uset_negative!(self.Flags, self.Y);
+        set_zero!(self.Flags, self.Y.0);
+        set_sign!(self.Flags, self.Y.0);
     }
 
     fn dex (&mut self, memory: &mut Mem) {
@@ -515,8 +464,8 @@ impl CPU {
 
     fn inx (&mut self, memory: &mut Mem) {
         self.X = self.X + W(1);
-        uset_zero!(self.Flags, self.X);
-        uset_negative!(self.Flags, self.X);
+        set_zero!(self.Flags, self.X.0);
+        set_sign!(self.Flags, self.X.0);
     }
 
     fn nop (&mut self, memory: &mut Mem) {
