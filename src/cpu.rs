@@ -171,6 +171,9 @@ const CYCLES_IMPLIED    : u32 = 2;
    ZPG; ABS; ZPG, X; ABS, X; Addressing modes */
 const CYCLES_COMMON_B : [u32; 4] = [5, 6, 6, 7]; 
 
+const CYCLES_COMMON_A : [u32; 8] = [6, 3, 2, 4, 5, 4, 4, 4];
+const CYCLES_COMMON_A_EXTRA : [u32; 8] = [0, 0, 0, 0, 1, 0, 1, 1];
+
 #[allow(non_snake_case)]
 pub struct CPU {
     A       : W<u8>,  // Accumulator
@@ -266,7 +269,7 @@ impl CPU {
         if OP_BRANCH_TABLE[index as usize](self.Flags) {
             let pc = self.PC;
             let mut offset = memory.load((pc + W(1)).0) as i8;
-            // To sign-magnitude
+            // From sign-magnitude
             if offset < 0 { 
                 offset = -(offset & 0x7F);
             }
