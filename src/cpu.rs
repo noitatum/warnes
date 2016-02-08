@@ -107,6 +107,13 @@ const OP_IMP_STACK      : u8 = 0x08;
 const OP_IMP_PULL_MASK  : u8 = 0xBF;
 const OP_IMP_PULL       : u8 = 0x28;
 
+/* Common instructions */
+
+/* ASL, ROL, LSR, ROR, DEC, INC Instructions */
+/* WARNING: Non exhaustive, this also selects STX and LDX */
+const OP_COMMON_B_MASK  : u8 = 0x03;
+const OP_COMMON_B       : u8 = 0x02;
+
 const STACK_PAGE        : u16 = 0x0100;
 const PAGE_MASK         : u16 = 0xFF00;
 
@@ -136,12 +143,16 @@ const CYCLES_RTS        : u32 = 6;
 /* Implied */
 const CYCLES_IMPLIED    : u32 = 2;
 
+/* ASL, ROL, LSR, ROR, DEC, INC Instructions 
+   ZPG; ABS; ZPG, X; ABS, X; Addressing modes */
+const CYCLES_COMMON_B : [u32; 4] = [5, 6, 6, 7]; 
+
 #[allow(non_snake_case)]
 pub struct CPU {
     A : W<u8>,  // Accumulator
     X : W<u8>,  // Indexes
     Y : W<u8>,  
-    P : u8,  // Status
+    P : u8,     // Status
     SP: W<u8>,  // Stack pointer
     PC: W<u16>, // Program counter
 }
@@ -189,71 +200,79 @@ impl CPU {
     }
 
     pub fn execute(&mut self, memory: &mut Mem) -> u32 {
-        let mut cycles : u32 = 0;
-        let opcode = memory.load(self.PC.0);
-
-        if opcode & OP_JUMP_MASK == OP_JUMP {
-            /* JMP */
-            cycles = CYCLES_JUMP;
-            let mut address = load_word(memory, self.PC + W(1)); 
-            if opcode & !OP_JUMP_MASK > 0 {
-                // Indirect Jump, additional two cycles
-                cycles += 2;
-                address = load_word(memory, W(address));
-            } 
-            self.PC = W(address);
-        } else if opcode & OP_SPECIAL_MASK == OP_SPECIAL {
-            /* Special */
-            cycles = if opcode == OP_JSR {
-                // Load destination address and push return address
-                let pc = self.PC;
-                let address = load_word(memory, pc + W(1));
-                self.push_word(memory, (pc + W(3)).0);
-                self.PC = W(address);
-                CYCLES_JSR
-            } else {
-                let index = (opcode >> 5) & 0x3;
-                OP_SPECIAL_TABLE[index as usize](self, memory)
-            }
-        } else if opcode & OP_BRANCH_MASK == OP_BRANCH {
-            /* Branch */
-            cycles = CYCLES_BRANCH;
-            let index = opcode >> 5;
-            if OP_BRANCH_TABLE[index as usize](self.P) {
-                // Additional cycle if branch taken
-                cycles += 1;
-                let pc = self.PC;
-                let mut offset = memory.load((pc + W(1)).0) as i8;
-                // To sign-magnitude
-                if offset < 0 { 
-                    offset = -(offset & 0x7F);
-                }
-                // Calculate branch address and push return address
-                let address = self.PC + W((offset as i16) as u16);
-                if (address & W(PAGE_MASK)) != (self.PC & W(PAGE_MASK)) {
-                    // Additional cycle if page boundary crossed
-                    cycles += 1;
-                }
-                self.push_word(memory, (pc + W(3)).0);
-                self.PC = address; 
-            }
-        } else if opcode & OP_IMPLIED_MASK == OP_IMPLIED {
-            /* Implied */
-            cycles = CYCLES_IMPLIED;
-            // Stack instructions get one additional cycle
-            cycles += (opcode & OP_IMP_STACK_MASK == OP_IMP_STACK) as u32; 
-            // An additional if it is a pull
-            cycles += (opcode & OP_IMP_PULL_MASK == OP_IMP_PULL) as u32;
-            let index = ((opcode >> 4) & 0xE) + ((opcode >> 1) & 1);
-            OP_IMPLIED_TABLE[index as usize](self, memory);
-        } else { 
-            /* Common Operations */
-            let addressing = (opcode >> 2) & 0x3;
-            let index = ((opcode >> 3) & 0x1C) + (opcode & 0x3);
-            OP_COMMON_TABLE[index as usize](self, memory, addressing);
+        let op = memory.load(self.PC.0);
+        match op {
+            _ if op & OP_JUMP_MASK == OP_JUMP => self.do_jump(memory, op),
+            _ if op & OP_SPECIAL_MASK == OP_SPECIAL => self.do_special(memory, op),
+            _ if op & OP_BRANCH_MASK == OP_BRANCH => self.do_branch(memory, op),
+            _ if op & OP_IMPLIED_MASK == OP_IMPLIED => self.do_implied(memory, op),
+            _ => self.do_common(memory, op),
         } 
+    }
 
+    fn do_jump(&mut self, memory: &mut Mem, opcode: u8) -> u32 {
+        let mut cycles = CYCLES_JUMP;
+        let mut address = load_word(memory, self.PC + W(1)); 
+        if opcode & !OP_JUMP_MASK > 0 {
+            address = load_word(memory, W(address));
+            // Indirect Jump, additional two cycles
+            cycles += 2;
+        } 
+        self.PC = W(address);
         return cycles;
+    }
+
+    fn do_special(&mut self, memory: &mut Mem, opcode: u8) -> u32 { 
+        if opcode == OP_JSR {
+            // Load destination address and push return address
+            let pc = self.PC;
+            let address = load_word(memory, pc + W(1));
+            self.push_word(memory, (pc + W(3)).0);
+            self.PC = W(address);
+            CYCLES_JSR
+        } else {
+            let index = (opcode >> 5) & 0x3;
+            OP_SPECIAL_TABLE[index as usize](self, memory)
+        }
+    }
+
+    fn do_branch(&mut self, memory: &mut Mem, opcode: u8) -> u32 {
+        let index = opcode >> 5;
+        let mut cycles = CYCLES_BRANCH;
+        if OP_BRANCH_TABLE[index as usize](self.P) {
+            let pc = self.PC;
+            let mut offset = memory.load((pc + W(1)).0) as i8;
+            // To sign-magnitude
+            if offset < 0 { 
+                offset = -(offset & 0x7F);
+            }
+            // Calculate branch address and push return address
+            let address = pc + W((offset as i16) as u16);
+            self.push_word(memory, (pc + W(3)).0);
+            self.PC = address; 
+            // Additional cycle if branch taken and page boundary crossed
+            cycles += 1 + ((address & W(PAGE_MASK)) != (pc & W(PAGE_MASK))) as u32;
+        }
+        return cycles;
+    }
+
+    fn do_implied(&mut self, memory: &mut Mem, opcode: u8) -> u32 {
+        let index = ((opcode >> 4) & 0xE) + ((opcode >> 1) & 1);
+        OP_IMPLIED_TABLE[index as usize](self, memory);
+        // Stack instructions get one additional cycle
+        // An additional one if it is a pull
+        CYCLES_IMPLIED + 
+            (opcode & OP_IMP_STACK_MASK == OP_IMP_STACK) as u32 +
+            (opcode & OP_IMP_PULL_MASK == OP_IMP_PULL) as u32
+    }
+
+    fn do_common(&mut self, memory: &mut Mem, opcode: u8) -> u32 {
+        /* Common Operations */
+        let addressing = (opcode >> 2) & 0x3;
+
+        let index = ((opcode >> 3) & 0x1C) + (opcode & 0x3);
+        OP_COMMON_TABLE[index as usize](self, memory, addressing);
+        return 0;
     }
 }
 

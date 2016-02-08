@@ -138,8 +138,8 @@ WWW | OP
   1 | ROL (2)
   2 | LSR (2)
   3 | ROR (2)
-  4 | STX (No ABS, X)
-  5 | LDX (1) 
+  4 | STX (3) (No ABS, X)
+  5 | LDX (1) (3)
   6 | DEC
   7 | INC
 
@@ -161,3 +161,4 @@ WWW | OP
 
 (1): IMM load at Z = 0
 (2): Operates on A at XYZ = 2 
+(3): ZPG, X uses Y instead
