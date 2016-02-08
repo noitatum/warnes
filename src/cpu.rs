@@ -37,21 +37,11 @@ macro_rules! set_zero {
 
 
 macro_rules! ror {
-    ($val:expr, $times:expr) => ( if $times != 0 {
-                                      for _ in 0..$times {
-                                          $val = ($val >> 1) | (($val & W(1)) << 7)
-                                      }
-                                  }
-                                );
+    ($val:expr) => ( $val = ($val >> 1) | (($val & W(1)) << 7));
 }
 
 macro_rules! rol {
-    ($val:expr, $times:expr) => ( if $times != 0 {
-                                      for _ in 0..$times {
-                                          $val = ($val << 1) | (($val & W(0x80)) >> 7)
-                                      }
-                                  }
-                                );
+    ($val:expr) => ($val = ($val << 1) | (($val & W(0x80)) >> 7));
 }
 
 const OP_SPECIAL_TABLE : [fn(&mut CPU, &mut Mem) -> u32; 4] = [
@@ -107,7 +97,7 @@ const OP_IMPLIED_TABLE : [fn(&mut CPU, &mut Mem); 32] = [
     CPU::invalid_i,
 ];
 
-const OP_COMMON_TABLE : [fn(&mut CPU, &mut Mem, u8) -> (); 32] = [
+const OP_COMMON_TABLE : [fn(&mut CPU, &mut Mem, u8, u16) -> (); 32] = [
     CPU::invalid_c,
     CPU::ora,
     CPU::asl,
@@ -314,7 +304,7 @@ impl CPU {
         let addressing = (opcode >> 2) & 0x3;
 
         let index = ((opcode >> 3) & 0x1C) + (opcode & 0x3);
-        OP_COMMON_TABLE[index as usize](self, memory, addressing);
+        OP_COMMON_TABLE[index as usize](self, memory, addressing, 0); /* calculate address */
         return 0;
     }
 }
@@ -417,7 +407,7 @@ impl CPU {
         } else {
             unset_flag!(self.Flags, FLAG_CARRY);
         }
-        rol!(self.A, 1);
+        rol!(self.A);
         set_zero!(self.Flags, self.A.0);
         set_sign!(self.Flags, self.A.0); 
     }
@@ -456,7 +446,7 @@ impl CPU {
         } else {
             unset_flag!(self.Flags, FLAG_CARRY);
         }
-        ror!(self.A, 1);
+        ror!(self.A);
         set_zero!(self.Flags, self.A.0);
         set_sign!(self.Flags, self.A.0);
     }
@@ -545,91 +535,91 @@ impl CPU {
 
     // Common
 
-    fn invalid_c(&mut self, memory: &mut Mem, addressing: u8) {
+    fn invalid_c(&mut self, memory: &mut Mem, mode: u8, address: u16) {
         assert!(false);
     }
 
-    fn ora (&mut self, memory: &mut Mem, addressing: u8) {
+    fn ora (&mut self, memory: &mut Mem, mode: u8, address: u16) {
 
     }
 
-    fn asl (&mut self, memory: &mut Mem, addressing: u8) {
+    fn asl (&mut self, memory: &mut Mem, mode: u8, address: u16) {
 
     }
 
-    fn bit (&mut self, memory: &mut Mem, addressing: u8) {
+    fn bit (&mut self, memory: &mut Mem, mode: u8, address: u16) {
 
     }
 
-    fn and (&mut self, memory: &mut Mem, addressing: u8) {
+    fn and (&mut self, memory: &mut Mem, mode: u8, address: u16) {
 
     }
 
-    fn rol (&mut self, memory: &mut Mem, addressing: u8) {
+    fn rol (&mut self, memory: &mut Mem, mode: u8, address: u16) {
 
     }
 
-    fn eor (&mut self, memory: &mut Mem, addressing: u8) {
+    fn eor (&mut self, memory: &mut Mem, mode: u8, address: u16) {
 
     }
 
-    fn lsr (&mut self, memory: &mut Mem, addressing: u8) {
+    fn lsr (&mut self, memory: &mut Mem, mode: u8, address: u16) {
 
     }
 
-    fn adc (&mut self, memory: &mut Mem, addressing: u8) {
+    fn adc (&mut self, memory: &mut Mem, mode: u8, address: u16) {
 
     }
 
-    fn ror (&mut self, memory: &mut Mem, addressing: u8) {
+    fn ror (&mut self, memory: &mut Mem, mode: u8, address: u16) {
 
     }
 
-    fn sty (&mut self, memory: &mut Mem, addressing: u8) {
+    fn sty (&mut self, memory: &mut Mem, mode: u8, address: u16) {
 
     }
 
-    fn sta (&mut self, memory: &mut Mem, addressing: u8) {
+    fn sta (&mut self, memory: &mut Mem, mode: u8, address: u16) {
 
     }
 
-    fn stx (&mut self, memory: &mut Mem, addressing: u8) {
+    fn stx (&mut self, memory: &mut Mem, mode: u8, address: u16) {
 
     }
 
-    fn ldy (&mut self, memory: &mut Mem, addressing: u8) {
+    fn ldy (&mut self, memory: &mut Mem, mode: u8, address: u16) {
 
     }
 
-    fn lda (&mut self, memory: &mut Mem, addressing: u8) {
+    fn lda (&mut self, memory: &mut Mem, mode: u8, address: u16) {
 
     }
 
-    fn ldx (&mut self, memory: &mut Mem, addressing: u8) {
+    fn ldx (&mut self, memory: &mut Mem, mode: u8, address: u16) {
 
     }
 
-    fn cpy (&mut self, memory: &mut Mem, addressing: u8) {
+    fn cpy (&mut self, memory: &mut Mem, mode: u8, address: u16) {
 
     }
 
-    fn cmp (&mut self, memory: &mut Mem, addressing: u8) {
+    fn cmp (&mut self, memory: &mut Mem, mode: u8, address: u16) {
 
     }
 
-    fn dec (&mut self, memory: &mut Mem, addressing: u8) {
+    fn dec (&mut self, memory: &mut Mem, mode: u8, address: u16) {
 
     }
 
-    fn cpx (&mut self, memory: &mut Mem, addressing: u8) {
+    fn cpx (&mut self, memory: &mut Mem, mode: u8, address: u16) {
 
     }
 
-    fn sbc (&mut self, memory: &mut Mem, addressing: u8) {
+    fn sbc (&mut self, memory: &mut Mem, mode: u8, address: u16) {
 
     }
    
-    fn inc (&mut self, memory: &mut Mem, addressing: u8) {
+    fn inc (&mut self, memory: &mut Mem, mode: u8, address: u16) {
 
     }
 }
