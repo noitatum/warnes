@@ -2,6 +2,63 @@ use std::fmt;
 use mem::Memory as Mem;
 use std::num::Wrapping as W;
 
+macro_rules! set_overflow {
+    ($flags:expr) => ($flags = $flags | (1 << 6));
+}
+
+macro_rules! unset_overflow {
+    ($flags:expr) => ($flags = $flags & !(1 << 6));
+}
+
+macro_rules! uset_negative {
+    ($flags:expr, $val:expr) => ( 
+        if ($val & W(1 << 7)) == W(0) {
+            $flags = $flags & !(1 << 7)
+        }else{
+            $flags = $flags | (1 << 7)
+        });
+}
+
+macro_rules! set_break {
+    ($flags:expr) => ($flags = $flags | (1 << 4));
+}
+
+macro_rules! unset_break {
+    ($flags:expr) => ($flags = $flags & !(1 << 4));
+}
+
+macro_rules! set_decimal {
+    ($flags:expr) => ($flags = $flags | (1 << 3));
+}
+
+macro_rules! unset_decimal {
+    ($flags:expr) => ($flags = $flags & !(1 << 3));
+}
+
+macro_rules! set_interrupt {
+    ($flags:expr) => ($flags = $flags | (1 << 2));
+}
+
+macro_rules! unset_interrupt {
+    ($flags:expr) => ($flags = $flags & !(1 << 2));
+}
+
+macro_rules! set_zero {
+    ($flags:expr) => ($flags = $flags | (1 << 1));
+}
+
+macro_rules! unset_zero {
+    ($flags:expr) => ($flags = $flags & !(1 << 1));
+}
+
+macro_rules! set_carry {
+    ($flags:expr) => ($flags = $flags | (1));
+}
+
+macro_rules! unset_carry {
+    ($flags:expr) => ($flags = $flags & !(1));
+}
+
 const OP_SPECIAL_TABLE : [fn(&mut CPU, &mut Mem) -> u32; 4] = [
     CPU::brk,
     CPU::invalid_s,
@@ -149,12 +206,12 @@ const CYCLES_COMMON_B : [u32; 4] = [5, 6, 6, 7];
 
 #[allow(non_snake_case)]
 pub struct CPU {
-    A : W<u8>,  // Accumulator
-    X : W<u8>,  // Indexes
-    Y : W<u8>,  
-    P : u8,     // Status
-    SP: W<u8>,  // Stack pointer
-    PC: W<u16>, // Program counter
+    A       : W<u8>,  // Accumulator
+    X       : W<u8>,  // Indexes
+    Y       : W<u8>,  
+    Flags   : u8,  // Status
+    SP      : W<u8>,  // Stack pointer
+    PC      : W<u16>, // Program counter
 }
 
 fn load_word(memory: &mut Mem, address: W<u16>) -> u16 {
@@ -170,12 +227,12 @@ fn write_word(memory: &mut Mem, address: W<u16>, word: u16) {
 impl CPU {
     pub fn new() -> CPU {
         CPU {
-            A : W(0),
-            X : W(0),
-            Y : W(0),
-            P : 0x24, 
-            SP : W(0xff),
-            PC : W(0),
+            A       : W(0),
+            X       : W(0),
+            Y       : W(0),
+            Flags   : 0x24, 
+            SP      : W(0xff),
+            PC      : W(0),
         }
     }
 
@@ -239,7 +296,7 @@ impl CPU {
     fn do_branch(&mut self, memory: &mut Mem, opcode: u8) -> u32 {
         let index = opcode >> 5;
         let mut cycles = CYCLES_BRANCH;
-        if OP_BRANCH_TABLE[index as usize](self.P) {
+        if OP_BRANCH_TABLE[index as usize](self.Flags) {
             let pc = self.PC;
             let mut offset = memory.load((pc + W(1)).0) as i8;
             // To sign-magnitude
@@ -279,37 +336,44 @@ impl CPU {
 // Branch conditions
 
 impl CPU {
-
-    fn bpl (P: u8) -> bool {
-        P & FLAG_SIGN_MASK == 0
+    #[allow(non_snake_case)]
+    fn bpl (Flags: u8) -> bool {
+        Flags & FLAG_SIGN_MASK == 0
     }
 
-    fn bmi (P: u8) -> bool {
-        P & FLAG_SIGN_MASK != 0
+    #[allow(non_snake_case)]
+    fn bmi (Flags: u8) -> bool {
+        Flags & FLAG_SIGN_MASK != 0
     }
 
-    fn bvc (P: u8) -> bool {
-        P & FLAG_OF_MASK == 0
+    #[allow(non_snake_case)]
+    fn bvc (Flags: u8) -> bool {
+        Flags & FLAG_OF_MASK == 0
     }
 
-    fn bvs (P: u8) -> bool {
-        P & FLAG_OF_MASK != 0
+    #[allow(non_snake_case)]
+    fn bvs (Flags: u8) -> bool {
+        Flags & FLAG_OF_MASK != 0
     }
 
-    fn bcc (P: u8) -> bool {
-        P & FLAG_CARRY_MASK == 0
+    #[allow(non_snake_case)]
+    fn bcc (Flags: u8) -> bool {
+        Flags & FLAG_CARRY_MASK == 0
     }
 
-    fn bcs (P: u8) -> bool {
-        P & FLAG_CARRY_MASK != 0
+    #[allow(non_snake_case)]
+    fn bcs (Flags: u8) -> bool {
+        Flags & FLAG_CARRY_MASK != 0
     }
 
-    fn bne (P: u8) -> bool {
-        P & FLAG_ZERO_MASK == 0
+    #[allow(non_snake_case)]
+    fn bne (Flags: u8) -> bool {
+        Flags & FLAG_ZERO_MASK == 0
     }
 
-    fn beq (P: u8) -> bool {
-        P & FLAG_ZERO_MASK != 0
+    #[allow(non_snake_case)]
+    fn beq (Flags: u8) -> bool {
+        Flags & FLAG_ZERO_MASK != 0
     }
 
 }
@@ -427,7 +491,13 @@ impl CPU {
     }
 
     fn iny (&mut self, memory: &mut Mem) {
-
+        self.Y = self.Y + W(1);
+        if self.Y == W(0){
+            set_zero!(self.Flags);
+        }else{
+            unset_zero!(self.Flags);
+        }
+        uset_negative!(self.Flags, self.Y)
     }
 
     fn dex (&mut self, memory: &mut Mem) {
@@ -439,7 +509,13 @@ impl CPU {
     }
 
     fn inx (&mut self, memory: &mut Mem) {
-
+        self.X = self.X + W(1);
+        if self.X == W(0){
+            set_zero!(self.Flags);
+        }else{
+            unset_zero!(self.Flags);
+        }
+        uset_negative!(self.Flags, self.X)
     }
 
     fn nop (&mut self, memory: &mut Mem) {
@@ -544,6 +620,6 @@ impl CPU {
 impl fmt::Display for CPU {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{{ A: {}, X: {}, Y: {}, P: {}, SP: {}, PC: {} }}",
-               self.A.0 , self.X.0 , self.Y.0 , self.P , self.SP.0 , self.PC.0)
+               self.A.0 , self.X.0 , self.Y.0 , self.Flags , self.SP.0 , self.PC.0)
     }
 }
