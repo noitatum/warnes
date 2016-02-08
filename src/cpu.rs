@@ -37,11 +37,15 @@ macro_rules! set_zero {
 
 
 macro_rules! ror {
-    ($val:expr) => ( $val = ($val >> 1) | (($val & W(1)) << 7));
+    ($val:expr, $flags:expr) => ( $val = ($val >> 1) | (($val & W(get_bit!($flags, FLAG_CARRY))) << 7));
 }
 
 macro_rules! rol {
-    ($val:expr) => ($val = ($val << 1) | (($val & W(0x80)) >> 7));
+    ($val:expr, $flags:expr) => ($val = ($val << 1) | (($val & W(get_bit!($flags, FLAG_CARRY))) >> 7));
+}
+
+macro_rules! get_bit {
+    ($flags:expr, $flag_bit:expr) => ($flags & $flag_bit;);
 }
 
 const OP_SPECIAL_TABLE : [fn(&mut CPU, &mut Mem) -> u32; 4] = [
@@ -405,12 +409,16 @@ impl CPU {
     }
 
     fn rol_a (&mut self, memory: &mut Mem) {
-        if self.A & W(0x80) != W(0) {
+        /* C = bit to be rotated into the carry */
+        let c : W<u8> = self.A & W(0x80);
+        rol!(self.A, self.Flags);
+        /* We rotate the carry bit into A */
+        /* And we set the Carry accordingly */
+        if c != W(0) {
             set_flag!(self.Flags, FLAG_CARRY);
         } else {
             unset_flag!(self.Flags, FLAG_CARRY);
         }
-        rol!(self.A);
         set_zero!(self.Flags, self.A.0);
         set_sign!(self.Flags, self.A.0); 
     }
@@ -444,12 +452,16 @@ impl CPU {
     }
 
     fn ror_a (&mut self, memory: &mut Mem) {
-        if self.A & W(1) != W(0) {
+        /* c = bit to be rotated into the carry */
+        let c : W<u8> = self.A & W(1);
+        ror!(self.A, self.Flags);
+        /* we rotate the carry bit into a */
+        /* and we set the carry accordingly */
+        if c != W(0) {
             set_flag!(self.Flags, FLAG_CARRY);
         } else {
             unset_flag!(self.Flags, FLAG_CARRY);
         }
-        ror!(self.A);
         set_zero!(self.Flags, self.A.0);
         set_sign!(self.Flags, self.A.0);
     }
