@@ -2,14 +2,14 @@ use std::fmt;
 use mem::Memory as Mem;
 use std::num::Wrapping as W;
 
-const FLAG_CARRY   : u8 = 0x01;
-const FLAG_ZERO    : u8 = 0x02;
-const FLAG_INT     : u8 = 0x04;
-const FLAG_DEC     : u8 = 0x08;
-const FLAG_BRK     : u8 = 0x10;
-const FLAG_UNUSED  : u8 = 0x20;
-const FLAG_OVER    : u8 = 0x40;
-const FLAG_SIGN    : u8 = 0x80;
+const FLAG_CARRY        : u8 = 0x01;
+const FLAG_ZERO         : u8 = 0x02;
+const FLAG_INTERRUPT    : u8 = 0x04;
+const FLAG_DECIMAL      : u8 = 0x08;
+const FLAG_BRK          : u8 = 0x10;
+const FLAG_UNUSED       : u8 = 0x20;
+const FLAG_OVERFLOW     : u8 = 0x40;
+const FLAG_SIGN         : u8 = 0x80;
 
 macro_rules! set_flag {
     ($flags:expr, $val:expr) => ($flags |= $val);
@@ -33,6 +33,25 @@ macro_rules! set_zero {
     ($flags:expr, $val:expr) => (
         set_flag!($flags, (($val == 0) as u8) << 1);
     );
+}
+
+
+macro_rules! ror {
+    ($val:expr, $times:expr) => ( if $times != 0 {
+                                      for _ in 0..$times {
+                                          $val = ($val >> 1) | (($val & W(1)) << 7)
+                                      }
+                                  }
+                                );
+}
+
+macro_rules! rol {
+    ($val:expr, $times:expr) => ( if $times != 0 {
+                                      for _ in 0..$times {
+                                          $val = ($val << 1) | (($val & W(0x80)) >> 7)
+                                      }
+                                  }
+                                );
 }
 
 const OP_SPECIAL_TABLE : [fn(&mut CPU, &mut Mem) -> u32; 4] = [
@@ -315,11 +334,11 @@ impl CPU {
     }
 
     fn bvc (flags: u8) -> bool {
-        !is_flag_set!(flags, FLAG_OVER)
+        !is_flag_set!(flags, FLAG_OVERFLOW)
     }
 
     fn bvs (flags: u8) -> bool {
-        is_flag_set!(flags, FLAG_OVER)
+        is_flag_set!(flags, FLAG_OVERFLOW)
     }
 
     fn bcc (flags: u8) -> bool {
@@ -372,83 +391,129 @@ impl CPU {
     }
 
     fn php (&mut self, memory: &mut Mem) {
-
+        let flags : u8 = self.Flags;
+        self.push(memory, flags);
     }
 
     fn asl_a (&mut self, memory: &mut Mem) {
-
+        if self.A & W(0x80) != W(0) {
+            set_flag!(self.Flags, FLAG_CARRY);
+        } else {
+            unset_flag!(self.Flags, FLAG_CARRY);
+        }
+        self.A = self.A << 1;
+        set_zero!(self.Flags, self.A.0);
+        set_sign!(self.Flags, self.A.0);
     }
 
     fn clc (&mut self, memory: &mut Mem) {
-
+        unset_flag!(self.Flags, FLAG_CARRY);
     }
 
     fn plp (&mut self, memory: &mut Mem) {
-
+        self.Flags = self.pop(memory);
     }
 
     fn rol_a (&mut self, memory: &mut Mem) {
-
+        if self.A & W(0x80) != W(0) {
+            set_flag!(self.Flags, FLAG_CARRY);
+        } else {
+            unset_flag!(self.Flags, FLAG_CARRY);
+        }
+        rol!(self.A, 1);
+        set_zero!(self.Flags, self.A.0);
+        set_sign!(self.Flags, self.A.0); 
     }
 
     fn sec (&mut self, memory: &mut Mem) {
-
+        set_flag!(self.Flags, FLAG_CARRY);
     }
 
     fn pha (&mut self, memory: &mut Mem) {
-
+        let AP : u8 = self.A.0;
+        self.push(memory, AP);
     }
 
     fn lsr_a (&mut self, memory: &mut Mem) {
-
+        if self.A & W(1) != W(0) {
+            set_flag!(self.Flags, FLAG_CARRY);
+        } else {
+            unset_flag!(self.Flags, FLAG_CARRY);
+        }
+        self.A = self.A >> 1;
+        set_zero!(self.Flags, self.A.0);
+        unset_flag!(self.Flags, FLAG_SIGN);
     }
 
     fn cli (&mut self, memory: &mut Mem) {
-
+        unset_flag!(self.Flags, FLAG_INTERRUPT);
     }
 
     fn pla (&mut self, memory: &mut Mem) {
-
+        self.A = W(self.pop(memory));
     }
 
     fn ror_a (&mut self, memory: &mut Mem) {
-
+        if self.A & W(1) != W(0) {
+            set_flag!(self.Flags, FLAG_CARRY);
+        } else {
+            unset_flag!(self.Flags, FLAG_CARRY);
+        }
+        ror!(self.A, 1);
+        set_zero!(self.Flags, self.A.0);
+        set_sign!(self.Flags, self.A.0);
     }
 
     fn sei (&mut self, memory: &mut Mem) {
-
+        set_flag!(self.Flags, FLAG_INTERRUPT);
     }
 
     fn dey (&mut self, memory: &mut Mem) {
-
+        self.Y = self.Y + W(1);
+        set_zero!(self.Flags, self.Y.0);
+        set_sign!(self.Flags, self.Y.0);
     }
 
     fn txa (&mut self, memory: &mut Mem) {
-
+        self.A = self.X;
+        set_zero!(self.Flags, self.A.0);
+        set_sign!(self.Flags, self.A.0);
     }
 
     fn tya (&mut self, memory: &mut Mem) {
+        self.A = self.Y;
+        set_zero!(self.Flags, self.A.0);
+        set_sign!(self.Flags, self.A.0);
 
     }
 
     fn txs (&mut self, memory: &mut Mem) {
+        self.SP = self.X;
+        set_zero!(self.Flags, self.X.0);
+        set_sign!(self.Flags, self.X.0);
 
     }
 
     fn tay (&mut self, memory: &mut Mem) {
-
+        self.Y = self.A;
+        set_zero!(self.Flags, self.Y.0);
+        set_sign!(self.Flags, self.Y.0);
     }
 
     fn tax (&mut self, memory: &mut Mem) {
-
+        self.X = self.A;
+        set_zero!(self.Flags, self.X.0);
+        set_sign!(self.Flags, self.X.0);
     }
 
     fn clv (&mut self, memory: &mut Mem) {
-
+        unset_flag!(self.Flags, FLAG_OVERFLOW);
     }
 
     fn tsx (&mut self, memory: &mut Mem) {
-
+        self.X = self.SP;
+        set_zero!(self.Flags, self.X.0);
+        set_sign!(self.Flags, self.X.0);
     }
 
     fn iny (&mut self, memory: &mut Mem) {
@@ -458,11 +523,13 @@ impl CPU {
     }
 
     fn dex (&mut self, memory: &mut Mem) {
-
+        self.X = self.X - W(1);
+        set_zero!(self.Flags, self.X.0);
+        set_sign!(self.Flags, self.X.0);
     }
 
     fn cld (&mut self, memory: &mut Mem) {
-
+        unset_flag!(self.Flags, FLAG_DECIMAL);
     }
 
     fn inx (&mut self, memory: &mut Mem) {
@@ -476,7 +543,7 @@ impl CPU {
     }
 
     fn sed (&mut self, memory: &mut Mem) {
-
+        set_flag!(self.Flags, FLAG_DECIMAL);
     }
 
     // Common
