@@ -3,60 +3,60 @@ use mem::Memory as Mem;
 use std::num::Wrapping as W;
 
 macro_rules! set_overflow {
-    ($flags:expr) => ($flags = $flags | W(1 << 6));
+    ($flags:expr) => ($flags = $flags | (1 << 6));
 }
 
 macro_rules! unset_overflow {
-    ($flags:expr) => ($flags = $flags & !W(1 << 6));
+    ($flags:expr) => ($flags = $flags & !(1 << 6));
 }
 
 macro_rules! uset_negative {
     ($flags:expr, $val:expr) => ( 
         if ($val & W(1 << 7)) == W(0) {
-            $flags = $flags & !W(1 << 7)
+            $flags = $flags & !(1 << 7)
         }else{
-            $flags = $flags | W(1 << 7)
+            $flags = $flags | (1 << 7)
         });
 }
 
 macro_rules! set_break {
-    ($flags:expr) => ($flags = $flags | W(1 << 4));
+    ($flags:expr) => ($flags = $flags | (1 << 4));
 }
 
 macro_rules! unset_break {
-    ($flags:expr) => ($flags = $flags & !W(1 << 4));
+    ($flags:expr) => ($flags = $flags & !(1 << 4));
 }
 
 macro_rules! set_decimal {
-    ($flags:expr) => ($flags = $flags | W(1 << 3));
+    ($flags:expr) => ($flags = $flags | (1 << 3));
 }
 
 macro_rules! unset_decimal {
-    ($flags:expr) => ($flags = $flags & !W(1 << 3));
+    ($flags:expr) => ($flags = $flags & !(1 << 3));
 }
 
 macro_rules! set_interrupt {
-    ($flags:expr) => ($flags = $flags | W(1 << 2));
+    ($flags:expr) => ($flags = $flags | (1 << 2));
 }
 
 macro_rules! unset_interrupt {
-    ($flags:expr) => ($flags = $flags & !W(1 << 2));
+    ($flags:expr) => ($flags = $flags & !(1 << 2));
 }
 
 macro_rules! set_zero {
-    ($flags:expr) => ($flags = $flags | W(1 << 1));
+    ($flags:expr) => ($flags = $flags | (1 << 1));
 }
 
 macro_rules! unset_zero {
-    ($flags:expr) => ($flags = $flags & !W(1 << 1));
+    ($flags:expr) => ($flags = $flags & !(1 << 1));
 }
 
 macro_rules! set_carry {
-    ($flags:expr) => ($flags = $flags | W(1));
+    ($flags:expr) => ($flags = $flags | (1));
 }
 
 macro_rules! unset_carry {
-    ($flags:expr) => ($flags = $flags & !W(1));
+    ($flags:expr) => ($flags = $flags & !(1));
 }
 
 const OP_SPECIAL_TABLE : [fn(&mut CPU, &mut Mem) -> u32; 4] = [
