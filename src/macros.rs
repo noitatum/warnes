@@ -25,11 +25,15 @@ macro_rules! set_zero {
 
 
 macro_rules! ror {
-    ($val:expr, $flags:expr) => ( $val = ($val >> 1) | (($val & W(get_bit!($flags, FLAG_CARRY))) << 7));
+    ($val:expr, $flags:expr) => (
+        $val = ($val >> 1) | (($val & W(get_bit!($flags, FLAG_CARRY))) << 7)
+    );
 }
 
 macro_rules! rol {
-    ($val:expr, $flags:expr) => ($val = ($val << 1) | (($val & W(get_bit!($flags, FLAG_CARRY))) >> 7));
+    ($val:expr, $flags:expr) => (
+        $val = ($val << 1) | (($val & W(get_bit!($flags, FLAG_CARRY))) >> 7)
+    );
 }
 
 macro_rules! get_bit {

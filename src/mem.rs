@@ -18,13 +18,13 @@ impl Memory {
             return self.ram[ (address & 0x7ff) as usize]
         } else if address < 0x4000 {
             return match (address % 0x2000) & 0x7 {
-                0 => self.ppu.ppuctrl,
-                1 => self.ppu.ppumask,
+                //0 => self.ppu.ppuctrl, En teoria los registros comentados son write only
+                //1 => self.ppu.ppumask,
                 2 => self.ppu.ppustatus,
-                3 => self.ppu.oamaddr,
+                //3 => self.ppu.oamaddr,
                 4 => self.ppu.oamdata,
-                5 => self.ppu.ppuscroll,
-                6 => self.ppu.ppuaddr,
+                //5 => self.ppu.ppuscroll,
+                //6 => self.ppu.ppuaddr,
                 7 => self.ppu.ppudata,
                 _ => 0 // fuck you.
             }
@@ -50,13 +50,13 @@ impl Memory {
             match (address % 0x2000) & 0x7 {
                 0 => self.ppu.ppuctrl = value,
                 1 => self.ppu.ppumask = value, 
-                2 => self.ppu.ppustatus = value,
+                //2 => self.ppu.ppustatus = value, Este registro es read only
                 3 => self.ppu.oamaddr = value,
                 4 => self.ppu.oamdata = value, 
                 5 => self.ppu.ppuscroll = value,
                 6 => self.ppu.ppuaddr = value,
                 7 => self.ppu.ppudata = value,
-                _ => self.ppu.ppuctrl = value  // epic.
+                _ => self.ppu.ppuctrl = self.ppu.ppuctrl  // epic.
             }
         } else if address < 0x4020 {
             /* Apu TODO*/
