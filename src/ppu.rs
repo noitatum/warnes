@@ -32,15 +32,15 @@ impl Ppu {
 
     pub fn load (self, address: u16) -> u8 {
         if address < 0x3000 {
-            return self.vram[address as usize];
+            self.vram[address as usize];
         }else if address < 0x3F00 {
-            return self.vram[(address - 0x1000) as usize];
+            self.vram[(address - 0x1000) as usize];
         }else if address < 0x3F20 {
-            return self.vram[address as usize];
+            self.vram[address as usize];
         }else if address < 0x4000 {
-            return self.vram[(address - 0x100) as usize];
+            self.vram[(address - 0x100) as usize];
         }else {
-            return self.vram[(address % 0x4000) as usize];
+            self.vram[(address % 0x4000) as usize];
         }
     }
 
