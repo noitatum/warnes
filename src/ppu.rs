@@ -9,8 +9,8 @@ pub struct Ppu {
     pub ppuaddr     : u8,
     pub ppudata     : u8,
 
-    oam  : [u8; 256],    /* Object atribute memory */
-    vram : [u8; 0x4000], //16kb
+    pub oam         : [u8; 256],    /* Object atribute memory */
+    pub vram        : [u8; 0x4000], //16kb
 }
 
 impl Ppu {
@@ -30,16 +30,16 @@ impl Ppu {
         }
     }
 
-    pub fn load (&mut self, address: u16) -> u8 {
-        if address < 0x3000{
+    pub fn load (self, address: u16) -> u8 {
+        if address < 0x3000 {
             return self.vram[address as usize];
-        }else if address < 0x3F00{
+        }else if address < 0x3F00 {
             return self.vram[(address - 0x1000) as usize];
-        }else if address < 0x3F20{
+        }else if address < 0x3F20 {
             return self.vram[address as usize];
-        }else if address < 0x4000{
+        }else if address < 0x4000 {
             return self.vram[(address - 0x100) as usize];
-        }else{
+        }else {
             return self.vram[(address % 0x4000) as usize];
         }
     }
@@ -58,15 +58,15 @@ impl Ppu {
      * */
 
     pub fn write (&mut self, address: u16, value: u8){
-        if address < 0x3000{
+        if address < 0x3000 {
             self.vram[address as usize] = value;
-        }else if address < 0x3F00{
+        }else if address < 0x3F00 {
             self.vram[(address - 0x1000) as usize] = value;
-        }else if address < 0x3F20{
+        }else if address < 0x3F20 {
             self.vram[address as usize] = value;
-        }else if address < 0x4000{
+        }else if address < 0x4000 {
             self.vram[(address - 0x100) as usize] = value;
-        }else{
+        }else {
             self.vram[(address % 0x4000) as usize] = value;
         }
     }

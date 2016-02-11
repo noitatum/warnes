@@ -15,7 +15,7 @@ impl Memory {
 
     pub fn load (&self, address: u16) -> u8 {
         if address < 0x2000 {
-            return self.ram[ (address & 0x7ff) as usize]
+            return self.ram[(address & 0x7ff) as usize]
         } else if address < 0x4000 {
             return match (address % 0x2000) & 0x7 {
                 //0 => self.ppu.ppuctrl, En teoria los registros comentados son write only
@@ -45,7 +45,7 @@ impl Memory {
 
     pub fn write (&mut self, address: u16, value : u8){
         if address < 0x2000 {
-            self.ram[ (address & 0x7ff) as usize] = value
+            self.ram[(address & 0x7ff) as usize] = value
         } else if address < 0x4000 {
             match (address % 0x2000) & 0x7 {
                 0 => self.ppu.ppuctrl = value,
