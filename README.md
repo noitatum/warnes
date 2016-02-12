@@ -1,3 +1,5 @@
+![](https://travis-ci.org/araml/RNES.svg?branch=master)
+
 # RNES
-(wip)NES Emulator made in Rust :video_game:
+NES Emulator written in Rust :video_game:
 
