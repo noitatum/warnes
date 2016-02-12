@@ -162,15 +162,6 @@ pub struct CPU {
     PC      : W<u16>, // Program counter
 }
 
-fn load_word(memory: &mut Mem, address: W<u16>) -> u16 {
-    let low = memory.load(address.0) as u16;
-    (memory.load((address + W(1)).0) as u16) << 8 | low
-}
-
-fn write_word(memory: &mut Mem, address: W<u16>, word: u16) {
-    memory.write(address.0, (word >> 8) as u8);
-    memory.write((address + W(1)).0, word as u8);
-}
 
 impl CPU {
     pub fn new() -> CPU {
@@ -190,7 +181,7 @@ impl CPU {
     }
 
     fn push(&mut self, memory: &mut Mem, byte: u8) {
-        memory.write(STACK_PAGE | (self.SP.0 as u16), byte);
+        memory.store(STACK_PAGE | (self.SP.0 as u16), byte);
         self.SP = self.SP - W(1);
     }
 
@@ -217,9 +208,9 @@ impl CPU {
 
     fn do_jump(&mut self, memory: &mut Mem, opcode: u8) -> u32 {
         let mut cycles = CYCLES_JUMP;
-        let mut address = load_word(memory, self.PC + W(1)); 
+        let mut address = memory.load_word(self.PC + W(1)); 
         if opcode & !OP_JUMP_MASK > 0 {
-            address = load_word(memory, W(address));
+            address = memory.load_word(W(address));
             // Indirect Jump, additional two cycles
             cycles += 2;
         } 
@@ -231,7 +222,7 @@ impl CPU {
         if opcode == OP_JSR {
             // Load destination address and push return address
             let pc = self.PC;
-            let address = load_word(memory, pc + W(1));
+            let address = memory.load_word(pc + W(1));
             self.push_word(memory, (pc + W(3)).0);
             self.PC = W(address);
             CYCLES_JSR

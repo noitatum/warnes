@@ -1,4 +1,7 @@
 use ppu::Ppu;
+use std::num::Wrapping as W;
+
+const STACK_PAGE        : u16 = 0x0100;
 
 pub struct Memory {
     ram : [u8; 2048],
@@ -18,7 +21,7 @@ impl Memory {
                 self.ram[(address & 0x7ff) as usize]
             } else if address < 0x4000 {
                 match (address % 0x2000) & 0x7 {
-                    //0 => self.ppu.ppuctrl, En teoria los registros comentados son write only
+                    //0 => self.ppu.ppuctrl, En teoria los registros comentados son read only
                     //1 => self.ppu.ppumask,
                     2 => self.ppu.ppustatus,
                     //3 => self.ppu.oamaddr,
@@ -43,7 +46,7 @@ impl Memory {
             }
     }
 
-    pub fn write (&mut self, address: u16, value : u8){
+    pub fn store (&mut self, address: u16, value : u8){
         if address < 0x2000 {
             self.ram[(address & 0x7ff) as usize] = value
         } else if address < 0x4000 {
@@ -71,5 +74,15 @@ impl Memory {
             /* PRG-ROM */
            
         }
+    }
+
+    pub fn load_word(&mut self, address: W<u16>) -> u16 {
+        let low = self.load(address.0) as u16;
+        (self.load((address + W(1)).0) as u16) << 8 | low
+    }
+
+    pub fn store_word(&mut self, address: W<u16>, word: u16) {
+        self.store(address.0, (word >> 8) as u8);
+        self.store((address + W(1)).0, word as u8);
     }
 }
