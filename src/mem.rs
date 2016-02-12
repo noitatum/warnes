@@ -1,4 +1,5 @@
 use ppu::Ppu;
+use std::num::Wrapping as W;
 
 pub struct Memory {
     ram : [u8; 2048],
@@ -13,11 +14,12 @@ impl Memory {
         }
     }
 
-    pub fn load (&self, address: u16) -> u8 {
-        if address < 0x2000 {
-            return self.ram[ (address & 0x7ff) as usize]
-        } else if address < 0x4000 {
-            return match (address % 0x2000) & 0x7 {
+    pub fn load (&self, address: W<u16>) -> W<u8> {
+        let addr = address.0;
+        if addr < 0x2000 {
+            W(self.ram[(addr & 0x7ff) as usize])
+        } else if addr < 0x4000 {
+            W(match (addr % 0x2000) & 0x7 {
                 0 => self.ppu.ppuctrl,
                 1 => self.ppu.ppumask,
                 2 => self.ppu.ppustatus,
@@ -27,44 +29,46 @@ impl Memory {
                 6 => self.ppu.ppuaddr,
                 7 => self.ppu.ppudata,
                 _ => 0 // fuck you.
-            }
-        } else if address < 0x4020 {
+            })
+        } else if addr < 0x4020 {
             /* Apu TODO*/
-            return 0 
-        } else if address < 0x6000 {
+            W(0) 
+        } else if addr < 0x6000 {
             /* Cartridge expansion ROM the f */
-            return 0
-        } else if address < 0x8000 {
+            W(0)
+        } else if addr < 0x8000 {
             /* SRAM */
-            return 0
+            W(0)
         } else /* 0x8000 <= address < 0xC000*/ {
             /* PRG-ROM */
-            return 0
+            W(0)
         }
     }
 
-    pub fn write (&mut self, address: u16, value : u8){
-        if address < 0x2000 {
-            self.ram[ (address & 0x7ff) as usize] = value
-        } else if address < 0x4000 {
-            match (address % 0x2000) & 0x7 {
-                0 => self.ppu.ppuctrl = value,
-                1 => self.ppu.ppumask = value, 
-                2 => self.ppu.ppustatus = value,
-                3 => self.ppu.oamaddr = value,
-                4 => self.ppu.oamdata = value, 
-                5 => self.ppu.ppuscroll = value,
-                6 => self.ppu.ppuaddr = value,
-                7 => self.ppu.ppudata = value,
-                _ => self.ppu.ppuctrl = value  // epic.
+    pub fn write (&mut self, address: W<u16>, value : W<u8>){
+        let addr = address.0;
+        let val = value.0;
+        if addr < 0x2000 {
+            self.ram[(addr & 0x7ff) as usize] = val
+        } else if addr < 0x4000 {
+            match (addr % 0x2000) & 0x7 {
+                0 => self.ppu.ppuctrl = val,
+                1 => self.ppu.ppumask = val, 
+                2 => self.ppu.ppustatus = val,
+                3 => self.ppu.oamaddr = val,
+                4 => self.ppu.oamdata = val, 
+                5 => self.ppu.ppuscroll = val,
+                6 => self.ppu.ppuaddr = val,
+                7 => self.ppu.ppudata = val,
+                _ => self.ppu.ppuctrl = val  // epic.
             }
-        } else if address < 0x4020 {
+        } else if addr < 0x4020 {
             /* Apu TODO*/
              
-        } else if address < 0x6000 {
+        } else if addr < 0x6000 {
             /* Cartridge expansion ROM the f */
             
-        } else if address < 0x8000 {
+        } else if addr < 0x8000 {
             /* SRAM */
            
         } else /* 0x8000 <= address < 0xC000*/ {

@@ -2,6 +2,158 @@ use std::fmt;
 use mem::Memory as Mem;
 use std::num::Wrapping as W;
 
+
+/* Addressing, Instruction, Cycles, Has Penalty */
+/* WARNING: Branch instructions are replaced with nops */
+
+const OPCODE_TABLE : [(fn(&mut CPU, &mut Mem) -> (W<u16>, bool),
+                      fn(&mut CPU, &mut Mem, W<u16>), u32, bool); 256] = [
+    (CPU::imp, CPU::brk, 7, false), (CPU::idx, CPU::ora, 6, false), 
+    (CPU::imp, CPU::nop, 2, false), (CPU::imp, CPU::nop, 2, false), 
+    (CPU::imp, CPU::nop, 2, false), (CPU::zpg, CPU::ora, 3, false),
+    (CPU::zpg, CPU::asl, 5, false), (CPU::imp, CPU::nop, 2, false),
+    (CPU::imp, CPU::php, 3, false), (CPU::imm, CPU::ora, 2, false),
+    (CPU::imp, CPU::sla, 2, false), (CPU::imp, CPU::nop, 2, false), 
+    (CPU::imp, CPU::nop, 2, false), (CPU::abs, CPU::ora, 4, false),
+    (CPU::abs, CPU::asl, 6, false), (CPU::imp, CPU::nop, 2, false), 
+    
+    (CPU::imp, CPU::nop, 2, false), (CPU::idy, CPU::ora, 5, true), 
+    (CPU::imp, CPU::nop, 2, false), (CPU::imp, CPU::nop, 2, false),
+    (CPU::imp, CPU::nop, 2, false), (CPU::zpx, CPU::ora, 4, false),
+    (CPU::zpx, CPU::asl, 6, false), (CPU::imp, CPU::nop, 2, false),
+    (CPU::imp, CPU::clc, 2, false), (CPU::aby, CPU::ora, 4, true),
+    (CPU::imp, CPU::nop, 2, false), (CPU::imp, CPU::nop, 2, false),
+    (CPU::imp, CPU::nop, 2, false), (CPU::abx, CPU::ora, 4, true), 
+    (CPU::abx, CPU::asl, 7, false), (CPU::imp, CPU::nop, 2, false),
+
+    (CPU::abs, CPU::jsr, 6, false), (CPU::idx, CPU::and, 6, false), 
+    (CPU::imp, CPU::nop, 2, false), (CPU::imp, CPU::nop, 6, false),
+    (CPU::zpg, CPU::bit, 3, false), (CPU::zpg, CPU::and, 3, false),
+    (CPU::zpg, CPU::rol, 5, false), (CPU::imp, CPU::nop, 2, false),
+    (CPU::imp, CPU::plp, 4, false), (CPU::imm, CPU::and, 2, false),
+    (CPU::imp, CPU::rla, 2, false), (CPU::imp, CPU::nop, 2, false),
+    (CPU::abs, CPU::bit, 4, false), (CPU::abs, CPU::and, 4, false),
+    (CPU::abs, CPU::rol, 6, false), (CPU::imp, CPU::nop, 2, false),
+
+    (CPU::imp, CPU::nop, 2, false), (CPU::idy, CPU::and, 5, true),
+    (CPU::imp, CPU::nop, 2, false), (CPU::imp, CPU::nop, 2, false),
+    (CPU::imp, CPU::nop, 2, false), (CPU::zpx, CPU::and, 4, false),
+    (CPU::zpx, CPU::rol, 6, false), (CPU::imp, CPU::nop, 2, false),
+    (CPU::imp, CPU::sec, 2, false), (CPU::aby, CPU::and, 4, true),
+    (CPU::imp, CPU::nop, 2, false), (CPU::imp, CPU::nop, 2, true),
+    (CPU::imp, CPU::nop, 2, false), (CPU::abx, CPU::and, 4, true),
+    (CPU::abx, CPU::rol, 7, false), (CPU::imp, CPU::nop, 2, false),
+
+    (CPU::imp, CPU::rti, 6, false), (CPU::idx, CPU::eor, 6, false),
+    (CPU::imp, CPU::nop, 2, false), (CPU::imp, CPU::nop, 2, false),
+    (CPU::imp, CPU::nop, 2, false), (CPU::zpg, CPU::eor, 3, false), 
+    (CPU::zpg, CPU::lsr, 5, false), (CPU::imp, CPU::nop, 2, false),
+    (CPU::imp, CPU::pha, 3, false), (CPU::imm, CPU::eor, 2, false),
+    (CPU::imp, CPU::sra, 2, false), (CPU::imp, CPU::nop, 2, false),
+    (CPU::abs, CPU::jmp, 3, false), (CPU::abs, CPU::eor, 4, false),
+    (CPU::abs, CPU::lsr, 6, false), (CPU::imp, CPU::nop, 2, false),
+
+    (CPU::imp, CPU::nop, 2, false), (CPU::idy, CPU::eor, 5, true), 
+    (CPU::imp, CPU::nop, 2, false), (CPU::imp, CPU::nop, 2, false),
+    (CPU::imp, CPU::nop, 2, false), (CPU::zpx, CPU::eor, 4, false),
+    (CPU::zpx, CPU::lsr, 6, false), (CPU::imp, CPU::nop, 2, false),
+    (CPU::imp, CPU::cli, 2, false), (CPU::aby, CPU::eor, 4, true), 
+    (CPU::imp, CPU::nop, 2, false), (CPU::imp, CPU::nop, 2, false), 
+    (CPU::imp, CPU::nop, 2, false), (CPU::abx, CPU::eor, 4, true),
+    (CPU::abx, CPU::lsr, 7, false), (CPU::imp, CPU::nop, 2, false),
+
+    (CPU::imp, CPU::rts, 6, false), (CPU::idx, CPU::adc, 6, false),
+    (CPU::imp, CPU::nop, 2, false), (CPU::imp, CPU::nop, 2, false),
+    (CPU::imp, CPU::nop, 2, false), (CPU::zpg, CPU::adc, 3, false),
+    (CPU::zpg, CPU::ror, 5, false), (CPU::imp, CPU::nop, 2, false),
+    (CPU::imp, CPU::pla, 4, false), (CPU::imm, CPU::adc, 2, false),
+    (CPU::imp, CPU::rra, 2, false), (CPU::imp, CPU::nop, 2, false),
+    (CPU::ind, CPU::jmp, 5, false), (CPU::abs, CPU::adc, 4, false),
+    (CPU::abs, CPU::ror, 6, false), (CPU::imp, CPU::nop, 2, false),
+
+    (CPU::imp, CPU::nop, 2, false), (CPU::idy, CPU::adc, 5, true),
+    (CPU::imp, CPU::nop, 2, false), (CPU::imp, CPU::nop, 2, false),
+    (CPU::imp, CPU::nop, 2, false), (CPU::zpx, CPU::adc, 4, false),
+    (CPU::zpx, CPU::ror, 6, false), (CPU::imp, CPU::nop, 2, false),
+    (CPU::imp, CPU::sei, 2, false), (CPU::aby, CPU::adc, 4, true),
+    (CPU::imp, CPU::nop, 2, false), (CPU::imp, CPU::nop, 2, false), 
+    (CPU::imp, CPU::nop, 2, false), (CPU::abx, CPU::adc, 4, true),
+    (CPU::abx, CPU::ror, 7, false), (CPU::imp, CPU::nop, 2, false),
+
+    (CPU::imp, CPU::nop, 2, false), (CPU::idx, CPU::sta, 6, false),
+    (CPU::imp, CPU::nop, 2, false), (CPU::imp, CPU::nop, 2, false),
+    (CPU::zpg, CPU::sty, 3, false), (CPU::zpg, CPU::sta, 3, false),
+    (CPU::zpg, CPU::stx, 3, false), (CPU::imp, CPU::nop, 2, false),
+    (CPU::imp, CPU::dey, 2, false), (CPU::imp, CPU::nop, 2, false),
+    (CPU::imp, CPU::txa, 2, false), (CPU::imp, CPU::nop, 2, false),
+    (CPU::abs, CPU::sty, 4, false), (CPU::abs, CPU::sta, 4, false),
+    (CPU::abs, CPU::stx, 4, false), (CPU::imp, CPU::nop, 2, false),
+
+    (CPU::imp, CPU::nop, 2, false), (CPU::idy, CPU::sta, 6, false),
+    (CPU::imp, CPU::nop, 2, false), (CPU::imp, CPU::nop, 2, false), 
+    (CPU::zpx, CPU::sty, 4, false), (CPU::zpx, CPU::sta, 4, false),
+    (CPU::zpy, CPU::stx, 4, false), (CPU::imp, CPU::nop, 2, false),
+    (CPU::imp, CPU::tya, 2, false), (CPU::aby, CPU::sta, 5, false), 
+    (CPU::imp, CPU::txs, 2, false), (CPU::imp, CPU::nop, 2, false), 
+    (CPU::imp, CPU::nop, 2, false), (CPU::abx, CPU::sta, 5, false),
+    (CPU::imp, CPU::nop, 2, false), (CPU::imp, CPU::nop, 2, false),
+
+    (CPU::imm, CPU::ldy, 2, false), (CPU::idx, CPU::lda, 6, false), 
+    (CPU::imm, CPU::ldx, 2, false), (CPU::imp, CPU::nop, 2, false),
+    (CPU::zpg, CPU::ldy, 3, false), (CPU::zpg, CPU::lda, 3, false),
+    (CPU::zpg, CPU::ldx, 3, false), (CPU::imp, CPU::nop, 2, false),
+    (CPU::imp, CPU::tya, 2, false), (CPU::imm, CPU::lda, 2, false),
+    (CPU::imp, CPU::tax, 2, false), (CPU::imp, CPU::nop, 2, false),
+    (CPU::abs, CPU::ldy, 4, false), (CPU::abs, CPU::lda, 4, false),
+    (CPU::abs, CPU::ldx, 4, false), (CPU::imp, CPU::nop, 4, false),
+
+    (CPU::imp, CPU::nop, 2, false), (CPU::idy, CPU::lda, 5, true), 
+    (CPU::imp, CPU::nop, 2, false), (CPU::imp, CPU::nop, 2, false),
+    (CPU::zpx, CPU::ldy, 4, false), (CPU::zpx, CPU::lda, 4, false),
+    (CPU::zpy, CPU::ldx, 4, false), (CPU::imp, CPU::nop, 2, false),
+    (CPU::imp, CPU::clv, 2, false), (CPU::aby, CPU::lda, 4, true), 
+    (CPU::imp, CPU::tsx, 2, false), (CPU::imp, CPU::nop, 2, false),
+    (CPU::abx, CPU::ldy, 4, true),  (CPU::abx, CPU::lda, 4, true),
+    (CPU::aby, CPU::ldx, 4, true),  (CPU::imp, CPU::nop, 2, false),
+
+    (CPU::imm, CPU::cpy, 2, false), (CPU::idx, CPU::cmp, 6, false), 
+    (CPU::imp, CPU::nop, 2, false), (CPU::imp, CPU::nop, 2, false), 
+    (CPU::zpg, CPU::cpy, 3, false), (CPU::zpg, CPU::cmp, 3, false),
+    (CPU::zpg, CPU::dec, 5, false), (CPU::imp, CPU::nop, 2, false),
+    (CPU::imp, CPU::iny, 2, false), (CPU::imm, CPU::cmp, 2, false),
+    (CPU::imp, CPU::dex, 2, false), (CPU::imp, CPU::nop, 2, false),
+    (CPU::abs, CPU::cpy, 4, false), (CPU::abs, CPU::cmp, 4, false),
+    (CPU::abs, CPU::dec, 6, false), (CPU::imp, CPU::nop, 2, false),
+
+    (CPU::imp, CPU::nop, 2, false), (CPU::idy, CPU::cmp, 5, true),
+    (CPU::imp, CPU::nop, 2, false), (CPU::imp, CPU::nop, 2, false),
+    (CPU::imp, CPU::nop, 2, false), (CPU::zpx, CPU::cmp, 4, false),
+    (CPU::zpx, CPU::dec, 6, false), (CPU::imp, CPU::nop, 2, false),
+    (CPU::imp, CPU::cld, 2, false), (CPU::aby, CPU::cmp, 4, true),
+    (CPU::imp, CPU::nop, 2, false), (CPU::imp, CPU::nop, 2, false),
+    (CPU::imp, CPU::nop, 2, false), (CPU::abx, CPU::cmp, 4, true),
+    (CPU::abx, CPU::dec, 7, false), (CPU::imp, CPU::nop, 2, false),
+
+    (CPU::imm, CPU::cpx, 2, false), (CPU::idx, CPU::sbc, 6, false), 
+    (CPU::imp, CPU::nop, 2, false), (CPU::imp, CPU::nop, 2, false),
+    (CPU::zpg, CPU::cpx, 3, false), (CPU::zpg, CPU::sbc, 3, false),
+    (CPU::zpg, CPU::inc, 6, false), (CPU::imp, CPU::nop, 2, false),
+    (CPU::imp, CPU::inx, 2, false), (CPU::imm, CPU::sbc, 2, false),
+    (CPU::imp, CPU::nop, 2, false), (CPU::imp, CPU::nop, 2, false),
+    (CPU::abs, CPU::cpx, 4, false), (CPU::abs, CPU::sbc, 4, false),
+    (CPU::abs, CPU::inc, 6, false), (CPU::imp, CPU::nop, 2, false),
+
+    (CPU::imp, CPU::nop, 2, false), (CPU::idy, CPU::sbc, 5, true), 
+    (CPU::imp, CPU::nop, 2, false), (CPU::imp, CPU::nop, 2, false),
+    (CPU::imp, CPU::nop, 2, false), (CPU::zpx, CPU::sbc, 4, false),
+    (CPU::zpx, CPU::inc, 6, false), (CPU::imp, CPU::nop, 2, false),
+    (CPU::imp, CPU::sed, 2, false), (CPU::aby, CPU::sbc, 4, true), 
+    (CPU::imp, CPU::nop, 2, false), (CPU::imp, CPU::nop, 2, false), 
+    (CPU::imp, CPU::nop, 2, false), (CPU::abx, CPU::sbc, 4, true),
+    (CPU::abx, CPU::inc, 7, false), (CPU::imp, CPU::nop, 2, false),
+    ];
+
+/* Flag bits */
 const FLAG_CARRY        : u8 = 0x01;
 const FLAG_ZERO         : u8 = 0x02;
 const FLAG_INTERRUPT    : u8 = 0x04;
@@ -10,6 +162,16 @@ const FLAG_BRK          : u8 = 0x10;
 const FLAG_UNUSED       : u8 = 0x20;
 const FLAG_OVERFLOW     : u8 = 0x40;
 const FLAG_SIGN         : u8 = 0x80;
+
+const BRANCH_FLAG_TABLE : [u8; 4] = 
+    [FLAG_SIGN, FLAG_OVERFLOW, FLAG_CARRY, FLAG_ZERO];
+
+const STACK_PAGE        : W<u16> = W(0x10 as u16); 
+const PAGE_MASK         : W<u16> = W(0xF0 as u16);
+
+const CYCLES_BRANCH     : u32 = 2;
+const OP_BRANCH         : u8 = 0x10;
+const OP_BRANCH_MASK    : u8 = 0x1F;
 
 macro_rules! set_flag {
     ($flags:expr, $val:expr) => ($flags |= $val);
@@ -35,157 +197,27 @@ macro_rules! set_zero {
     );
 }
 
+macro_rules! addressing {
+    ($opcode:expr) => (($opcode >> 2) & 0x7)
+}
 
 macro_rules! ror {
-    ($val:expr, $flags:expr) => ( $val = ($val >> 1) | (($val & W(get_bit!($flags, FLAG_CARRY))) << 7));
+    ($val:expr, $flags:expr) => (
+            $val = ($val >> 1) | (($val & W($flags & FLAG_CARRY)) << 7));
 }
 
 macro_rules! rol {
-    ($val:expr, $flags:expr) => ($val = ($val << 1) | (($val & W(get_bit!($flags, FLAG_CARRY))) >> 7));
+    ($val:expr, $flags:expr) => (
+            $val = ($val << 1) | (($val & W($flags & FLAG_CARRY)) >> 7));
 }
 
-macro_rules! get_bit {
-    ($flags:expr, $flag_bit:expr) => ($flags & $flag_bit;);
+macro_rules! W16 {
+    ($val:expr) => (W($val.0 as u16));
 }
 
-const OP_SPECIAL_TABLE : [fn(&mut CPU, &mut Mem) -> u32; 4] = [
-    CPU::brk,
-    CPU::invalid_s,
-    CPU::rti,
-    CPU::rts,
-];
-
-const OP_BRANCH_TABLE : [fn(P : u8) -> bool; 8] = [
-    CPU::bpl,
-    CPU::bmi,
-    CPU::bvc,
-    CPU::bvs,
-    CPU::bcc,
-    CPU::bcs,
-    CPU::bne,
-    CPU::beq,
-];
-
-const OP_IMPLIED_TABLE : [fn(&mut CPU, &mut Mem); 32] = [
-    CPU::php,
-    CPU::asl_a,
-    CPU::clc,
-    CPU::invalid_i,
-    CPU::plp, 
-    CPU::rol_a,
-    CPU::sec,
-    CPU::invalid_i,
-    CPU::pha,
-    CPU::lsr_a,
-    CPU::cli,
-    CPU::invalid_i,
-    CPU::pla,
-    CPU::ror_a,
-    CPU::sei,
-    CPU::invalid_i,
-    CPU::dey,
-    CPU::txa,
-    CPU::tya,
-    CPU::txs,
-    CPU::tay,
-    CPU::tax,
-    CPU::clv,
-    CPU::tsx,
-    CPU::iny,
-    CPU::dex,
-    CPU::cld,
-    CPU::invalid_i,
-    CPU::inx,
-    CPU::nop,
-    CPU::sed,
-    CPU::invalid_i,
-];
-
-const OP_COMMON_TABLE : [fn(&mut CPU, &mut Mem, u8, u16) -> (); 32] = [
-    CPU::invalid_c,
-    CPU::ora,
-    CPU::asl,
-    CPU::invalid_c,
-    CPU::bit,
-    CPU::and,
-    CPU::rol,
-    CPU::invalid_c,
-    CPU::invalid_c,
-    CPU::eor,
-    CPU::lsr,
-    CPU::invalid_c,
-    CPU::invalid_c,
-    CPU::adc,
-    CPU::ror,
-    CPU::invalid_c,
-    CPU::sty,
-    CPU::sta,
-    CPU::stx,
-    CPU::invalid_c,
-    CPU::ldy,
-    CPU::lda,
-    CPU::ldx,
-    CPU::invalid_c,
-    CPU::cpy,
-    CPU::cmp,
-    CPU::dec,
-    CPU::invalid_c,
-    CPU::cpx,
-    CPU::sbc,
-    CPU::inc,
-    CPU::invalid_c,
-];
-
-const OP_JUMP_MASK      : u8 = 0xDF;
-const OP_JUMP           : u8 = 0x4C;
-const OP_SPECIAL_MASK   : u8 = 0x9F;
-const OP_SPECIAL        : u8 = 0x00;
-const OP_BRANCH_MASK    : u8 = 0x1F;
-const OP_BRANCH         : u8 = 0x10;
-const OP_IMPLIED_MASK   : u8 = 0x1F;
-const OP_IMPLIED        : u8 = 0x08;
-
-const OP_JSR            : u8 = 0x20;
-
-/* Implied instructions with more than two cycles */
-const OP_IMP_STACK_MASK : u8 = 0x9F;
-const OP_IMP_STACK      : u8 = 0x08;
-const OP_IMP_PULL_MASK  : u8 = 0xBF;
-const OP_IMP_PULL       : u8 = 0x28;
-
-/* Common instructions */
-
-/* ASL, ROL, LSR, ROR, DEC, INC Instructions */
-/* WARNING: Non exhaustive, this also selects STX and LDX */
-const OP_COMMON_B_MASK  : u8 = 0x03;
-const OP_COMMON_B       : u8 = 0x02;
-
-const STACK_PAGE        : u16 = 0x0100;
-const PAGE_MASK         : u16 = 0xFF00;
-
-/* Cycle cost */
-
-/* Jumps */
-const CYCLES_JUMP       : u32 = 3;
-const CYCLES_JSR        : u32 = 6;
-
-/* Branches */
-const CYCLES_BRANCH     : u32 = 2;
-
-/* Specials */
-const CYCLES_BRK        : u32 = 7;
-const CYCLES_RTI        : u32 = 6;
-const CYCLES_RTS        : u32 = 6;
-
-/* Implied */
-const CYCLES_IMPLIED    : u32 = 2;
-
-/* ASL, ROL, LSR, ROR, DEC, INC Instructions 
-   ZPG; ABS; ZPG, X; ABS, X; Addressing modes */
-const CYCLES_COMMON_B : [u32; 4] = [5, 6, 6, 7]; 
-
-const CYCLES_COMMON_A : [u32; 8] = [6, 3, 2, 4, 5, 4, 4, 4];
-const CYCLES_COMMON_A_EXTRA : [u32; 8] = [0, 0, 0, 0, 1, 0, 1, 1];
+macro_rules! W8 {
+    ($val:expr) => (W($val.0 as u8));
+}
 
 #[allow(non_snake_case)]
 pub struct CPU {
@@ -197,14 +229,14 @@ pub struct CPU {
     PC      : W<u16>, // Program counter
 }
 
-fn load_word(memory: &mut Mem, address: W<u16>) -> u16 {
-    let low = memory.load(address.0) as u16;
-    (memory.load((address + W(1)).0) as u16) << 8 | low
+fn load_word(memory: &mut Mem, address: W<u16>) -> W<u16> {
+    let low = W16!(memory.load(address));
+    (W16!(memory.load(address + W(1))) << 8) | low
 }
 
-fn write_word(memory: &mut Mem, address: W<u16>, word: u16) {
-    memory.write(address.0, (word >> 8) as u8);
-    memory.write((address + W(1)).0, word as u8);
+fn write_word(memory: &mut Mem, address: W<u16>, word: W<u16>) {
+    memory.write(address, W8!(word >> 8));
+    memory.write(address + W(1), W8!(word));
 }
 
 impl CPU {
@@ -219,177 +251,170 @@ impl CPU {
         }
     }
 
-    fn pop(&mut self, memory: &mut Mem) -> u8 {
+    fn pop(&mut self, memory: &mut Mem) -> W<u8> {
         self.SP = self.SP + W(1);
-        memory.load(STACK_PAGE | (self.SP.0 as u16))
+        memory.load(STACK_PAGE | W16!(self.SP))
     }
 
-    fn push(&mut self, memory: &mut Mem, byte: u8) {
-        memory.write(STACK_PAGE | (self.SP.0 as u16), byte);
+    fn push(&mut self, memory: &mut Mem, byte: W<u8>) {
+        memory.write(STACK_PAGE | W16!(self.SP), byte);
         self.SP = self.SP - W(1);
     }
 
-    fn push_word(&mut self, memory: &mut Mem, word: u16) {
-        self.push(memory, (word >> 8) as u8);
-        self.push(memory, word as u8);
+    fn push_word(&mut self, memory: &mut Mem, word: W<u16>) {
+        self.push(memory, W8!(word >> 8));
+        self.push(memory, W8!(word));
     }
 
-    fn pop_word(&mut self, memory: &mut Mem) -> u16 {
-        let low = self.pop(memory) as u16; 
-        (self.pop(memory) as u16) << 8 | low
+    fn pop_word(&mut self, memory: &mut Mem) -> W<u16> {
+        let low = W16!(self.pop(memory)); 
+        (W16!(self.pop(memory)) << 8) | low
+    }
+
+    fn branch(&mut self, memory: &mut Mem, opcode: u8) -> u32 {
+        let index = opcode >> 6;
+        let check = ((opcode >> 5) & 1) != 0;
+        if is_flag_set!(self.Flags, BRANCH_FLAG_TABLE[index as usize]) != check {
+            self.PC = self.PC + W(2);
+            return CYCLES_BRANCH;
+        }
+        let pc = self.PC;
+        let mut offset = memory.load(pc + W(1)).0 as i8;
+        // From sign-magnitude
+        if offset < 0 { 
+            offset = -(offset & 0x7F);
+        }
+        // Calculate branch address and push return address
+        let address = pc + W((offset as i16) as u16);
+        self.push_word(memory, pc + W(2));
+        self.PC = address; 
+        // Additional cycle if branch taken and page boundary crossed
+        CYCLES_BRANCH + 1 + ((address & PAGE_MASK) != (pc & PAGE_MASK)) as u32
     }
 
     pub fn execute(&mut self, memory: &mut Mem) -> u32 {
-        let op = memory.load(self.PC.0);
-        match op {
-            _ if op & OP_JUMP_MASK == OP_JUMP => self.do_jump(memory, op),
-            _ if op & OP_SPECIAL_MASK == OP_SPECIAL => self.do_special(memory, op),
-            _ if op & OP_BRANCH_MASK == OP_BRANCH => self.do_branch(memory, op),
-            _ if op & OP_IMPLIED_MASK == OP_IMPLIED => self.do_implied(memory, op),
-            _ => self.do_common(memory, op),
-        } 
-    }
-
-    fn do_jump(&mut self, memory: &mut Mem, opcode: u8) -> u32 {
-        let mut cycles = CYCLES_JUMP;
-        let mut address = load_word(memory, self.PC + W(1)); 
-        if opcode & !OP_JUMP_MASK > 0 {
-            address = load_word(memory, W(address));
-            // Indirect Jump, additional two cycles
-            cycles += 2;
-        } 
-        self.PC = W(address);
-        return cycles;
-    }
-
-    fn do_special(&mut self, memory: &mut Mem, opcode: u8) -> u32 { 
-        if opcode == OP_JSR {
-            // Load destination address and push return address
-            let pc = self.PC;
-            let address = load_word(memory, pc + W(1));
-            self.push_word(memory, (pc + W(3)).0);
-            self.PC = W(address);
-            CYCLES_JSR
+        let opcode = memory.load(self.PC).0;
+        if opcode & OP_BRANCH_MASK == OP_BRANCH {
+            self.branch(memory, opcode)
         } else {
-            let index = (opcode >> 5) & 0x3;
-            OP_SPECIAL_TABLE[index as usize](self, memory)
+            let instruction = OPCODE_TABLE[opcode as usize]; 
+            // Get address from mode
+            let (address, crossed) = instruction.0(self, memory);
+            // Execute the instruction
+            instruction.1(self, memory, address);
+            // Add the extra cycle if needed
+            instruction.2 + (instruction.3 && crossed) as u32
         }
-    }
-
-    fn do_branch(&mut self, memory: &mut Mem, opcode: u8) -> u32 {
-        let index = opcode >> 5;
-        let mut cycles = CYCLES_BRANCH;
-        if OP_BRANCH_TABLE[index as usize](self.Flags) {
-            let pc = self.PC;
-            let mut offset = memory.load((pc + W(1)).0) as i8;
-            // From sign-magnitude
-            if offset < 0 { 
-                offset = -(offset & 0x7F);
-            }
-            // Calculate branch address and push return address
-            let address = pc + W((offset as i16) as u16);
-            self.push_word(memory, (pc + W(3)).0);
-            self.PC = address; 
-            // Additional cycle if branch taken and page boundary crossed
-            cycles += 1 + ((address & W(PAGE_MASK)) != (pc & W(PAGE_MASK))) as u32;
-        }
-        return cycles;
-    }
-
-    fn do_implied(&mut self, memory: &mut Mem, opcode: u8) -> u32 {
-        let index = ((opcode >> 4) & 0xE) + ((opcode >> 1) & 1);
-        OP_IMPLIED_TABLE[index as usize](self, memory);
-        // Stack instructions get one additional cycle
-        // An additional one if it is a pull
-        CYCLES_IMPLIED + 
-            (opcode & OP_IMP_STACK_MASK == OP_IMP_STACK) as u32 +
-            (opcode & OP_IMP_PULL_MASK == OP_IMP_PULL) as u32
-    }
-
-    fn do_common(&mut self, memory: &mut Mem, opcode: u8) -> u32 {
-        /* Common Operations */
-        let addressing = (opcode >> 2) & 0x3;
-
-        let index = ((opcode >> 3) & 0x1C) + (opcode & 0x3);
-        OP_COMMON_TABLE[index as usize](self, memory, addressing, 0); /* calculate address */
-        return 0;
     }
 }
 
-// Branch conditions
+// Addressing modes
 
 impl CPU {
-    fn bpl (flags: u8) -> bool {
-        !is_flag_set!(flags, FLAG_SIGN)
+
+    fn imp(&mut self, memory: &mut Mem) -> (W<u16>, bool) {
+        self.PC = self.PC + W(1);
+        (W(0), false)
     }
 
-    fn bmi (flags: u8) -> bool {
-        is_flag_set!(flags, FLAG_SIGN)
+    fn imm(&mut self, memory: &mut Mem) -> (W<u16>, bool) {
+        self.PC = self.PC + W(2);
+        (self.PC - W(1), false)
     }
 
-    fn bvc (flags: u8) -> bool {
-        !is_flag_set!(flags, FLAG_OVERFLOW)
+    fn zpg(&mut self, memory: &mut Mem) -> (W<u16>, bool) {
+        let address = W16!(memory.load(self.PC + W(1)));
+        self.PC = self.PC + W(2);
+        (address, false)
     }
 
-    fn bvs (flags: u8) -> bool {
-        is_flag_set!(flags, FLAG_OVERFLOW)
+    fn abs(&mut self, memory: &mut Mem) -> (W<u16>, bool) {
+        let address = W16!(load_word(memory, self.PC + W(1)));
+        self.PC = self.PC + W(3);
+        (address, false)
     }
 
-    fn bcc (flags: u8) -> bool {
-        !is_flag_set!(flags, FLAG_CARRY)
+    fn ind(&mut self, memory: &mut Mem) -> (W<u16>, bool) {
+        let address = load_word(memory, self.PC + W(1));
+        self.PC = self.PC + W(3);
+        (load_word(memory, address), false)
     }
 
-    fn bcs (flags: u8) -> bool {
-        is_flag_set!(flags, FLAG_CARRY)
+    fn idx(&mut self, memory: &mut Mem) -> (W<u16>, bool) {
+        let address = W16!(memory.load(self.PC + W(1)) + self.X);
+        self.PC = self.PC + W(2);
+        (load_word(memory, address), false)
     }
 
-    fn bne (flags: u8) -> bool {
-        !is_flag_set!(flags, FLAG_ZERO)
+    fn idy(&mut self, memory: &mut Mem) -> (W<u16>, bool) {
+        let addr = W16!(memory.load(self.PC + W(1))); 
+        let dest = W16!(load_word(memory, addr) + W16!(self.Y));
+        self.PC = self.PC + W(2);
+        (dest, true)
     }
 
-    fn beq (flags: u8) -> bool {
-        is_flag_set!(flags, FLAG_ZERO)
+    fn zpx(&mut self, memory: &mut Mem) -> (W<u16>, bool) {
+        let address = W16!(memory.load(self.PC + W(1)) + self.X);
+        self.PC = self.PC + W(2);
+        (address, false)
+    }
+
+    fn zpy(&mut self, memory: &mut Mem) -> (W<u16>, bool) {
+        let address = W16!(memory.load(self.PC + W(1)) + self.Y);
+        self.PC = self.PC + W(2);
+        (address, false)
+    }
+
+    fn abx(&mut self, memory: &mut Mem) -> (W<u16>, bool) {
+        let address = load_word(memory, self.PC + W(1)) + W16!(self.X);
+        self.PC = self.PC + W(3);
+        (address, true)
+    }
+
+    fn aby(&mut self, memory: &mut Mem) -> (W<u16>, bool) {
+        let address = load_word(memory, self.PC + W(1)) + W16!(self.Y);
+        self.PC = self.PC + W(3);
+        (address, true)
     }
 }
 
 // Instructions
 
-impl CPU {
+impl CPU {   
+    
+    // Jump
 
-    // Special
-
-    fn invalid_s(&mut self, memory: &mut Mem) -> u32 {
-        assert!(false);
-        return 0;
+    fn jsr(&mut self, memory: &mut Mem, address: W<u16>) {
+        // Load destination address and push return address
+        let ret = self.PC + W(2);
+        self.push_word(memory, ret);
+        self.PC = address;
     }
 
-    fn brk(&mut self, memory: &mut Mem) -> u32 {
-       
-       return CYCLES_BRK; 
-    }
-
-    fn rti(&mut self, memory: &mut Mem) -> u32 {
-        
-       return CYCLES_RTI;
-    }
-
-    fn rts(&mut self, memory: &mut Mem) -> u32 {
-        
-       return CYCLES_RTS;
+    fn jmp(&mut self, memory: &mut Mem, address: W<u16>) {
+        self.PC = address;
     }
 
     // Implied
 
-    fn invalid_i(&mut self, memory: &mut Mem) { 
-        assert!(false);
+    fn brk(&mut self, memory: &mut Mem, address: W<u16>) {
+       
     }
 
-    fn php (&mut self, memory: &mut Mem) {
-        let flags : u8 = self.Flags;
+    fn rti(&mut self, memory: &mut Mem, address: W<u16>) {
+        
+    }
+
+    fn rts(&mut self, memory: &mut Mem, address: W<u16>) {
+        
+    }
+
+    fn php (&mut self, memory: &mut Mem, address: W<u16>) {
+        let flags = W(self.Flags);
         self.push(memory, flags);
     }
 
-    fn asl_a (&mut self, memory: &mut Mem) {
+    fn sla (&mut self, memory: &mut Mem, address: W<u16>) {
         if self.A & W(0x80) != W(0) {
             set_flag!(self.Flags, FLAG_CARRY);
         } else {
@@ -400,15 +425,15 @@ impl CPU {
         set_sign!(self.Flags, self.A.0);
     }
 
-    fn clc (&mut self, memory: &mut Mem) {
+    fn clc (&mut self, memory: &mut Mem, address: W<u16>) {
         unset_flag!(self.Flags, FLAG_CARRY);
     }
 
-    fn plp (&mut self, memory: &mut Mem) {
-        self.Flags = self.pop(memory);
+    fn plp (&mut self, memory: &mut Mem, address: W<u16>) {
+        self.Flags = self.pop(memory).0;
     }
 
-    fn rol_a (&mut self, memory: &mut Mem) {
+    fn rla (&mut self, memory: &mut Mem, address: W<u16>) {
         /* C = bit to be rotated into the carry */
         let c : W<u8> = self.A & W(0x80);
         rol!(self.A, self.Flags);
@@ -423,16 +448,16 @@ impl CPU {
         set_sign!(self.Flags, self.A.0); 
     }
 
-    fn sec (&mut self, memory: &mut Mem) {
+    fn sec (&mut self, memory: &mut Mem, address: W<u16>) {
         set_flag!(self.Flags, FLAG_CARRY);
     }
 
-    fn pha (&mut self, memory: &mut Mem) {
-        let AP : u8 = self.A.0;
-        self.push(memory, AP);
+    fn pha (&mut self, memory: &mut Mem, address: W<u16>) {
+        let a = self.A;
+        self.push(memory, a);
     }
 
-    fn lsr_a (&mut self, memory: &mut Mem) {
+    fn sra (&mut self, memory: &mut Mem, address: W<u16>) {
         if self.A & W(1) != W(0) {
             set_flag!(self.Flags, FLAG_CARRY);
         } else {
@@ -443,15 +468,15 @@ impl CPU {
         unset_flag!(self.Flags, FLAG_SIGN);
     }
 
-    fn cli (&mut self, memory: &mut Mem) {
+    fn cli (&mut self, memory: &mut Mem, address: W<u16>) {
         unset_flag!(self.Flags, FLAG_INTERRUPT);
     }
 
-    fn pla (&mut self, memory: &mut Mem) {
-        self.A = W(self.pop(memory));
+    fn pla (&mut self, memory: &mut Mem, address: W<u16>) {
+        self.A = self.pop(memory);
     }
 
-    fn ror_a (&mut self, memory: &mut Mem) {
+    fn rra (&mut self, memory: &mut Mem, address: W<u16>) {
         /* c = bit to be rotated into the carry */
         let c : W<u8> = self.A & W(1);
         ror!(self.A, self.Flags);
@@ -466,175 +491,171 @@ impl CPU {
         set_sign!(self.Flags, self.A.0);
     }
 
-    fn sei (&mut self, memory: &mut Mem) {
+    fn sei (&mut self, memory: &mut Mem, address: W<u16>) {
         set_flag!(self.Flags, FLAG_INTERRUPT);
     }
 
-    fn dey (&mut self, memory: &mut Mem) {
+    fn dey (&mut self, memory: &mut Mem, address: W<u16>) {
         self.Y = self.Y + W(1);
         set_zero!(self.Flags, self.Y.0);
         set_sign!(self.Flags, self.Y.0);
     }
 
-    fn txa (&mut self, memory: &mut Mem) {
+    fn txa (&mut self, memory: &mut Mem, address: W<u16>) {
         self.A = self.X;
         set_zero!(self.Flags, self.A.0);
         set_sign!(self.Flags, self.A.0);
     }
 
-    fn tya (&mut self, memory: &mut Mem) {
+    fn tya (&mut self, memory: &mut Mem, address: W<u16>) {
         self.A = self.Y;
         set_zero!(self.Flags, self.A.0);
         set_sign!(self.Flags, self.A.0);
 
     }
 
-    fn txs (&mut self, memory: &mut Mem) {
+    fn txs (&mut self, memory: &mut Mem, address: W<u16>) {
         self.SP = self.X;
         set_zero!(self.Flags, self.X.0);
         set_sign!(self.Flags, self.X.0);
 
     }
 
-    fn tay (&mut self, memory: &mut Mem) {
+    fn tay (&mut self, memory: &mut Mem, address: W<u16>) {
         self.Y = self.A;
         set_zero!(self.Flags, self.Y.0);
         set_sign!(self.Flags, self.Y.0);
     }
 
-    fn tax (&mut self, memory: &mut Mem) {
+    fn tax (&mut self, memory: &mut Mem, address: W<u16>) {
         self.X = self.A;
         set_zero!(self.Flags, self.X.0);
         set_sign!(self.Flags, self.X.0);
     }
 
-    fn clv (&mut self, memory: &mut Mem) {
+    fn clv (&mut self, memory: &mut Mem, address: W<u16>) {
         unset_flag!(self.Flags, FLAG_OVERFLOW);
     }
 
-    fn tsx (&mut self, memory: &mut Mem) {
+    fn tsx (&mut self, memory: &mut Mem, address: W<u16>) {
         self.X = self.SP;
         set_zero!(self.Flags, self.X.0);
         set_sign!(self.Flags, self.X.0);
     }
 
-    fn iny (&mut self, memory: &mut Mem) {
+    fn iny (&mut self, memory: &mut Mem, address: W<u16>) {
         self.Y = self.Y + W(1);
         set_zero!(self.Flags, self.Y.0);
         set_sign!(self.Flags, self.Y.0);
     }
 
-    fn dex (&mut self, memory: &mut Mem) {
+    fn dex (&mut self, memory: &mut Mem, address: W<u16>) {
         self.X = self.X - W(1);
         set_zero!(self.Flags, self.X.0);
         set_sign!(self.Flags, self.X.0);
     }
 
-    fn cld (&mut self, memory: &mut Mem) {
+    fn cld (&mut self, memory: &mut Mem, address: W<u16>) {
         unset_flag!(self.Flags, FLAG_DECIMAL);
     }
 
-    fn inx (&mut self, memory: &mut Mem) {
+    fn inx (&mut self, memory: &mut Mem, address: W<u16>) {
         self.X = self.X + W(1);
         set_zero!(self.Flags, self.X.0);
         set_sign!(self.Flags, self.X.0);
     }
 
-    fn nop (&mut self, memory: &mut Mem) {
+    fn nop (&mut self, memory: &mut Mem, address: W<u16>) {
 
     }
 
-    fn sed (&mut self, memory: &mut Mem) {
+    fn sed (&mut self, memory: &mut Mem, address: W<u16>) {
         set_flag!(self.Flags, FLAG_DECIMAL);
     }
 
     // Common
 
-    fn invalid_c(&mut self, memory: &mut Mem, mode: u8, address: u16) {
-        assert!(false);
-    }
-
-    fn ora (&mut self, memory: &mut Mem, mode: u8, address: u16) {
+    fn ora (&mut self, memory: &mut Mem, address: W<u16>) {
 
     }
 
-    fn asl (&mut self, memory: &mut Mem, mode: u8, address: u16) {
+    fn asl (&mut self, memory: &mut Mem, address: W<u16>) {
 
     }
 
-    fn bit (&mut self, memory: &mut Mem, mode: u8, address: u16) {
+    fn bit (&mut self, memory: &mut Mem, address: W<u16>) {
 
     }
 
-    fn and (&mut self, memory: &mut Mem, mode: u8, address: u16) {
+    fn and (&mut self, memory: &mut Mem, address: W<u16>) {
 
     }
 
-    fn rol (&mut self, memory: &mut Mem, mode: u8, address: u16) {
+    fn rol (&mut self, memory: &mut Mem, address: W<u16>) {
 
     }
 
-    fn eor (&mut self, memory: &mut Mem, mode: u8, address: u16) {
+    fn eor (&mut self, memory: &mut Mem, address: W<u16>) {
 
     }
 
-    fn lsr (&mut self, memory: &mut Mem, mode: u8, address: u16) {
+    fn lsr (&mut self, memory: &mut Mem, address: W<u16>) {
 
     }
 
-    fn adc (&mut self, memory: &mut Mem, mode: u8, address: u16) {
+    fn adc (&mut self, memory: &mut Mem, address: W<u16>) {
 
     }
 
-    fn ror (&mut self, memory: &mut Mem, mode: u8, address: u16) {
+    fn ror (&mut self, memory: &mut Mem, address: W<u16>) {
 
     }
 
-    fn sty (&mut self, memory: &mut Mem, mode: u8, address: u16) {
+    fn sty (&mut self, memory: &mut Mem, address: W<u16>) {
 
     }
 
-    fn sta (&mut self, memory: &mut Mem, mode: u8, address: u16) {
+    fn sta (&mut self, memory: &mut Mem, address: W<u16>) {
 
     }
 
-    fn stx (&mut self, memory: &mut Mem, mode: u8, address: u16) {
+    fn stx (&mut self, memory: &mut Mem, address: W<u16>) {
 
     }
 
-    fn ldy (&mut self, memory: &mut Mem, mode: u8, address: u16) {
+    fn ldy (&mut self, memory: &mut Mem, address: W<u16>) {
 
     }
 
-    fn lda (&mut self, memory: &mut Mem, mode: u8, address: u16) {
+    fn lda (&mut self, memory: &mut Mem, address: W<u16>) {
 
     }
 
-    fn ldx (&mut self, memory: &mut Mem, mode: u8, address: u16) {
+    fn ldx (&mut self, memory: &mut Mem, address: W<u16>) {
 
     }
 
-    fn cpy (&mut self, memory: &mut Mem, mode: u8, address: u16) {
+    fn cpy (&mut self, memory: &mut Mem, address: W<u16>) {
 
     }
 
-    fn cmp (&mut self, memory: &mut Mem, mode: u8, address: u16) {
+    fn cmp (&mut self, memory: &mut Mem, address: W<u16>) {
 
     }
 
-    fn dec (&mut self, memory: &mut Mem, mode: u8, address: u16) {
+    fn dec (&mut self, memory: &mut Mem, address: W<u16>) {
 
     }
 
-    fn cpx (&mut self, memory: &mut Mem, mode: u8, address: u16) {
+    fn cpx (&mut self, memory: &mut Mem, address: W<u16>) {
 
     }
 
-    fn sbc (&mut self, memory: &mut Mem, mode: u8, address: u16) {
+    fn sbc (&mut self, memory: &mut Mem, address: W<u16>) {
 
     }
    
-    fn inc (&mut self, memory: &mut Mem, mode: u8, address: u16) {
+    fn inc (&mut self, memory: &mut Mem, address: W<u16>) {
 
     }
 }
