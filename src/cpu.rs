@@ -1,3 +1,5 @@
+#[macro_use]
+use macros;
 use std::fmt;
 use mem::Memory as Mem;
 use std::num::Wrapping as W;
@@ -173,52 +175,6 @@ const CYCLES_BRANCH     : u32 = 2;
 const OP_BRANCH         : u8 = 0x10;
 const OP_BRANCH_MASK    : u8 = 0x1F;
 
-macro_rules! set_flag {
-    ($flags:expr, $val:expr) => ($flags |= $val);
-}
-
-macro_rules! unset_flag {
-    ($flags:expr, $val:expr) => ($flags &= !$val);
-}
-
-macro_rules! is_flag_set {
-    ($flags:expr, $val:expr) => ($flags & $val != 0);
-}
-
-macro_rules! set_sign {
-    ($flags:expr, $val:expr) => ( 
-        $flags = $flags & !FLAG_SIGN | $val & FLAG_SIGN;
-    );
-}
-
-macro_rules! set_zero {
-    ($flags:expr, $val:expr) => (
-        set_flag!($flags, (($val == 0) as u8) << 1);
-    );
-}
-
-macro_rules! addressing {
-    ($opcode:expr) => (($opcode >> 2) & 0x7)
-}
-
-macro_rules! ror {
-    ($val:expr, $flags:expr) => (
-            $val = ($val >> 1) | (($val & W($flags & FLAG_CARRY)) << 7));
-}
-
-macro_rules! rol {
-    ($val:expr, $flags:expr) => (
-            $val = ($val << 1) | (($val & W($flags & FLAG_CARRY)) >> 7));
-}
-
-macro_rules! W16 {
-    ($val:expr) => (W($val.0 as u16));
-}
-
-macro_rules! W8 {
-    ($val:expr) => (W($val.0 as u8));
-}
-
 #[allow(non_snake_case)]
 pub struct CPU {
     A       : W<u8>,  // Accumulator
@@ -227,16 +183,6 @@ pub struct CPU {
     Flags   : u8,     // Status
     SP      : W<u8>,  // Stack pointer
     PC      : W<u16>, // Program counter
-}
-
-fn load_word(memory: &mut Mem, address: W<u16>) -> W<u16> {
-    let low = W16!(memory.load(address));
-    (W16!(memory.load(address + W(1))) << 8) | low
-}
-
-fn write_word(memory: &mut Mem, address: W<u16>, word: W<u16>) {
-    memory.write(address, W8!(word >> 8));
-    memory.write(address + W(1), W8!(word));
 }
 
 impl CPU {
@@ -257,7 +203,7 @@ impl CPU {
     }
 
     fn push(&mut self, memory: &mut Mem, byte: W<u8>) {
-        memory.write(STACK_PAGE | W16!(self.SP), byte);
+        memory.store(STACK_PAGE | W16!(self.SP), byte);
         self.SP = self.SP - W(1);
     }
 
@@ -329,26 +275,26 @@ impl CPU {
     }
 
     fn abs(&mut self, memory: &mut Mem) -> (W<u16>, bool) {
-        let address = W16!(load_word(memory, self.PC + W(1)));
+        let address = W16!(memory.load_word(self.PC + W(1)));
         self.PC = self.PC + W(3);
         (address, false)
     }
 
     fn ind(&mut self, memory: &mut Mem) -> (W<u16>, bool) {
-        let address = load_word(memory, self.PC + W(1));
+        let address = memory.load_word(self.PC + W(1));
         self.PC = self.PC + W(3);
-        (load_word(memory, address), false)
+        (memory.load_word(address), false)
     }
 
     fn idx(&mut self, memory: &mut Mem) -> (W<u16>, bool) {
         let address = W16!(memory.load(self.PC + W(1)) + self.X);
         self.PC = self.PC + W(2);
-        (load_word(memory, address), false)
+        (memory.load_word(address), false)
     }
 
     fn idy(&mut self, memory: &mut Mem) -> (W<u16>, bool) {
         let addr = W16!(memory.load(self.PC + W(1))); 
-        let dest = W16!(load_word(memory, addr) + W16!(self.Y));
+        let dest = W16!(memory.load_word(addr) + W16!(self.Y));
         self.PC = self.PC + W(2);
         (dest, true)
     }
@@ -366,13 +312,13 @@ impl CPU {
     }
 
     fn abx(&mut self, memory: &mut Mem) -> (W<u16>, bool) {
-        let address = load_word(memory, self.PC + W(1)) + W16!(self.X);
+        let address = memory.load_word(self.PC + W(1)) + W16!(self.X);
         self.PC = self.PC + W(3);
         (address, true)
     }
 
     fn aby(&mut self, memory: &mut Mem) -> (W<u16>, bool) {
-        let address = load_word(memory, self.PC + W(1)) + W16!(self.Y);
+        let address = memory.load_word(self.PC + W(1)) + W16!(self.Y);
         self.PC = self.PC + W(3);
         (address, true)
     }
