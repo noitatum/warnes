@@ -86,9 +86,9 @@ impl Memory {
     }
 
     pub fn load_word_page_wrap(&mut self, address: W<u16>) -> W<u16> {
-        let low = W16!(self.load(address));
-        let high = (address & PAGE_MASK) | W16!(W8!(address) + W(1));
-        high | low
+        let low = self.load(address);
+        let high = self.load((address & PAGE_MASK) | W16!(W8!(address) + W(1)));
+        (W16!(high) << 8) | W16!(low)
     }
 
     pub fn store_word(&mut self, address: W<u16>, word: W<u16>) {
