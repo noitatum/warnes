@@ -1,10 +1,10 @@
 #[macro_use]
 mod macros;
-use std::fmt;
 mod cpu;
 mod mem;
 mod ppu;
 
+use std::fmt;
 
 fn main() {
     let mut cpu = cpu::CPU::new();

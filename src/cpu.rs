@@ -155,6 +155,11 @@ const OPCODE_TABLE : [(fn(&mut CPU, &mut Mem) -> (W<u16>, bool),
     (CPU::abx, CPU::inc, 7, false), (CPU::imp, CPU::nop, 2, false),
     ];
 
+
+/* Memory */
+const STACK_PAGE        : W<u16> = W(0x0100 as u16); 
+const PAGE_MASK         : W<u16> = W(0xFF00 as u16);
+
 /* Flag bits */
 const FLAG_CARRY        : u8 = 0x01;
 const FLAG_ZERO         : u8 = 0x02;
@@ -167,9 +172,6 @@ const FLAG_SIGN         : u8 = 0x80;
 
 const BRANCH_FLAG_TABLE : [u8; 4] = 
     [FLAG_SIGN, FLAG_OVERFLOW, FLAG_CARRY, FLAG_ZERO];
-
-const STACK_PAGE        : W<u16> = W(0x10 as u16); 
-const PAGE_MASK         : W<u16> = W(0xF0 as u16);
 
 const CYCLES_BRANCH     : u32 = 2;
 const OP_BRANCH         : u8 = 0x10;
@@ -283,20 +285,20 @@ impl CPU {
     fn ind(&mut self, memory: &mut Mem) -> (W<u16>, bool) {
         let address = memory.load_word(self.PC + W(1));
         self.PC = self.PC + W(3);
-        (memory.load_word(address), false)
+        (memory.load_word_page_wrap(address), false)
     }
 
     fn idx(&mut self, memory: &mut Mem) -> (W<u16>, bool) {
         let address = W16!(memory.load(self.PC + W(1)) + self.X);
         self.PC = self.PC + W(2);
-        (memory.load_word(address), false)
+        (memory.load_word_page_wrap(address), false)
     }
 
     fn idy(&mut self, memory: &mut Mem) -> (W<u16>, bool) {
         let addr = W16!(memory.load(self.PC + W(1))); 
-        let dest = W16!(memory.load_word(addr) + W16!(self.Y));
+        let dest = W16!(memory.load_word_page_wrap(addr) + W16!(self.Y));
         self.PC = self.PC + W(2);
-        (dest, true)
+        (dest, W8!(dest) < self.Y)
     }
 
     fn zpx(&mut self, memory: &mut Mem) -> (W<u16>, bool) {
@@ -314,13 +316,13 @@ impl CPU {
     fn abx(&mut self, memory: &mut Mem) -> (W<u16>, bool) {
         let address = memory.load_word(self.PC + W(1)) + W16!(self.X);
         self.PC = self.PC + W(3);
-        (address, true)
+        (address, W8!(address) < self.X)
     }
 
     fn aby(&mut self, memory: &mut Mem) -> (W<u16>, bool) {
         let address = memory.load_word(self.PC + W(1)) + W16!(self.Y);
         self.PC = self.PC + W(3);
-        (address, true)
+        (address, W8!(address) < self.Y)
     }
 }
 

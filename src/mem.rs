@@ -1,6 +1,8 @@
 use ppu::Ppu;
 use std::num::Wrapping as W;
 
+const PAGE_MASK         : W<u16> = W(0xFF00 as u16);
+
 pub struct Memory {
     ram : [u8; 2048],
     ppu : Ppu,
@@ -81,6 +83,12 @@ impl Memory {
     pub fn load_word(&mut self, address: W<u16>) -> W<u16> {
         let low = W16!(self.load(address));
         (W16!(self.load(address + W(1))) << 8) | low
+    }
+
+    pub fn load_word_page_wrap(&mut self, address: W<u16>) -> W<u16> {
+        let low = W16!(self.load(address));
+        let high = (address & PAGE_MASK) | W16!(W8!(address) + W(1));
+        high | low
     }
 
     pub fn store_word(&mut self, address: W<u16>, word: W<u16>) {
