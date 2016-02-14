@@ -36,21 +36,22 @@ const STATUS_VERTICAL_BLANK     : u8 = 0x80; // set = in vertical blank
  
 
 pub struct Ppu {
-    pub ppuctrl     : u8,
-    pub ppumask     : u8,
-    pub ppustatus   : u8,
-    pub oamaddr     : u8,
-    pub oamdata     : u8,
-    pub ppuscroll   : u8,
-    pub ppuaddr     : u8,
-    pub ppudata     : u8,
+    pub ppuctrl         : u8,
+    pub ppumask         : u8,
+    pub ppustatus       : u8,
+    pub oamaddr         : u8,
+    pub oamdata         : u8,
+    pub ppuscroll       : u8,
+    pub ppuaddr         : u8,
+    pub ppudata         : u8,
 
-    pub oamdma      : u8,
-    pub oam         : [u8; 256],    // Object atribute memory 
-    pub vram        : [u8; 0x4000], // 16kb
+    pub oamdma          : u8,
+    pub oam             : [u8; 256],    // Object atribute memory 
+    pub vram            : [u8; 0x4000], // 16kb
 
     // status
-    oam_writable    : bool,
+    pub oam_writable    : bool,
+    pub oam_write_bytes : u8,
 }
 
 impl Ppu {
@@ -71,6 +72,7 @@ impl Ppu {
             vram            : [0;  0x4000],
 
             oam_writable    : false,
+            oam_write_bytes : 0,
         }
     }
 
@@ -99,18 +101,28 @@ impl Ppu {
         let val = value.0;
         if address != 0x4014 {
             match (address % 0x2000) & 0x7 {
-                0 => self.ppuctrl = val,
-                1 => self.ppumask = val, 
+                0 =>    self.ppuctrl = val,
+                1 =>    self.ppumask = val, 
                 // 2 => self.ppustatus = value, Este registro es read only
-                3 => self.oamaddr = val,
-                4 => self.oamdata = val, 
-                5 => self.ppuscroll = val,
-                6 => self.ppuaddr = val,
-                7 => self.ppudata = val,
-                _ => self.ppuctrl = self.ppuctrl  // epic.
+                3 =>    self.oamaddr = val,
+                4 =>    {  if self.oam_writable { 
+                                self.oam[(100 * self.oamdma) as usize] = val;
+                                self.oam_write_bytes -= 1;
+                                if self.oam_write_bytes == 0 { 
+                                    self.oam_writable = false; 
+                                }
+                            } else {
+                                self.oamdata = val;
+                            }
+                        },
+                5 =>    self.ppuscroll = val,
+                6 =>    self.ppuaddr = val,
+                7 =>    self.ppudata = val,
+                _ =>    self.ppuctrl = self.ppuctrl  // epic.
             };
         } else {
             self.oam_writable = true;
+            self.oam_write_bytes = 256;
             self.oamdma = val;
         };
     }
