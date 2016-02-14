@@ -1,8 +1,7 @@
 use ppu::Ppu;
 use std::num::Wrapping as W;
 
-const PAGE_MASK         : W<u16> = W(0xFF00 as u16);
-
+const PAGE_MASK         : W<u16>    = W(0xFF00 as u16);
 
 
 pub struct Memory {
@@ -26,12 +25,41 @@ impl Memory {
             self.ppu.load(W(address)).0
         } else if address < 0x4020 {
             /* Apu AND IO TODO*/
-            if address == 0x4014 {
-                self.ppu.load(W(address)).0
-            } else{
-                0
+            match address {
+                0x4000 => 0,
+                0x4001 => 0,
+                0x4002 => 0,
+                0x4003 => 0,
+                0x4004 => 0,
+                0x4005 => 0,
+                0x4006 => 0,
+                0x4007 => 0,
+                0x4008 => 0,
+                0x4009 => 0,
+                0x400A => 0,
+                0x400B => 0,
+                0x400C => 0,
+                0x400D => 0,
+                0x400E => 0,
+                0x400F => 0,
+                0x4010 => 0,
+                0x4011 => 0,
+                0x4012 => 0,
+                0x4013 => 0,
+                0x4014 => self.ppu.load(W(address)).0,
+                0x4015 => 0,
+                0x4016 => 0,
+                0x4017 => 0,
+                0x4018 => 0,
+                0x4019 => 0,
+                0x401A => 0,
+                0x401B => 0,
+                0x401C => 0,
+                0x401D => 0,
+                0x401E => 0, 
+                0x401F => 0,
+                _      => 0,
             }
-            
         } else if address < 0x6000 {
             /* Cartridge expansion ROM the f */
             0
@@ -53,15 +81,49 @@ impl Memory {
             self.ppu.store(W(address), value)
         } else if address < 0x4020 {
             /* Apu AND IO TODO*/
-            if address == 0x4014 {
-                self.ppu.store(W(address), value);
-                // When oamdma is written to we initialize
-                // the oam memory with 256 consecutive writes
-                // from the cpu memory at oamdma * 100. (oamdma = value)
-                for i in 0..256 {
-                    let byte = self.load(W16!((W(100) * value) + W(i)));
-                    self.store(W(0x2004), byte);
-                }
+            match address {
+                0x4000 =>   (),
+                0x4001 =>   (),
+                0x4002 =>   (),
+                0x4003 =>   (),
+                0x4004 =>   (),
+                0x4005 =>   (),
+                0x4006 =>   (),
+                0x4007 =>   (),
+                0x4008 =>   (),
+                0x4009 =>   (),
+                0x400A =>   (),
+                0x400B =>   (),
+                0x400C =>   (),
+                0x400D =>   (),
+                0x400E =>   (),
+                0x400F =>   (),
+                0x4010 =>   (),
+                0x4011 =>   (),
+                0x4012 =>   (),
+                0x4013 =>   (),
+                0x4014 =>   {   
+                                self.ppu.store(W(address), value);
+                                // When oamdma is written to we initialize
+                                // the oam memory with 256 consecutive writes
+                                // from the cpu memory at oamdma * 100. (oamdma = value)
+                                for i in 0..256 {
+                                    let byte = self.load(W16!((W(100) * value) + W(i)));
+                                    self.store(W(0x2004), byte);
+                                }       
+                            },
+                0x4015 =>   (),
+                0x4016 =>   (),
+                0x4017 =>   (),
+                0x4018 =>   (),
+                0x4019 =>   (),
+                0x401A =>   (),
+                0x401B =>   (),
+                0x401C =>   (),
+                0x401D =>   (),
+                0x401E =>   (), 
+                0x401F =>   (),
+                _      =>   (),
             }
         } else if address < 0x6000 {
             /* Cartridge expansion ROM the f */
