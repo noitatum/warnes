@@ -46,6 +46,7 @@ pub struct Ppu {
     pub ppudata         : u8,
 
     pub oamdma          : u8,
+    
     pub oam             : [u8; 256],    // Object atribute memory 
     pub vram            : [u8; 0x4000], // 16kb
 
@@ -105,11 +106,12 @@ impl Ppu {
                 1 =>    self.ppumask = val, 
                 // 2 => self.ppustatus = value, Este registro es read only
                 3 =>    self.oamaddr = val,
-                4 =>    {  if self.oam_writable { 
-                                self.oam[(100 * self.oamdma) as usize] = val;
+                4 =>    {  if self.oam_writable {
+                                self.oam[self.oamdma as usize] = val;
                                 self.oam_write_bytes -= 1;
-                                if self.oam_write_bytes == 0 { 
-                                    self.oam_writable = false; 
+                                if self.oam_write_bytes == 255 { 
+                                    self.oam_writable = false;
+                                    self.oam_write_bytes = 0;
                                 }
                             } else {
                                 self.oamdata = val;
@@ -122,7 +124,6 @@ impl Ppu {
             };
         } else {
             self.oam_writable = true;
-            self.oam_write_bytes = 256;
             self.oamdma = val;
         };
     }
@@ -156,7 +157,7 @@ impl Ppu {
     }
 
     pub fn load_word_vram (&mut self, address: W<u16>) -> W<u16> {
-        let mut word : W<u16> = W16!(self.load(address));
+        let word : W<u16> = W16!(self.load(address));
         word | W16!(self.load(address + W(1)) << 8)
     }
 
