@@ -348,15 +348,19 @@ impl CPU {
     // Implied
 
     fn brk(&mut self, memory: &mut Mem, address: W<u16>) {
-       
+       self.PC = self.PC + 2;
+       push(memory, self.PC);
+       push(memory, self.Flags);
     }
 
     fn rti(&mut self, memory: &mut Mem, address: W<u16>) {
-        
+        self.Flags = pop(memory);
+        self.PC = pop(memory);
     }
 
     fn rts(&mut self, memory: &mut Mem, address: W<u16>) {
-        
+        self.PC = pop(memory);
+        self.PC = self.PC + 1;
     }
 
     fn php (&mut self, memory: &mut Mem, address: W<u16>) {
