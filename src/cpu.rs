@@ -177,6 +177,8 @@ const CYCLES_BRANCH     : u32 = 2;
 const OP_BRANCH         : u8 = 0x10;
 const OP_BRANCH_MASK    : u8 = 0x1F;
 
+const ZERO              : W<u8> = W(0);
+
 #[allow(non_snake_case)]
 pub struct CPU {
     A       : W<u8>,  // Accumulator
@@ -515,7 +517,7 @@ impl CPU {
     }
 
     fn nop (&mut self, memory: &mut Mem, address: W<u16>) {
-
+        
     }
 
     fn sed (&mut self, memory: &mut Mem, address: W<u16>) {
@@ -525,87 +527,236 @@ impl CPU {
     // Common
 
     fn ora (&mut self, memory: &mut Mem, address: W<u16>) {
-
+        let m = memory.load(address);
+        self.A = self.A | m;
+        set_zero!(self.Flags, self.A.0);
+        set_sign!(self.Flags, self.A.0);
     }
 
     fn asl (&mut self, memory: &mut Mem, address: W<u16>) {
-
+        let mut m = memory.load(address);
+        if m & W(0x80) != W(0) {
+            set_flag!(self.Flags, FLAG_CARRY);
+        } else {
+            unset_flag!(self.Flags, FLAG_CARRY);
+        }
+        m = m << 1;
+        set_zero!(self.Flags, m.0);
+        set_sign!(self.Flags, m.0);
+        memory.store(address, m);
     }
 
     fn bit (&mut self, memory: &mut Mem, address: W<u16>) {
+        let m = memory.load(address);
+        let test = self.A & m;
 
+        if (test & W(0x80)) != W(0) {
+            set_flag!(self.Flags, FLAG_SIGN);
+        } else {
+            unset_flag!(self.Flags, FLAG_SIGN);
+        }
+
+        if (test & W(0x40)) != W(0) {
+            set_flag!(self.Flags, FLAG_OVERFLOW);
+        } else {
+            unset_flag!(self.Flags, FLAG_OVERFLOW);
+        }
+
+        if test != W(0) {
+            set_flag!(self.Flags, FLAG_ZERO);
+        } else {
+            unset_flag!(self.Flags, FLAG_ZERO);
+        }
     }
 
     fn and (&mut self, memory: &mut Mem, address: W<u16>) {
+        let m = memory.load(address);
+        self.A = self.A & m;
+        if self.A != W(0)  {
+            unset_flag!(self.Flags, FLAG_ZERO);
+        } else {
+            set_flag!(self.Flags, FLAG_ZERO);
+        }
 
+        if (self.A & W(0x80)) != W(0) {
+            set_flag!(self.Flags, FLAG_SIGN);
+        } else {
+            unset_flag!(self.Flags, FLAG_SIGN);
+        }
     }
 
     fn rol (&mut self, memory: &mut Mem, address: W<u16>) {
-
+        let mut m = memory.load(address);
+        /* c = bit to be rotated into the carry */
+        let c : W<u8> = m & W(1);
+        ror!(m, self.Flags);
+        /* we rotate the carry bit into a */
+        /* and we set the carry accordingly */
+        if c != W(0) {
+            set_flag!(self.Flags, FLAG_CARRY);
+        } else {
+            unset_flag!(self.Flags, FLAG_CARRY);
+        }
+        set_zero!(self.Flags, m.0);
+        set_sign!(self.Flags, m.0);
+        memory.store(address, m);
     }
 
     fn eor (&mut self, memory: &mut Mem, address: W<u16>) {
-
+        let m = memory.load(address);
+        self.A = m ^ self.A;
+        set_zero!(self.Flags, self.A.0);
+        set_sign!(self.Flags, self.A.0);
     }
 
     fn lsr (&mut self, memory: &mut Mem, address: W<u16>) {
-
+        let mut m = memory.load(address);
+        if m & W(1) != W(0) {
+            set_flag!(self.Flags, FLAG_CARRY);
+        } else {
+            unset_flag!(self.Flags, FLAG_CARRY);
+        }
+        m = m >> 1;
+        set_zero!(self.Flags, m.0);
+        unset_flag!(self.Flags, FLAG_SIGN);
+        memory.store(address, m);
     }
 
     fn adc (&mut self, memory: &mut Mem, address: W<u16>) {
-
+        let m = memory.load(address);
+        let v : W<u16> = W(m.0 as u16 - self.A.0 as u16);
+        
+        if (v & W(0x100)) != W(0) {
+            set_flag!(self.Flags, FLAG_CARRY);
+            set_flag!(self.Flags, FLAG_OVERFLOW);
+        } else {
+            unset_flag!(self.Flags, FLAG_CARRY);
+            unset_flag!(self.Flags, FLAG_OVERFLOW);
+        }
+        
+        self.A = self.A + m;
+        set_sign!(self.Flags, self.A.0);
+        set_zero!(self.Flags, self.A.0);
     }
 
     fn ror (&mut self, memory: &mut Mem, address: W<u16>) {
+        let mut m = memory.load(address);
+        let c : W<u8> = m & W(1);
+        ror!(m, self.Flags);
+        /* we rotate the carry bit into a */
+        /* and we set the carry accordingly */
+        
+        if c != W(0) {
+            set_flag!(self.Flags, FLAG_CARRY);
+        } else {
+            unset_flag!(self.Flags, FLAG_CARRY);
+        }
+
+        set_zero!(self.Flags, m.0);
+        set_sign!(self.Flags, m.0);
+        memory.store(address, m);
 
     }
 
     fn sty (&mut self, memory: &mut Mem, address: W<u16>) {
-
-    }
-
-    fn sta (&mut self, memory: &mut Mem, address: W<u16>) {
-
+        memory.store(address, self.Y);
     }
 
     fn stx (&mut self, memory: &mut Mem, address: W<u16>) {
+        memory.store(address, self.X);
+    }
 
+    fn sta (&mut self, memory: &mut Mem, address: W<u16>) {
+        memory.store(address, self.A);
     }
 
     fn ldy (&mut self, memory: &mut Mem, address: W<u16>) {
-
-    }
-
-    fn lda (&mut self, memory: &mut Mem, address: W<u16>) {
-
+        self.Y = memory.load(address);
+        set_sign!(self.Flags, self.Y.0);
+        set_zero!(self.Flags, self.Y.0);
     }
 
     fn ldx (&mut self, memory: &mut Mem, address: W<u16>) {
+        self.X = memory.load(address);
+        set_sign!(self.Flags, self.X.0);
+        set_zero!(self.Flags, self.X.0);
+    }
 
+    fn lda (&mut self, memory: &mut Mem, address: W<u16>) {
+        self.A = memory.load(address);
+        set_sign!(self.Flags, self.A.0);
+        set_zero!(self.Flags, self.A.0);
     }
 
     fn cpy (&mut self, memory: &mut Mem, address: W<u16>) {
-
-    }
-
-    fn cmp (&mut self, memory: &mut Mem, address: W<u16>) {
-
-    }
-
-    fn dec (&mut self, memory: &mut Mem, address: W<u16>) {
-
+        let m = memory.load(address);
+        let comp: W<u16> = W(self.Y.0 as u16 - m.0 as u16);
+        if (comp & W(0x100)) != W(0) {
+            set_flag!(self.Flags, FLAG_CARRY);
+        } else {
+            unset_flag!(self.Flags, FLAG_CARRY);
+        }
+        let comp = comp.0 as u8;
+        set_sign!(self.Flags, comp);
+        set_zero!(self.Flags, comp);
     }
 
     fn cpx (&mut self, memory: &mut Mem, address: W<u16>) {
-
+        let m = memory.load(address);
+        let comp: W<u16> = W(self.X.0 as u16 - m.0 as u16);
+        if (comp & W(0x100)) != W(0) {
+            set_flag!(self.Flags, FLAG_CARRY);
+        } else {
+            unset_flag!(self.Flags, FLAG_CARRY);
+        }
+        let comp = comp.0 as u8;
+        set_sign!(self.Flags, comp);
+        set_zero!(self.Flags, comp);
     }
 
-    fn sbc (&mut self, memory: &mut Mem, address: W<u16>) {
+    fn cmp (&mut self, memory: &mut Mem, address: W<u16>) {
+        let m = memory.load(address);
+        let comp: W<u16> = W(self.A.0 as u16 - m.0 as u16);
+        if (comp & W(0x100)) != W(0) {
+            set_flag!(self.Flags, FLAG_CARRY);
+        } else {
+            unset_flag!(self.Flags, FLAG_CARRY);
+        }
+        let comp = comp.0 as u8;
+        set_sign!(self.Flags, comp);
+        set_zero!(self.Flags, comp);
+    }
 
+    fn dec (&mut self, memory: &mut Mem, address: W<u16>) {
+        let mut m = memory.load(address);
+        m = m - W(1);
+        set_sign!(self.Flags, m.0);
+        set_zero!(self.Flags, m.0);
+        memory.store(address, m);
+    }
+
+
+    fn sbc (&mut self, memory: &mut Mem, address: W<u16>) {
+        let m = memory.load(address);
+        let v : W<u16> = W(self.A.0 as u16 - m.0 as u16 - get_bit!(self.Flags, FLAG_CARRY) as u16);
+        if (v & W(0x100)) != W(0) {
+            set_flag!(self.Flags, FLAG_CARRY);
+            set_flag!(self.Flags, FLAG_OVERFLOW);
+        } else {
+            unset_flag!(self.Flags, FLAG_CARRY);
+            unset_flag!(self.Flags, FLAG_OVERFLOW);
+        }
+        self.A = W(v.0 as u8);
+        set_sign!(self.Flags, self.A.0);
+        set_zero!(self.Flags, self.A.0);
     }
    
     fn inc (&mut self, memory: &mut Mem, address: W<u16>) {
-
+        let mut m = memory.load(address);
+        m = m + W(1);
+        set_sign!(self.Flags, m.0);
+        set_zero!(self.Flags, m.0);
+        memory.store(address, m);
     }
 }
 

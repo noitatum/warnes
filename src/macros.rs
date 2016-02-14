@@ -22,7 +22,6 @@ macro_rules! set_zero {
     );
 }
 
-
 macro_rules! ror {
     ($val:expr, $flags:expr) => (
         $val = ($val >> 1) | (($val & W($flags & FLAG_CARRY)) << 7)
@@ -41,4 +40,8 @@ macro_rules! W16 {
 
 macro_rules! W8 {
     ($val:expr) => (W($val.0 as u8));
+}
+
+macro_rules! get_bit {
+    ($flags:expr, $flag_bit:expr) => ($flags & $flag_bit;);
 }
