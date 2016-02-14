@@ -57,3 +57,11 @@ macro_rules! W8 {
 macro_rules! get_bit {
     ($flags:expr, $flag_bit:expr) => ($flags & $flag_bit;);
 }
+
+macro_rules! set_sgn_z_flag_cond{
+    ($flags:expr, $zero:expr, $sign:expr, $val:expr, $cond:expr) => (
+        set_sign!($flags, $sign);
+        set_zero!($flags, $zero);
+        set_flag_cond!($flags, $val, $cond);
+        )
+}
