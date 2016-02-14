@@ -566,28 +566,15 @@ impl CPU {
         } else {
             unset_flag!(self.Flags, FLAG_OVERFLOW);
         }
-
-        if test != W(0) {
-            set_flag!(self.Flags, FLAG_ZERO);
-        } else {
-            unset_flag!(self.Flags, FLAG_ZERO);
-        }
+        
+        set_zero!(self.Flags, test.0);
     }
 
     fn and (&mut self, memory: &mut Mem, address: W<u16>) {
         let m = memory.load(address);
         self.A = self.A & m;
-        if self.A != W(0)  {
-            unset_flag!(self.Flags, FLAG_ZERO);
-        } else {
-            set_flag!(self.Flags, FLAG_ZERO);
-        }
-
-        if (self.A & W(0x80)) != W(0) {
-            set_flag!(self.Flags, FLAG_SIGN);
-        } else {
-            unset_flag!(self.Flags, FLAG_SIGN);
-        }
+        set_zero!(self.Flags, self.A.0);
+        set_sign!(self.Flags, self.A.0);
     }
 
     fn rol (&mut self, memory: &mut Mem, address: W<u16>) {
