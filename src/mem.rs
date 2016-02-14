@@ -54,7 +54,14 @@ impl Memory {
         } else if address < 0x4020 {
             /* Apu AND IO TODO*/
             if address == 0x4014 {
-                self.ppu.store(W(address), value)
+                self.ppu.store(W(address), value);
+                // When oamdma is written to we initialize
+                // the oam memory with 256 consecutive writes
+                // from the cpu memory at oamdma * 100. (oamdma = value)
+                for i in 0..256 {
+                    let byte = self.load(W16!((W(100) * value) + W(i)));
+                    self.store(W(0x2004), byte);
+                }
             }
         } else if address < 0x6000 {
             /* Cartridge expansion ROM the f */
