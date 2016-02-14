@@ -27,7 +27,7 @@ macro_rules! set_zero {
     );
 }
 
-macro_rules! set_sign_and_zero {
+macro_rules! set_sign_zero {
     ($flags:expr, $val:expr) => (
         set_sign!($flags, $val);
         set_zero!($flags, $val);
@@ -58,10 +58,9 @@ macro_rules! get_bit {
     ($flags:expr, $flag_bit:expr) => ($flags & $flag_bit;);
 }
 
-macro_rules! set_sgn_z_flag_cond{
-    ($flags:expr, $sign:expr, $zero:expr, $val:expr, $cond:expr) => (
-        set_sign!($flags, $sign);
-        set_zero!($flags, $zero);
-        set_flag_cond!($flags, $val, $cond);
-        )
+macro_rules! set_sign_zero_carry_cond {
+    ($flags:expr, $val:expr, $cond:expr) => (
+        set_sign_zero!($flags, $val);
+        set_flag_cond!($flags, FLAG_CARRY, $cond);
+        );
 }
