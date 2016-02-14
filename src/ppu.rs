@@ -33,7 +33,7 @@ const STATUS_SPRITE_OVERFLOW    : u8 = 0x20;
 const STATUS_SPRITE_0_HIT       : u8 = 0x40;
 const STATUS_VERTICAL_BLANK     : u8 = 0x80; // set = in vertical blank
 
-
+ 
 
 pub struct Ppu {
     pub ppuctrl     : u8,
@@ -45,28 +45,77 @@ pub struct Ppu {
     pub ppuaddr     : u8,
     pub ppudata     : u8,
 
+    pub oamdma      : u8,
     pub oam         : [u8; 256],    // Object atribute memory 
     pub vram        : [u8; 0x4000], // 16kb
+
+    // status
+    oam_writable    : bool,
 }
 
 impl Ppu {
     pub fn new () -> Ppu {
         Ppu {
-            ppuctrl     : 0,
-            ppumask     : 0,
-            ppustatus   : 0,
-            oamaddr     : 0,
-            oamdata     : 0,
-            ppuscroll   : 0,
-            ppuaddr     : 0,
-            ppudata     : 0,
+            ppuctrl         : 0,
+            ppumask         : 0,
+            ppustatus       : 0,
+            oamaddr         : 0,
+            oamdata         : 0,
+            ppuscroll       : 0,
+            ppuaddr         : 0,
+            ppudata         : 0,
+            
+            oamdma          : 0,
 
-            oam         : [0; 256],
-            vram        : [0;  0x4000],
+            oam             : [0; 256],
+            vram            : [0;  0x4000],
+
+            oam_writable    : false,
         }
     }
 
     pub fn load (&self, address: W<u16>) -> W<u8> {
+       let address = address.0;
+       W(if address != 0x4014 {
+           match (address % 0x2000) & 0x7 {
+                // En teoria los registros comentados son read only
+                // 0 => self.ppuctrl
+                // 1 => self.ppumask,
+                2 => self.ppustatus,
+                // 3 => self.oamaddr,
+                4 => self.oamdata,
+                // 5 => self.ppuscroll,
+                // 6 => self.ppuaddr,
+                7 => self.ppudata,
+                _ => 0 // fuck you.
+            }
+       } else {
+            0
+       })
+    }
+
+    pub fn store (&mut self, address: W<u16>, value: W<u8> ){
+        let address = address.0;
+        let val = value.0;
+        if address != 0x4014 {
+            match (address % 0x2000) & 0x7 {
+                0 => self.ppuctrl = val,
+                1 => self.ppumask = val, 
+                // 2 => self.ppustatus = value, Este registro es read only
+                3 => self.oamaddr = val,
+                4 => self.oamdata = val, 
+                5 => self.ppuscroll = val,
+                6 => self.ppuaddr = val,
+                7 => self.ppudata = val,
+                _ => self.ppuctrl = self.ppuctrl  // epic.
+            };
+        } else {
+            self.oam_writable = true;
+            self.oamdma = val;
+        };
+    }
+
+    pub fn load_vram (&self, address: W<u16>) -> W<u8> {
         W(if address.0 < 0x3000 {
             self.vram[address.0 as usize]
         }else if address.0 < 0x3F00 {
@@ -80,7 +129,7 @@ impl Ppu {
         })
     }
 
-    pub fn store (&mut self, address: W<u16>, value: W<u8>){
+    pub fn store_vram (&mut self, address: W<u16>, value: W<u8>){
         if address.0 < 0x3000 {
             self.vram[address.0 as usize] = value.0;
         }else if address.0 < 0x3F00 {
@@ -94,12 +143,12 @@ impl Ppu {
         }
     }
 
-    pub fn load_word(&mut self, address: W<u16>) -> W<u16> {
+    pub fn load_word_vram (&mut self, address: W<u16>) -> W<u16> {
         let mut word : W<u16> = W16!(self.load(address));
         word | W16!(self.load(address + W(1)) << 8)
     }
 
-    pub fn store_word(&mut self, address: W<u16>, word: W<u16>) {
+    pub fn store_word_vram (&mut self, address: W<u16>, word: W<u16>) {
         self.store(address, W8!(word >> 8));
         self.store(address + W(1), W8!(word))
     }
