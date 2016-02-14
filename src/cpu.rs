@@ -174,7 +174,6 @@ const CYCLES_BRANCH     : u32 = 2;
 const OP_BRANCH         : u8 = 0x10;
 const OP_BRANCH_MASK    : u8 = 0x1F;
 
-const ZERO              : W<u8> = W(0);
 
 #[allow(non_snake_case)]
 pub struct CPU {
@@ -264,12 +263,12 @@ impl CPU {
 
 impl CPU {
 
-    fn imp(&mut self, memory: &mut Mem) -> (W<u16>, bool) {
+    fn imp(&mut self, _: &mut Mem) -> (W<u16>, bool) {
         self.PC = self.PC + W(1);
         (W(0), false)
     }
 
-    fn imm(&mut self, memory: &mut Mem) -> (W<u16>, bool) {
+    fn imm(&mut self, _: &mut Mem) -> (W<u16>, bool) {
         self.PC = self.PC + W(2);
         (self.PC - W(1), false)
     }
@@ -343,51 +342,51 @@ impl CPU {
         self.PC = address;
     }
 
-    fn jmp(&mut self, memory: &mut Mem, address: W<u16>) {
+    fn jmp(&mut self, _: &mut Mem, address: W<u16>) {
         self.PC = address;
     }
 
     // Implied
 
-    fn brk(&mut self, memory: &mut Mem, address: W<u16>) {
+    fn brk(&mut self, memory: &mut Mem, _: W<u16>) {
        self.PC = self.PC + W(2);
-       let PCb = self.PC;
+       let pcb = self.PC;
        let flags = W(self.Flags | FLAG_PUSHED | FLAG_BRK);
-       self.push_word(memory, PCb);
+       self.push_word(memory, pcb);
        self.push(memory, flags);
     }
 
-    fn rti(&mut self, memory: &mut Mem, address: W<u16>) {
+    fn rti(&mut self, memory: &mut Mem, _: W<u16>) {
         self.Flags = self.pop(memory).0;
         self.PC = self.pop_word(memory);
     }
 
-    fn rts(&mut self, memory: &mut Mem, address: W<u16>) {
+    fn rts(&mut self, memory: &mut Mem, _: W<u16>) {
         self.PC = self.pop_word(memory);
         self.PC = self.PC + W(1);
     }
 
-    fn php (&mut self, memory: &mut Mem, address: W<u16>) {
+    fn php (&mut self, memory: &mut Mem, _: W<u16>) {
         // Two bits are set on memory when pushing flags 
         let flags = W(self.Flags | FLAG_PUSHED | FLAG_BRK);
         self.push(memory, flags);
     }
 
-    fn sla (&mut self, memory: &mut Mem, address: W<u16>) {
+    fn sla (&mut self, _: &mut Mem, _: W<u16>) {
         set_flag_cond!(self.Flags, FLAG_CARRY, self.A & W(0x80) != W(0));
         self.A = self.A << 1;
         set_sign_and_zero!(self.Flags, self.A);
     }
 
-    fn clc (&mut self, memory: &mut Mem, address: W<u16>) {
+    fn clc (&mut self, _: &mut Mem, _: W<u16>) {
         unset_flag!(self.Flags, FLAG_CARRY);
     }
 
-    fn plp (&mut self, memory: &mut Mem, address: W<u16>) {
+    fn plp (&mut self, memory: &mut Mem, _: W<u16>) {
         self.Flags = self.pop(memory).0;
     }
 
-    fn rla (&mut self, memory: &mut Mem, address: W<u16>) {
+    fn rla (&mut self, _: &mut Mem, _: W<u16>) {
         /* C = bit to be rotated into the carry */
         let carry = self.A & W(0x80) != W(0);
         rol!(self.A, self.Flags);
@@ -397,30 +396,30 @@ impl CPU {
         set_sign_and_zero!(self.Flags, self.A);
     }
 
-    fn sec (&mut self, memory: &mut Mem, address: W<u16>) {
+    fn sec (&mut self, _: &mut Mem, _: W<u16>) {
         set_flag!(self.Flags, FLAG_CARRY);
     }
 
-    fn pha (&mut self, memory: &mut Mem, address: W<u16>) {
+    fn pha (&mut self, memory: &mut Mem, _: W<u16>) {
         let a = self.A;
         self.push(memory, a);
     }
 
-    fn sra (&mut self, memory: &mut Mem, address: W<u16>) {
+    fn sra (&mut self, _: &mut Mem, _: W<u16>) {
         set_flag_cond!(self.Flags, FLAG_CARRY, self.A & W(1) != W(0));
         self.A = self.A >> 1;
         set_sign_and_zero!(self.Flags, self.A);
     }
 
-    fn cli (&mut self, memory: &mut Mem, address: W<u16>) {
+    fn cli (&mut self, _: &mut Mem, _: W<u16>) {
         unset_flag!(self.Flags, FLAG_INTERRUPT);
     }
 
-    fn pla (&mut self, memory: &mut Mem, address: W<u16>) {
+    fn pla (&mut self, memory: &mut Mem, _: W<u16>) {
         self.A = self.pop(memory);
     }
 
-    fn rra (&mut self, memory: &mut Mem, address: W<u16>) {
+    fn rra (&mut self, _: &mut Mem, _: W<u16>) {
         /* c = bit to be rotated into the carry */
         let carry = self.A & W(1) != W(0);
         ror!(self.A, self.Flags);
@@ -430,72 +429,72 @@ impl CPU {
         set_sign_and_zero!(self.Flags, self.A);
     }
 
-    fn sei (&mut self, memory: &mut Mem, address: W<u16>) {
+    fn sei (&mut self, _: &mut Mem, _: W<u16>) {
         set_flag!(self.Flags, FLAG_INTERRUPT);
     }
 
-    fn dey (&mut self, memory: &mut Mem, address: W<u16>) {
+    fn dey (&mut self, _: &mut Mem, _: W<u16>) {
         self.Y = self.Y + W(1);
         set_sign_and_zero!(self.Flags, self.Y);
     }
 
-    fn txa (&mut self, memory: &mut Mem, address: W<u16>) {
+    fn txa (&mut self, _: &mut Mem, _: W<u16>) {
         self.A = self.X;
         set_sign_and_zero!(self.Flags, self.A);
     }
 
-    fn tya (&mut self, memory: &mut Mem, address: W<u16>) {
+    fn tya (&mut self, _: &mut Mem, _: W<u16>) {
         self.A = self.Y;
         set_sign_and_zero!(self.Flags, self.A);
     }
 
-    fn txs (&mut self, memory: &mut Mem, address: W<u16>) {
+    fn txs (&mut self, _: &mut Mem, _: W<u16>) {
         self.SP = self.X;
     }
 
-    fn tay (&mut self, memory: &mut Mem, address: W<u16>) {
+    fn tay (&mut self, _: &mut Mem, _: W<u16>) {
         self.Y = self.A;
         set_sign_and_zero!(self.Flags, self.Y);
     }
 
-    fn tax (&mut self, memory: &mut Mem, address: W<u16>) {
+    fn tax (&mut self, _: &mut Mem, _: W<u16>) {
         self.X = self.A;
         set_sign_and_zero!(self.Flags, self.X);
     }
 
-    fn clv (&mut self, memory: &mut Mem, address: W<u16>) {
+    fn clv (&mut self, _: &mut Mem, _: W<u16>) {
         unset_flag!(self.Flags, FLAG_OVERFLOW);
     }
 
-    fn tsx (&mut self, memory: &mut Mem, address: W<u16>) {
+    fn tsx (&mut self, _: &mut Mem, _: W<u16>) {
         self.X = self.SP;
         set_sign_and_zero!(self.Flags, self.X);
     }
 
-    fn iny (&mut self, memory: &mut Mem, address: W<u16>) {
+    fn iny (&mut self, _: &mut Mem, _: W<u16>) {
         self.Y = self.Y + W(1);
         set_sign_and_zero!(self.Flags, self.Y);
     }
 
-    fn dex (&mut self, memory: &mut Mem, address: W<u16>) {
+    fn dex (&mut self, _: &mut Mem, _: W<u16>) {
         self.X = self.X - W(1);
         set_sign_and_zero!(self.Flags, self.X);
     }
 
-    fn cld (&mut self, memory: &mut Mem, address: W<u16>) {
+    fn cld (&mut self, _: &mut Mem, _: W<u16>) {
         unset_flag!(self.Flags, FLAG_DECIMAL);
     }
 
-    fn inx (&mut self, memory: &mut Mem, address: W<u16>) {
+    fn inx (&mut self, _: &mut Mem, _: W<u16>) {
         self.X = self.X + W(1);
         set_sign_and_zero!(self.Flags, self.X);
     }
 
-    fn nop (&mut self, memory: &mut Mem, address: W<u16>) {
+    fn nop (&mut self, _: &mut Mem, _: W<u16>) {
         
     }
 
-    fn sed (&mut self, memory: &mut Mem, address: W<u16>) {
+    fn sed (&mut self, _: &mut Mem, _: W<u16>) {
         set_flag!(self.Flags, FLAG_DECIMAL);
     }
 
