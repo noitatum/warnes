@@ -1,3 +1,4 @@
+use std::num::Wrapping as W;
 
 pub struct Ppu {
     pub ppuctrl     : u8,
@@ -30,18 +31,18 @@ impl Ppu {
         }
     }
 
-    pub fn load (self, address: u16) -> u8 {
-        if address < 0x3000 {
-            self.vram[address as usize]
-        }else if address < 0x3F00 {
-            self.vram[(address - 0x1000) as usize]
-        }else if address < 0x3F20 {
-            self.vram[address as usize]
-        }else if address < 0x4000 {
-            self.vram[(address - 0x100) as usize]
+    pub fn load (self, address: W<u16>) -> W<u8> {
+        W(if address.0 < 0x3000 {
+            self.vram[address.0 as usize]
+        }else if address.0 < 0x3F00 {
+            self.vram[(address.0 - 0x1000) as usize]
+        }else if address.0 < 0x3F20 {
+            self.vram[address.0 as usize]
+        }else if address.0 < 0x4000 {
+            self.vram[(address.0 - 0x100) as usize]
         }else {
-            self.vram[(address % 0x4000) as usize]
-        }
+            self.vram[(address.0 % 0x4000) as usize]
+        })
     }
 
     /* 
@@ -57,17 +58,17 @@ impl Ppu {
     }
      * */
 
-    pub fn write (&mut self, address: u16, value: u8){
-        if address < 0x3000 {
-            self.vram[address as usize] = value;
-        }else if address < 0x3F00 {
-            self.vram[(address - 0x1000) as usize] = value;
-        }else if address < 0x3F20 {
-            self.vram[address as usize] = value;
-        }else if address < 0x4000 {
-            self.vram[(address - 0x100) as usize] = value;
+    pub fn write (&mut self, address: W<u16>, value: W<u8>){
+        if address.0 < 0x3000 {
+            self.vram[address.0 as usize] = value.0;
+        }else if address.0 < 0x3F00 {
+            self.vram[(address.0 - 0x1000) as usize] = value.0;
+        }else if address.0 < 0x3F20 {
+            self.vram[address.0 as usize] = value.0;
+        }else if address.0 < 0x4000 {
+            self.vram[(address.0 - 0x100) as usize] = value.0;
         }else {
-            self.vram[(address % 0x4000) as usize] = value;
+            self.vram[(address.0 % 0x4000) as usize] = value.0;
         }
     }
 }
