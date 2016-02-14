@@ -1,5 +1,40 @@
 use std::num::Wrapping as W;
 
+
+// ppuctrl
+// Const values to access the controller register bits.
+const CTRL_BASE_TABLE           : u8 = 0x03;
+/* 0 = 0x2000 e incrementa de a 0x400,
+ 1 = 0x2400 etc. */
+const CTRL_INCREMENT            : u8 = 0x04;
+const CTRL_SPRITE_PATTERN       : u8 = 0x08;
+const CTRL_BACKGROUND_PATTERN   : u8 = 0x10;
+const CTRL_SPRITE_SIZE          : u8 = 0x20;
+// trigger warning
+const CTRL_PPU_SLAVE_MASTER     : u8 = 0x40;
+const CTRL_GEN_NMI              : u8 = 0x80;
+
+// ppu scroll coordinates
+const COORDINATE_X              : u8 = 0x01;
+const COORDINATE_Y              : u8 = 0x02;
+
+// ppu mask
+const MASK_GRAYSCALE            : u8 = 0x01;
+const MASK_SHOW_BACKGROUND_LEFT : u8 = 0x02; // set = show bacgrkound in leftmost 8 pixels of screen
+const MASK_SHOW_SPRITES_LEF     : u8 = 0x04; // set = show sprites in leftmost 8 pixels of screens
+const MASK_SHOW_BACKGROUND      : u8 = 0x08; 
+const MASK_SHOW_SPRITES         : u8 = 0x10;
+const MASK_EMPHASIZE_RED        : u8 = 0x20;
+const MASK_EMPHASIZE_GREEN      : u8 = 0x40;
+const MASK_EMPHASIZE_BLUE       : u8 = 0x80;
+
+// ppu status
+const STATUS_SPRITE_OVERFLOW    : u8 = 0x20;
+const STATUS_SPRITE_0_HIT       : u8 = 0x40;
+const STATUS_VERTICAL_BLANK     : u8 = 0x80; // set = in vertical blank
+
+
+
 pub struct Ppu {
     pub ppuctrl     : u8,
     pub ppumask     : u8,
@@ -10,8 +45,8 @@ pub struct Ppu {
     pub ppuaddr     : u8,
     pub ppudata     : u8,
 
-    pub oam         : [u8; 256],    /* Object atribute memory */
-    pub vram        : [u8; 0x4000], //16kb
+    pub oam         : [u8; 256],    // Object atribute memory 
+    pub vram        : [u8; 0x4000], // 16kb
 }
 
 impl Ppu {
@@ -31,7 +66,7 @@ impl Ppu {
         }
     }
 
-    pub fn load (self, address: W<u16>) -> W<u8> {
+    pub fn load (&self, address: W<u16>) -> W<u8> {
         W(if address.0 < 0x3000 {
             self.vram[address.0 as usize]
         }else if address.0 < 0x3F00 {
@@ -45,20 +80,7 @@ impl Ppu {
         })
     }
 
-    /* 
-        pub fn execute(&mut self, memory: &mut Mem) -> u32 {
-        let op = memory.load(self.PC.0);
-        match op {
-            _ if op & OP_JUMP_MASK == OP_JUMP => self.do_jump(memory, op),
-            _ if op & OP_SPECIAL_MASK == OP_SPECIAL => self.do_special(memory, op),
-            _ if op & OP_BRANCH_MASK == OP_BRANCH => self.do_branch(memory, op),
-            _ if op & OP_IMPLIED_MASK == OP_IMPLIED => self.do_implied(memory, op),
-            _ => self.do_common(memory, op),
-        } 
-    }
-     * */
-
-    pub fn write (&mut self, address: W<u16>, value: W<u8>){
+    pub fn store (&mut self, address: W<u16>, value: W<u8>){
         if address.0 < 0x3000 {
             self.vram[address.0 as usize] = value.0;
         }else if address.0 < 0x3F00 {
@@ -71,4 +93,15 @@ impl Ppu {
             self.vram[(address.0 % 0x4000) as usize] = value.0;
         }
     }
+
+    pub fn load_word(&mut self, address: W<u16>) -> W<u16> {
+        let mut word : W<u16> = W16!(self.load(address));
+        word | W16!(self.load(address + W(1)) << 8)
+    }
+
+    pub fn store_word(&mut self, address: W<u16>, word: W<u16>) {
+        self.store(address, W8!(word >> 8));
+        self.store(address + W(1), W8!(word))
+    }
+
 }
