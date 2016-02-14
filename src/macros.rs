@@ -27,6 +27,13 @@ macro_rules! set_zero {
     );
 }
 
+macro_rules! set_sign_and_zero {
+    ($flags:expr, $val:expr) => (
+        set_sign!($flags, $val);
+        set_zero!($flags, $val);
+    );
+}
+
 macro_rules! ror {
     ($val:expr, $flags:expr) => (
         $val = ($val >> 1) | (($val & W($flags & FLAG_CARRY)) << 7)
