@@ -361,7 +361,7 @@ impl CPU {
 
     fn php (&mut self, memory: &mut Mem, address: W<u16>) {
         // Two bits are set on memory when pushing flags 
-        let flags = W(self.Flags) | FLAG_PUSHED | FLAG_BRK;
+        let flags = W(self.Flags | FLAG_PUSHED | FLAG_BRK);
         self.push(memory, flags);
     }
 
