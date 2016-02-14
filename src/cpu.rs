@@ -166,7 +166,7 @@ const FLAG_ZERO         : u8 = 0x02;
 const FLAG_INTERRUPT    : u8 = 0x04;
 const FLAG_DECIMAL      : u8 = 0x08;
 const FLAG_BRK          : u8 = 0x10;
-const FLAG_UNUSED       : u8 = 0x20;
+const FLAG_PUSHED       : u8 = 0x20;
 const FLAG_OVERFLOW     : u8 = 0x40;
 const FLAG_SIGN         : u8 = 0x80;
 
@@ -334,7 +334,7 @@ impl CPU {
 
     fn jsr(&mut self, memory: &mut Mem, address: W<u16>) {
         // Load destination address and push return address
-        let ret = self.PC + W(2);
+        let ret = self.PC;
         self.push_word(memory, ret);
         self.PC = address;
     }
@@ -358,7 +358,8 @@ impl CPU {
     }
 
     fn php (&mut self, memory: &mut Mem, address: W<u16>) {
-        let flags = W(self.Flags);
+        // Two bits are set on memory when pushing flags 
+        let flags = W(self.Flags) | FLAG_PUSHED | FLAG_BRK;
         self.push(memory, flags);
     }
 
