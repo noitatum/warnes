@@ -348,19 +348,21 @@ impl CPU {
     // Implied
 
     fn brk(&mut self, memory: &mut Mem, address: W<u16>) {
-       self.PC = self.PC + 2;
-       push(memory, self.PC);
-       push(memory, self.Flags);
+       self.PC = self.PC + W(2);
+       let PCb = self.PC;
+       let flags = W(self.Flags);
+       self.push_word(memory, PCb);
+       self.push(memory, flags);
     }
 
     fn rti(&mut self, memory: &mut Mem, address: W<u16>) {
-        self.Flags = pop(memory);
-        self.PC = pop(memory);
+        self.Flags = self.pop(memory).0;
+        self.PC = self.pop_word(memory);
     }
 
     fn rts(&mut self, memory: &mut Mem, address: W<u16>) {
-        self.PC = pop(memory);
-        self.PC = self.PC + 1;
+        self.PC = self.pop_word(memory);
+        self.PC = self.PC + W(1);
     }
 
     fn php (&mut self, memory: &mut Mem, address: W<u16>) {
@@ -565,28 +567,15 @@ impl CPU {
         } else {
             unset_flag!(self.Flags, FLAG_OVERFLOW);
         }
-
-        if test != W(0) {
-            set_flag!(self.Flags, FLAG_ZERO);
-        } else {
-            unset_flag!(self.Flags, FLAG_ZERO);
-        }
+        
+        set_zero!(self.Flags, test.0);
     }
 
     fn and (&mut self, memory: &mut Mem, address: W<u16>) {
         let m = memory.load(address);
         self.A = self.A & m;
-        if self.A != W(0)  {
-            unset_flag!(self.Flags, FLAG_ZERO);
-        } else {
-            set_flag!(self.Flags, FLAG_ZERO);
-        }
-
-        if (self.A & W(0x80)) != W(0) {
-            set_flag!(self.Flags, FLAG_SIGN);
-        } else {
-            unset_flag!(self.Flags, FLAG_SIGN);
-        }
+        set_zero!(self.Flags, self.A.0);
+        set_sign!(self.Flags, self.A.0);
     }
 
     fn rol (&mut self, memory: &mut Mem, address: W<u16>) {
@@ -694,7 +683,7 @@ impl CPU {
 
     fn cpy (&mut self, memory: &mut Mem, address: W<u16>) {
         let m = memory.load(address);
-        let comp: W<u16> = W(self.Y.0 as u16 - m.0 as u16);
+        let comp: W<u16> = W16!(self.Y) - W16!(m);
         if (comp & W(0x100)) != W(0) {
             set_flag!(self.Flags, FLAG_CARRY);
         } else {
@@ -707,7 +696,7 @@ impl CPU {
 
     fn cpx (&mut self, memory: &mut Mem, address: W<u16>) {
         let m = memory.load(address);
-        let comp: W<u16> = W(self.X.0 as u16 - m.0 as u16);
+        let comp: W<u16> = W16!(self.X) - W16!(m);
         if (comp & W(0x100)) != W(0) {
             set_flag!(self.Flags, FLAG_CARRY);
         } else {
@@ -720,7 +709,7 @@ impl CPU {
 
     fn cmp (&mut self, memory: &mut Mem, address: W<u16>) {
         let m = memory.load(address);
-        let comp: W<u16> = W(self.A.0 as u16 - m.0 as u16);
+        let comp: W<u16> = W16!(self.A) - W16!(m);
         if (comp & W(0x100)) != W(0) {
             set_flag!(self.Flags, FLAG_CARRY);
         } else {
@@ -742,7 +731,7 @@ impl CPU {
 
     fn sbc (&mut self, memory: &mut Mem, address: W<u16>) {
         let m = memory.load(address);
-        let v : W<u16> = W(self.A.0 as u16 - m.0 as u16 - get_bit!(self.Flags, FLAG_CARRY) as u16);
+        let v : W<u16> = W16!(self.A) - W16!(m) - W16!(W(get_bit!(self.Flags, FLAG_CARRY)));
         if (v & W(0x100)) != W(0) {
             set_flag!(self.Flags, FLAG_CARRY);
             set_flag!(self.Flags, FLAG_OVERFLOW);
