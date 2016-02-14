@@ -59,7 +59,7 @@ macro_rules! get_bit {
 }
 
 macro_rules! set_sgn_z_flag_cond{
-    ($flags:expr, $zero:expr, $sign:expr, $val:expr, $cond:expr) => (
+    ($flags:expr, $sign:expr, $zero:expr, $val:expr, $cond:expr) => (
         set_sign!($flags, $sign);
         set_zero!($flags, $zero);
         set_flag_cond!($flags, $val, $cond);
