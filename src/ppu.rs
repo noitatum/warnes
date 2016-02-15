@@ -36,17 +36,7 @@ const STATUS_VERTICAL_BLANK     : u8 = 0x80; // set = in vertical blank
  
 
 pub struct Ppu {
-    pub ppuctrl         : u8,
-    pub ppumask         : u8,
-    pub ppustatus       : u8,
-    pub oamaddr         : u8,
-    pub oamdata         : u8,
-    pub ppuscroll       : u8,
-    pub ppuaddr         : u8,
-    pub ppudata         : u8,
 
-    pub oamdma          : u8,
-    
     pub oam             : [u8; 256],    // Object atribute memory 
     pub vram            : [u8; 0x4000], // 16kb
 
@@ -58,17 +48,6 @@ pub struct Ppu {
 impl Ppu {
     pub fn new () -> Ppu {
         Ppu {
-            ppuctrl         : 0,
-            ppumask         : 0,
-            ppustatus       : 0,
-            oamaddr         : 0,
-            oamdata         : 0,
-            ppuscroll       : 0,
-            ppuaddr         : 0,
-            ppudata         : 0,
-            
-            oamdma          : 0,
-
             oam             : [0; 256],
             vram            : [0;  0x4000],
 
@@ -77,56 +56,24 @@ impl Ppu {
         }
     }
 
-    pub fn load (&self, address: W<u16>) -> W<u8> {
-       let address = address.0;
-       W(if address != 0x4014 {
-           match (address % 0x2000) & 0x7 {
-                // En teoria los registros comentados son read only
-                // 0 => self.ppuctrl
-                // 1 => self.ppumask,
-                2 => self.ppustatus,
-                // 3 => self.oamaddr,
-                4 => self.oamdata,
-                // 5 => self.ppuscroll,
-                // 6 => self.ppuaddr,
-                7 => self.ppudata,
-                _ => 0 // fuck you.
-            }
-       } else {
-            0
-       })
+    pub fn load_oam (&self, address: W<u16>) -> W<u8> {
+       W(self.oam[address.0 as usize])
     }
 
-    pub fn store (&mut self, address: W<u16>, value: W<u8> ){
-        let address = address.0;
-        let val = value.0;
-        if address != 0x4014 {
-            match (address % 0x2000) & 0x7 {
-                0 =>    self.ppuctrl = val,
-                1 =>    self.ppumask = val, 
-                // 2 => self.ppustatus = value, Este registro es read only
-                3 =>    self.oamaddr = val,
-                4 =>    {  if self.oam_writable {
-                                self.oam[self.oamdma as usize] = val;
-                                self.oam_write_bytes += 1;
-                                if self.oam_write_bytes == 255 { 
-                                    self.oam_writable = false;
-                                    self.oam_write_bytes = 0;
-                                }
-                            } else {
-                                self.oamdata = val;
-                            }
-                        },
-                5 =>    self.ppuscroll = val,
-                6 =>    self.ppuaddr = val,
-                7 =>    self.ppudata = val,
-                _ =>    self.ppuctrl = self.ppuctrl  // epic.
-            };
-        } else {
-            self.oam_writable = true;
-            self.oamdma = val;
-        };
+    pub fn store_oam (&mut self, address: W<u16>, value: W<u8> ){ 
+       self.oam[address.0 as usize] = value.0;
     }
+    
+    pub fn load_word_oam (&self, address: W<u16>) -> W<u16> {
+       let low : W<u16> = W16!(self.load_oam(address));
+       low | W16!(self.load_oam(address + W(1)))
+    }
+
+    pub fn store_word_oam (&mut self, address: W<u16>,  word: W<u16>){ 
+        self.store_oam(address, W8!(word >> 8));
+        self.store_oam(address + W(1), W8!(word));
+    }
+
 
     pub fn load_vram (&self, address: W<u16>) -> W<u8> {
         W(if address.0 < 0x3000 {
@@ -157,13 +104,13 @@ impl Ppu {
     }
 
     pub fn load_word_vram (&mut self, address: W<u16>) -> W<u16> {
-        let word : W<u16> = W16!(self.load(address));
-        word | W16!(self.load(address + W(1)) << 8)
+        let word : W<u16> = W16!(self.load_vram(address));
+        word | W16!(self.load_vram(address + W(1)) << 8)
     }
 
     pub fn store_word_vram (&mut self, address: W<u16>, word: W<u16>) {
-        self.store(address, W8!(word >> 8));
-        self.store(address + W(1), W8!(word))
+        self.store_vram(address, W8!(word >> 8));
+        self.store_vram(address + W(1), W8!(word));
     }
 
 }
