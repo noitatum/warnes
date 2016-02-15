@@ -12,7 +12,7 @@ const OPCODE_TABLE : [(fn(&mut CPU, &mut Mem) -> (W<u16>, bool),
     (CPU::imp, CPU::nop, 2, false), (CPU::zpg, CPU::ora, 3, false),
     (CPU::zpg, CPU::asl, 5, false), (CPU::imp, CPU::nop, 2, false),
     (CPU::imp, CPU::php, 3, false), (CPU::imm, CPU::ora, 2, false),
-    (CPU::imp, CPU::sla, 2, false), (CPU::imp, CPU::nop, 2, false), 
+    (CPU::imp, CPU::sal, 2, false), (CPU::imp, CPU::nop, 2, false), 
     (CPU::imp, CPU::nop, 2, false), (CPU::abs, CPU::ora, 4, false),
     (CPU::abs, CPU::asl, 6, false), (CPU::imp, CPU::nop, 2, false), 
     
@@ -30,7 +30,7 @@ const OPCODE_TABLE : [(fn(&mut CPU, &mut Mem) -> (W<u16>, bool),
     (CPU::zpg, CPU::bit, 3, false), (CPU::zpg, CPU::and, 3, false),
     (CPU::zpg, CPU::rol, 5, false), (CPU::imp, CPU::nop, 2, false),
     (CPU::imp, CPU::plp, 4, false), (CPU::imm, CPU::and, 2, false),
-    (CPU::imp, CPU::rla, 2, false), (CPU::imp, CPU::nop, 2, false),
+    (CPU::imp, CPU::ral, 2, false), (CPU::imp, CPU::nop, 2, false),
     (CPU::abs, CPU::bit, 4, false), (CPU::abs, CPU::and, 4, false),
     (CPU::abs, CPU::rol, 6, false), (CPU::imp, CPU::nop, 2, false),
 
@@ -48,7 +48,7 @@ const OPCODE_TABLE : [(fn(&mut CPU, &mut Mem) -> (W<u16>, bool),
     (CPU::imp, CPU::nop, 2, false), (CPU::zpg, CPU::eor, 3, false), 
     (CPU::zpg, CPU::lsr, 5, false), (CPU::imp, CPU::nop, 2, false),
     (CPU::imp, CPU::pha, 3, false), (CPU::imm, CPU::eor, 2, false),
-    (CPU::imp, CPU::sra, 2, false), (CPU::imp, CPU::nop, 2, false),
+    (CPU::imp, CPU::sar, 2, false), (CPU::imp, CPU::nop, 2, false),
     (CPU::abs, CPU::jmp, 3, false), (CPU::abs, CPU::eor, 4, false),
     (CPU::abs, CPU::lsr, 6, false), (CPU::imp, CPU::nop, 2, false),
 
@@ -66,7 +66,7 @@ const OPCODE_TABLE : [(fn(&mut CPU, &mut Mem) -> (W<u16>, bool),
     (CPU::imp, CPU::nop, 2, false), (CPU::zpg, CPU::adc, 3, false),
     (CPU::zpg, CPU::ror, 5, false), (CPU::imp, CPU::nop, 2, false),
     (CPU::imp, CPU::pla, 4, false), (CPU::imm, CPU::adc, 2, false),
-    (CPU::imp, CPU::rra, 2, false), (CPU::imp, CPU::nop, 2, false),
+    (CPU::imp, CPU::rar, 2, false), (CPU::imp, CPU::nop, 2, false),
     (CPU::ind, CPU::jmp, 5, false), (CPU::abs, CPU::adc, 4, false),
     (CPU::abs, CPU::ror, 6, false), (CPU::imp, CPU::nop, 2, false),
 
@@ -364,7 +364,7 @@ impl CPU {
         self.push(memory, flags);
     }
 
-    fn sla (&mut self, _: &mut Mem, _: W<u16>) {
+    fn sal (&mut self, _: &mut Mem, _: W<u16>) {
         set_sign_zero_carry_cond!(self.Flags, self.A << 1, self.A & W(0x80) != W(0));
         self.A = self.A << 1;
     }
@@ -378,7 +378,7 @@ impl CPU {
         self.Flags = self.pop(memory).0 & !(FLAG_PUSHED | FLAG_BRK);
     }
 
-    fn rla (&mut self, _: &mut Mem, _: W<u16>) {
+    fn ral (&mut self, _: &mut Mem, _: W<u16>) {
         /* Bit to be rotated into the carry */
         let carry = self.A & W(0x80) != W(0);
         /* We rotate the carry bit into A */
@@ -396,7 +396,7 @@ impl CPU {
         self.push(memory, a);
     }
 
-    fn sra (&mut self, _: &mut Mem, _: W<u16>) {
+    fn sar (&mut self, _: &mut Mem, _: W<u16>) {
         set_sign_zero_carry_cond!(self.Flags, self.A >> 1, self.A & W(1) != W(0));
         self.A = self.A >> 1;
     }
@@ -409,7 +409,7 @@ impl CPU {
         self.A = self.pop(memory);
     }
 
-    fn rra (&mut self, _: &mut Mem, _: W<u16>) {
+    fn rar (&mut self, _: &mut Mem, _: W<u16>) {
         /* Bit to be rotated into the carry */
         let carry = self.A & W(1) != W(0);
         /* We rotate the carry bit into a */

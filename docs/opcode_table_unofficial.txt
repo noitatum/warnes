@@ -1,0 +1,56 @@
+       _           _     _           _     _     _     _     _     _           _           _     _
+ \LO  | |    |     _|    _|   |_|   |_    |_      |   |_|   |_|    _|   |_    |      _|   |_|   |_
+ HI\  |_|    |    |_     _|     |    _|   |_|     |   |_|    _|   |_|   |_|   |_    |_|   |_    |
+  _ +-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+ 
+ | || BRK | ORA |*KIL*|*SLO*|*NOP*| ORA | ASL |*SLO*| PHP | ORA | ASL |*ANC*|*NOP*| ORA | ASL |*SLO*|
+ |_||     |IND,X|     |IND,X| ZPG | ZPG | ZPG | ZPG |     | IMM |  A  | IMM | ABS | ABS | ABS | ABS |
+    +-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+
+  | | BPL | ORA |*KIL*|*SLO*|*NOP*| ORA | ASL |*SLO*| CLC | ORA |*NOP*|*SLO*|*NOP*| ORA | ASL |*SLO*|
+  | | REL |IND,Y|     |IND,Y|ZPG,X|ZPG,X|ZPG,X|ZPG,X|     |ABS,Y|     |ABS,Y|ABS,X|ABS,X|ABS,X|ABS,X|
+  _ +-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+
+  _|| JSR | AND |*KIL*|*RLA*| BIT | AND | ROL |*RLA*| PLP | AND | ROL |*ANC*| BIT | AND | ROL |*RLA*|
+ |_ | ABS |IND,X|     |IND,X| ZPG | ZPG | ZPG | ZPG |     | IMM |  A  | IMM | ABS | ABS | ABS | ABS |
+  _ +-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+
+  _|| BMI | AND |*KIL*|*RLA*|*NOP*| AND | ROL |*RLA*| SEC | AND |*NOP*|*RLA*|*NOP*| AND | ROL |*RLA*|
+  _|| REL |IND,Y|     |IND,Y|ZPG,X|ZPG,X|ZPG,X|ZPG,X|     |ABS,Y|     |ABS,Y|ABS,X|ABS,X|ABS,X|ABS,X|
+    +-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+
+ |_|| RTI | EOR |*KIL*|*SRE*|*NOP*| EOR | LSR |*SRE*| PHA | EOR | LSR |*ALR*| JMP | EOR | LSR |*SRE*|
+   ||     |IND,X|     |IND,X| ZPG | ZPG | ZPG | ZPG |     | IMM |  A  | IMM | ABS | ABS | ABS | ABS |
+  _ +-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+
+ |_ | BVC | EOR |*KIL*|*SRE*|*NOP*| EOR | LSR |*SRE*| CLI | EOR |*NOP*|*SRE*|*NOP*| EOR | LSR |*SRE*|
+  _|| REL |IND,Y|     |IND,Y|ZPG,X|ZPG,X|ZPG,X|ZPG,X|     |ABS,Y|     |ABS,Y|ABS,X|ABS,X|ABS,X|ABS,X|
+  _ +-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+
+ |_ | RTS | ADC |*KIL*|*RRA*|*NOP*| ADC | ROR |*RRA*| PLA | ADC | ROR |*ARR*| JMP | ADC | ROR |*RRA*|
+ |_||     |IND,X|     |IND,X| ZPG | ZPG | ZPG | ZPG |     | IMM |  A  | IMM | IND | ABS | ABS | ABS |
+  _ +-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+
+   || BVS | ADC |*KIL*|*RRA*|*NOP*| ADC | ROR |*RRA*| SEI | ADC |*NOP*|*RRA*|*NOP*| ADC | ROR |*RRA*|
+   || REL |IND,Y|     |IND,Y|ZPG,X|ZPG,X|ZPG,X|ZPG,X|     |ABS,Y|     |ABS,Y|ABS,X|ABS,X|ABS,X|ABS,X|
+  _ +-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+
+ |_||*NOP*| STA |*NOP*|*SAX*| STY | STA | STX |*SAX*| DEY |*NOP*| TXA |!XAA!| STY | STA | STX |*SAX*|
+ |_|| IMM |IND,X| IMM |IND,X| ZPG | ZPG | ZPG | ZPG |     | IMM |     | IMM | ABS | ABS | ABS | ABS |
+  _ +-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+
+ |_|| BCC | STA |*KIL*|*AHX!| STY | STA | STX |*SAX*| TYA | STA | TXS |*TAS!|*SHY!| STA |*SHX!|*AHX!|
+  _|| REL |IND,Y|     |IND,Y|ZPG,X|ZPG,X|ZPG,Y|ZPG,Y|     |ABS,Y|     |ABS,Y|ABS,X|ABS,X|ABS,Y|ABS,Y|
+  _ +-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+
+  _|| LDY | LDA | LDX |*LAX*| LDY | LDA | LDX |*LAX*| TAY | LDA | TAX |!LAX!| LDY | LDA | LDX |*LAX*|
+ |_|| IMM |IND,X| IMM |IND,X| ZPG | ZPG | ZPG | ZPG |     | IMM |     | IMM | ABS | ABS | ABS | ABS |
+    +-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+
+ |_ | BCS | LDA |*KIL*|*LAX*| LDY | LDA | LDX |*LAX*| CLV | LDA | TSX |*LAS*| LDY | LDA | LDX |*LAX*|
+ |_|| REL |IND,Y|     |IND,Y|ZPG,X|ZPG,X|ZPG,Y|ZPG,Y|     |ABS,Y|     |ABS,Y|ABS,X|ABS,X|ABS,Y|ABS,Y|
+  _ +-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+
+ |  | CPY | CMP |*NOP*|*DCP*| CPY | CMP | DEC |*DCP*| INY | CMP | DEX |*AXS*| CPY | CMP | DEC |*DCP*|
+ |_ | IMM |IND,X| IMM |IND,X| ZPG | ZPG | ZPG | ZPG |     | IMM |     | IMM | ABS | ABS | ABS | ABS |
+    +-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+
+  _|| BNE | CMP |*KIL*|*DCP*|*NOP*| CMP | DEC |*DCP*| CLD | CMP |*NOP*|*DCP*|*NOP*| CMP | DEC |*DCP*|
+ |_|| REL |IND,Y|     |IND,Y|ZPG,X|ZPG,X|ZPG,X|ZPG,X|     |ABS,Y|     |ABS,Y|ABS,X|ABS,X|ABS,X|ABS,X|
+  _ +-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+
+ |_|| CPX | SBC |*NOP*|*ISC*| CPX | SBC | INC |*ISC*| INX | SBC | NOP |*SBC*| CPX | SBC | INC |*ISC*|
+ |_ | IMM |IND,X| IMM |IND,X| ZPG | ZPG | ZPG | ZPG |     | IMM |     | IMM | ABS | ABS | ABS | ABS |
+  _ +-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+
+ |_ | BEQ | SBC |*KIL*|*ISC*|*NOP*| SBC | INC |*ISC*| SED | SBC |*NOP*|*ISC*|*NOP*| SBC | INC |*ISC*|
+ |  | REL |IND,Y|     |IND,Y|ZPG,X|ZPG,X|ZPG,X|ZPG,X|     |ABS,Y|     |ABS,Y|ABS,X|ABS,X|ABS,X|ABS,X|
+    +-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+
+    
+*___* : Unofficial
+*___! : Unofficial unstable
+!___! : Unofficial highly unstable
