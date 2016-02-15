@@ -189,8 +189,8 @@ impl CPU {
             A       : W(0),
             X       : W(0),
             Y       : W(0),
-            Flags   : FLAG_INTERRUPT, 
-            SP      : W(0xff),
+            Flags   : 0x34, 
+            SP      : W(0xfd),
             PC      : W(0),
         }
     }

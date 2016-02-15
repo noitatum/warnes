@@ -104,8 +104,9 @@ impl Memory {
                 0x4014 =>   {   
                                 self.ppu.store(W(address), value);
                                 // When oamdma is written to
-                                // we dma the oam memory with 256 writes
-                                // from the cpu memory selected page
+                                // the cpu locks down and fills the
+                                // the oam memory with the selected page.
+                                // (value in oamdma).
                                 for i in 0..256 {
                                     let byte = self.load((W16!(value) << 8) + W(i));
                                     self.store(W(0x2004), byte);

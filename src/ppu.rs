@@ -108,7 +108,7 @@ impl Ppu {
                 3 =>    self.oamaddr = val,
                 4 =>    {  if self.oam_writable {
                                 self.oam[self.oamdma as usize] = val;
-                                self.oam_write_bytes -= 1;
+                                self.oam_write_bytes += 1;
                                 if self.oam_write_bytes == 255 { 
                                     self.oam_writable = false;
                                     self.oam_write_bytes = 0;
