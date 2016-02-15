@@ -369,9 +369,8 @@ impl CPU {
     }
 
     fn sla (&mut self, _: &mut Mem, _: W<u16>) {
-        let shift = self.A << 1;
-        set_sign_zero_carry_cond!(self.Flags, shift, self.A & W(0x80) != W(0));
-        self.A = shift;
+        set_sign_zero_carry_cond!(self.Flags, self.A << 1, self.A & W(0x80) != W(0));
+        self.A = self.A << 1;
     }
 
     fn clc (&mut self, _: &mut Mem, _: W<u16>) {
@@ -402,9 +401,8 @@ impl CPU {
     }
 
     fn sra (&mut self, _: &mut Mem, _: W<u16>) {
-        let shift = self.A >> 1;
-        set_sign_zero_carry_cond!(self.Flags, shift, self.A & W(1) != W(0));
-        self.A = shift;
+        set_sign_zero_carry_cond!(self.Flags, self.A >> 1, self.A & W(1) != W(0));
+        self.A = self.A >> 1;
     }
 
     fn cli (&mut self, _: &mut Mem, _: W<u16>) {
