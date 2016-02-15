@@ -107,7 +107,7 @@ impl Memory {
                                 // we dma the oam memory with 256 writes
                                 // from the cpu memory selected page
                                 for i in 0..256 {
-                                    let byte = self.load(W16!(value << 8) + W(i));
+                                    let byte = self.load((W16!(value) << 8) + W(i));
                                     self.store(W(0x2004), byte);
                                 }       
                             },
