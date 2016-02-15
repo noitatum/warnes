@@ -34,6 +34,13 @@ macro_rules! set_sign_zero {
     );
 }
 
+macro_rules! set_sign_zero_carry_cond {
+    ($flags:expr, $val:expr, $cond:expr) => (
+        set_sign_zero!($flags, $val);
+        set_flag_cond!($flags, FLAG_CARRY, $cond);
+        );
+}
+
 macro_rules! ror {
     ($val:expr, $flags:expr) => (
         $val = ($val >> 1) | ((W(get_bit!($flags, FLAG_CARRY))) << 7)
@@ -56,11 +63,4 @@ macro_rules! W8 {
 
 macro_rules! get_bit {
     ($flags:expr, $flag_bit:expr) => ($flags & $flag_bit;);
-}
-
-macro_rules! set_sign_zero_carry_cond {
-    ($flags:expr, $val:expr, $cond:expr) => (
-        set_sign_zero!($flags, $val);
-        set_flag_cond!($flags, FLAG_CARRY, $cond);
-        );
 }

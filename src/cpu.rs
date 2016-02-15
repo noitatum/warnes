@@ -156,6 +156,7 @@ const OPCODE_TABLE : [(fn(&mut CPU, &mut Mem) -> (W<u16>, bool),
 /* Memory */
 const STACK_PAGE        : W<u16> = W(0x0100 as u16); 
 const PAGE_MASK         : W<u16> = W(0xFF00 as u16);
+const ADDRESS_INTERRUPT : W<u16> = W(0xFFFE as u16);
 
 /* Flag bits */
 const FLAG_CARRY        : u8 = 0x01;
@@ -167,12 +168,13 @@ const FLAG_PUSHED       : u8 = 0x20;
 const FLAG_OVERFLOW     : u8 = 0x40;
 const FLAG_SIGN         : u8 = 0x80;
 
-const BRANCH_FLAG_TABLE : [u8; 4] = 
-    [FLAG_SIGN, FLAG_OVERFLOW, FLAG_CARRY, FLAG_ZERO];
-
 const CYCLES_BRANCH     : u32 = 2;
 const OP_BRANCH         : u8 = 0x10;
 const OP_BRANCH_MASK    : u8 = 0x1F;
+const BRANCH_FLAG_TABLE : [u8; 4] = 
+    [FLAG_SIGN, FLAG_OVERFLOW, FLAG_CARRY, FLAG_ZERO];
+
+
 
 
 #[allow(non_snake_case)]
@@ -191,7 +193,7 @@ impl CPU {
             A       : W(0),
             X       : W(0),
             Y       : W(0),
-            Flags   : 0x24, 
+            Flags   : FLAG_INTERRUPT, 
             SP      : W(0xff),
             PC      : W(0),
         }
@@ -200,22 +202,14 @@ impl CPU {
     fn branch(&mut self, memory: &mut Mem, opcode: u8) -> u32 {
         let index = opcode >> 6;
         let check = ((opcode >> 5) & 1) != 0;
+        self.PC = self.PC + W(2);
         if is_flag_set!(self.Flags, BRANCH_FLAG_TABLE[index as usize]) != check {
-            self.PC = self.PC + W(2);
             return CYCLES_BRANCH;
         }
         let pc = self.PC;
-        let mut offset = memory.load(pc + W(1)).0 as i8;
-        // From sign-magnitude
-        if offset < 0 { 
-            offset = -(offset & 0x7F);
-        }
-        // Calculate branch address and push return address
-        let address = pc + W((offset as i16) as u16);
-        self.push_word(memory, pc + W(2));
-        self.PC = address; 
+        self.PC = pc + W(memory.load(pc - W(1)).0 as i8 as u16);
         // Additional cycle if branch taken and page boundary crossed
-        CYCLES_BRANCH + 1 + ((address & PAGE_MASK) != (pc & PAGE_MASK)) as u32
+        CYCLES_BRANCH + 1 + ((self.PC & PAGE_MASK) != (pc & PAGE_MASK)) as u32
     }
 
     pub fn execute(&mut self, memory: &mut Mem) -> u32 {
@@ -337,7 +331,7 @@ impl CPU {
 
     fn jsr(&mut self, memory: &mut Mem, address: W<u16>) {
         // Load destination address and push return address
-        let ret = self.PC;
+        let ret = self.PC - W(1);
         self.push_word(memory, ret);
         self.PC = address;
     }
@@ -349,21 +343,23 @@ impl CPU {
     // Implied
 
     fn brk(&mut self, memory: &mut Mem, _: W<u16>) {
-       self.PC = self.PC + W(2);
-       let pcb = self.PC;
+       // Two bits are set on memory when pushing flags 
        let flags = W(self.Flags | FLAG_PUSHED | FLAG_BRK);
-       self.push_word(memory, pcb);
+       let pc = self.PC + W(1);
+       self.push_word(memory, pc);
        self.push(memory, flags);
+       set_flag!(self.Flags, FLAG_INTERRUPT);
+       self.PC = memory.load_word(ADDRESS_INTERRUPT);
     }
 
     fn rti(&mut self, memory: &mut Mem, _: W<u16>) {
-        self.Flags = self.pop(memory).0;
+        // Ignore the two bits not present
+        self.Flags = self.pop(memory).0 & !(FLAG_PUSHED | FLAG_BRK);
         self.PC = self.pop_word(memory);
     }
 
     fn rts(&mut self, memory: &mut Mem, _: W<u16>) {
-        self.PC = self.pop_word(memory);
-        self.PC = self.PC + W(1);
+        self.PC = self.pop_word(memory) + W(1);
     }
 
     fn php (&mut self, memory: &mut Mem, _: W<u16>) {
@@ -383,14 +379,15 @@ impl CPU {
     }
 
     fn plp (&mut self, memory: &mut Mem, _: W<u16>) {
-        self.Flags = self.pop(memory).0;
+        // Ignore the two bits not present
+        self.Flags = self.pop(memory).0 & !(FLAG_PUSHED | FLAG_BRK);
     }
 
     fn rla (&mut self, _: &mut Mem, _: W<u16>) {
-        /* C = bit to be rotated into the carry */
+        /* Bit to be rotated into the carry */
         let carry = self.A & W(0x80) != W(0);
-        rol!(self.A, self.Flags);
         /* We rotate the carry bit into A */
+        rol!(self.A, self.Flags);
         /* And we set the Carry accordingly */
         set_sign_zero_carry_cond!(self.Flags, self.A, carry);
     }
@@ -419,11 +416,11 @@ impl CPU {
     }
 
     fn rra (&mut self, _: &mut Mem, _: W<u16>) {
-        /* c = bit to be rotated into the carry */
+        /* Bit to be rotated into the carry */
         let carry = self.A & W(1) != W(0);
+        /* We rotate the carry bit into a */
         ror!(self.A, self.Flags);
-        /* we rotate the carry bit into a */
-        /* and we set the carry accordingly */
+        /* And we set the carry accordingly */
         set_sign_zero_carry_cond!(self.Flags, self.A, carry);
     }
 
@@ -637,7 +634,7 @@ impl CPU {
 
 impl fmt::Display for CPU {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{{ A: {}, X: {}, Y: {}, P: {}, SP: {}, PC: {} }}",
+        write!(f, "{{ A: {:02X}, X: {:02X}, Y: {:02X}, P: {:02X}, SP: {:02X}, PC: {:04X} }}",
                self.A.0 , self.X.0 , self.Y.0 , self.Flags , self.SP.0 , self.PC.0)
     }
 }

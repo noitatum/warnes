@@ -3,8 +3,6 @@ use std::num::Wrapping as W;
 
 const PAGE_MASK         : W<u16> = W(0xFF00 as u16);
 
-
-
 pub struct Memory {
     ram : [u8; 2048],
     ppu : Ppu,
