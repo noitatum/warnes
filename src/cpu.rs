@@ -263,18 +263,6 @@ impl CPU {
         (self.PC - W(1), false)
     }
 
-    fn zpg(&mut self, memory: &mut Mem) -> (W<u16>, bool) {
-        let address = W16!(memory.load(self.PC + W(1)));
-        self.PC = self.PC + W(2);
-        (address, false)
-    }
-
-    fn abs(&mut self, memory: &mut Mem) -> (W<u16>, bool) {
-        let address = W16!(memory.load_word(self.PC + W(1)));
-        self.PC = self.PC + W(3);
-        (address, false)
-    }
-
     fn ind(&mut self, memory: &mut Mem) -> (W<u16>, bool) {
         let address = memory.load_word(self.PC + W(1));
         self.PC = self.PC + W(3);
@@ -294,6 +282,12 @@ impl CPU {
         (dest, W8!(dest) < self.Y)
     }
 
+    fn zpg(&mut self, memory: &mut Mem) -> (W<u16>, bool) {
+        let address = W16!(memory.load(self.PC + W(1)));
+        self.PC = self.PC + W(2);
+        (address, false)
+    }
+
     fn zpx(&mut self, memory: &mut Mem) -> (W<u16>, bool) {
         let address = W16!(memory.load(self.PC + W(1)) + self.X);
         self.PC = self.PC + W(2);
@@ -303,6 +297,12 @@ impl CPU {
     fn zpy(&mut self, memory: &mut Mem) -> (W<u16>, bool) {
         let address = W16!(memory.load(self.PC + W(1)) + self.Y);
         self.PC = self.PC + W(2);
+        (address, false)
+    }
+
+    fn abs(&mut self, memory: &mut Mem) -> (W<u16>, bool) {
+        let address = memory.load_word(self.PC + W(1));
+        self.PC = self.PC + W(3);
         (address, false)
     }
 
