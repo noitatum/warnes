@@ -6,7 +6,7 @@ use std::num::Wrapping as W;
 /* Addressing, Instruction, Cycles, Has Penalty */
 
 const OPCODE_TABLE : [(fn(&mut CPU, &mut Mem) -> (W<u16>, bool),
-                      fn(&mut CPU, &mut Mem, W<u16>), u32, bool); 256] = [
+                       fn(&mut CPU, &mut Mem, W<u16>), u32, bool); 256] = [
     (CPU::imp, CPU::brk, 7, false), (CPU::idx, CPU::ora, 6, false), 
     (CPU::imp, CPU::nop, 2, false), (CPU::imp, CPU::nop, 2, false), 
     (CPU::imp, CPU::nop, 2, false), (CPU::zpg, CPU::ora, 3, false),
@@ -152,7 +152,6 @@ const OPCODE_TABLE : [(fn(&mut CPU, &mut Mem) -> (W<u16>, bool),
     (CPU::abx, CPU::inc, 7, false), (CPU::imp, CPU::nop, 2, false),
     ];
 
-
 /* Memory */
 const STACK_PAGE        : W<u16> = W(0x0100 as u16); 
 const PAGE_MASK         : W<u16> = W(0xFF00 as u16);
@@ -173,9 +172,6 @@ const OP_BRANCH         : u8 = 0x10;
 const OP_BRANCH_MASK    : u8 = 0x1F;
 const BRANCH_FLAG_TABLE : [u8; 4] = 
     [FLAG_SIGN, FLAG_OVERFLOW, FLAG_CARRY, FLAG_ZERO];
-
-
-
 
 #[allow(non_snake_case)]
 pub struct CPU {
