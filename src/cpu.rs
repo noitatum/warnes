@@ -628,7 +628,16 @@ impl CPU {
 
 impl fmt::Display for CPU {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{{ A: {:02X}, X: {:02X}, Y: {:02X}, P: {:02X}, SP: {:02X}, PC: {:04X} }}",
+        write!(f, "{{ A: {:#x}, X: {:#x}, Y: {:#x}, P: {:#x}, SP: {:#x}, PC: {:#x} }}",
                self.A.0 , self.X.0 , self.Y.0 , self.Flags , self.SP.0 , self.PC.0)
+    }
+}
+
+impl fmt::Debug for CPU {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let mut output = "CPU: ".to_string();
+        output.push_str(&format!("{{ A: {:#x}, X: {:#x}, Y: {:#x}, P: {:#x}, SP: {:#x}, PC: {:#x} }}",
+               self.A.0 , self.X.0 , self.Y.0 , self.Flags , self.SP.0 , self.PC.0));
+        write!(f, "{}", output)
     }
 }

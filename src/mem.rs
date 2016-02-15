@@ -1,5 +1,6 @@
 use ppu::Ppu;
 use std::num::Wrapping as W;
+use std::fmt;
 
 const PAGE_MASK         : W<u16> = W(0xFF00 as u16);
 
@@ -151,5 +152,16 @@ impl Memory {
     pub fn store_word(&mut self, address: W<u16>, word: W<u16>) {
         self.store(address, W8!(word >> 8));
         self.store(address + W(1), W8!(word));
+    }
+}
+
+impl fmt::Debug for Memory {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let mut output = "ram: [".to_string();
+        for i in 0..2047{
+            output.push_str(&format!("{:#x}|", self.ram[i]));
+        }
+        output.push_str(&format!("{:#x}]", self.ram[2047]));
+        write!(f, "{} \n {:?}", output, self.ppu)
     }
 }

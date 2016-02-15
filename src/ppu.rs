@@ -1,5 +1,5 @@
 use std::num::Wrapping as W;
-
+use std::fmt;
 
 // ppuctrl
 // Const values to access the controller register bits.
@@ -166,4 +166,15 @@ impl Ppu {
         self.store(address + W(1), W8!(word))
     }
 
+}
+
+impl fmt::Debug for Ppu {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let mut output  = "oam: [".to_string();
+        for i in 0..255 {
+            output.push_str(&format!("{:#x}|", self.oam[i]));
+        }
+        output.push_str(&format!("{:#x}]", self.oam[255]));
+        write!(f, "{}", output)
+    }
 }
