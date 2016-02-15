@@ -1,5 +1,7 @@
-use std::num::Wrapping as W;
 use std::fmt;
+use mem::Memory as Mem;
+use std::num::Wrapping as W;
+
 
 // ppuctrl
 // Const values to access the controller register bits.
@@ -33,8 +35,6 @@ const STATUS_SPRITE_OVERFLOW    : u8 = 0x20;
 const STATUS_SPRITE_0_HIT       : u8 = 0x40;
 const STATUS_VERTICAL_BLANK     : u8 = 0x80; // set = in vertical blank
 
- 
-
 pub struct Ppu {
 
     pub oam             : [u8; 256],    // Object atribute memory 
@@ -56,6 +56,13 @@ impl Ppu {
         }
     }
 
+    pub fn execute(&mut self, memory: &mut Mem) -> u32 {
+        match memory.write_status {
+           _ => (), // do something
+        }
+        0
+    }
+
     pub fn load_oam (&self, address: W<u16>) -> W<u8> {
        W(self.oam[address.0 as usize])
     }
@@ -63,7 +70,7 @@ impl Ppu {
     pub fn store_oam (&mut self, address: W<u16>, value: W<u8> ){ 
        self.oam[address.0 as usize] = value.0;
     }
-    
+
     pub fn load_word_oam (&self, address: W<u16>) -> W<u16> {
        let low : W<u16> = W16!(self.load_oam(address));
        low | W16!(self.load_oam(address + W(1)))
