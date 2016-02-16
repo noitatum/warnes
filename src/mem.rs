@@ -16,6 +16,7 @@ pub enum memState {
     oamdma,
     io,
     memory,
+    noState,
 }
 
 impl fmt::Display for memState{
@@ -33,12 +34,18 @@ impl fmt::Display for memState{
                 memState::oamdma    => "oamdma",
                 memState::memory    => "memory",
                 memState::io        => "io",
+                memState::noState   => "noState",
         })
     }
 }
 
 pub struct Memory {
     ram : [u8; 2048],
+
+    pub read_status     : memState,
+    pub write_status    : memState,
+
+    // Some registers may be removed later.
     pub ppuctrl         : u8,
     pub ppumask         : u8,
     pub ppustatus       : u8,
@@ -49,15 +56,16 @@ pub struct Memory {
     pub ppudata         : u8,
     pub oamdma          : u8,
 
-    pub read_status     : memState,
-    pub write_status    : memState,
 }
 
 impl Memory {
     pub fn new (ppu : Ppu) -> Memory {
         Memory {
             ram : [0;  2048],
-
+            read_status      : memState::noState,
+            write_status          : memState::noState,
+            
+            // Some registers may be removed later.
             ppuctrl         : 0,
             ppumask         : 0,
             ppustatus       : 0,
@@ -68,8 +76,6 @@ impl Memory {
             ppudata         : 0,
             oamdma          : 0,
 
-            read_status     : memState::memory,
-            write_status    : memState::memory,
         }
     }
 

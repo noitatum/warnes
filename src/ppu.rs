@@ -1,5 +1,5 @@
 use std::fmt;
-use mem::Memory as Mem;
+use mem::{Memory as Mem, memState};
 use std::num::Wrapping as W;
 
 
@@ -40,9 +40,23 @@ pub struct Ppu {
     pub oam             : [u8; 256],    // Object atribute memory 
     pub vram            : [u8; 0x4000], // 16kb
 
+
+    pub ppuctrl         : u8,
+    pub ppumask         : u8,
+    pub ppustatus       : u8,
+    pub oamaddr         : u8,
+    pub oamdata         : u8,
+    pub ppuscroll       : u8,
+    pub ppuaddr         : u8,
+    pub ppudata         : u8,
+    pub oamdma          : u8,
     // status
     pub oam_writable    : bool,
     pub oam_write_bytes : u8,
+    pub vram_address    : u16,
+    pub upper           : bool,         // El cpu escribe a ppuaddr 2 bytes para direccionar en la vram
+                                        // Si upper es true es la parte alta sino la parte baja,
+                                        // luego se resetea.
 }
 
 impl Ppu {
@@ -50,17 +64,49 @@ impl Ppu {
         Ppu {
             oam             : [0; 256],
             vram            : [0;  0x4000],
-
             oam_writable    : false,
             oam_write_bytes : 0,
+            upper           : true,
+            vram_address    : 0,
+            
+            // Registers, some may be removed later.
+            ppuctrl         : 0,
+            ppumask         : 0,
+            ppustatus       : 0,
+            oamaddr         : 0,
+            oamdata         : 0,
+            ppuscroll       : 0,
+            ppuaddr         : 0,
+            ppudata         : 0,
+            oamdma          : 0,
         }
     }
 
     pub fn execute(&mut self, memory: &mut Mem) -> u32 {
         match memory.write_status {
-           _ => (), // do something
+            memState::ppuaddr => {  if self.upper {
+                                        self.upper = false;
+                                        self.vram_address = (memory.ppuaddr as u16) << 8;
+                                    } else {
+                                        self.upper = true;
+                                        self.vram_address |= memory.ppuaddr as u16;
+                                    }
+                                    return 2;
+                                 },
+            memState::oamdata => {  self.oamaddr += 1;
+                                    return 2;
+                                 }
+            _ => (), // do something probably update internal registers.
         }
-        0
+
+        match memory.read_status {
+            memState::ppudata => {   
+                                    memory.ppudata = self.vram[self.vram_address as usize]; 
+                                    return 2;
+                                 },
+            _ => (),
+        }
+        0 //return
     }
 
     pub fn load_oam (&self, address: W<u16>) -> W<u8> {
@@ -129,6 +175,6 @@ impl fmt::Debug for Ppu {
             output.push_str(&format!("{:#x}|", self.oam[i]));
         }
         output.push_str(&format!("{:#x}]", self.oam[255]));
-        write!(f, "{}", output)
+        write!(f, "Vram addr: {:#x} \n {}", self.vram_address, output)
     }
 }
