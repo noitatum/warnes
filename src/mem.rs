@@ -1,40 +1,39 @@
-use ppu::Ppu;
 use std::num::Wrapping as W;
 use std::fmt;
 
 const PAGE_MASK         : W<u16> = W(0xFF00 as u16);
 
-pub enum memState {
-    ppuctrl,
-    ppumask,
-    ppustatus,
-    oamaddr,
-    oamdata,
-    ppuscroll,
-    ppuaddr,
-    ppudata,
-    oamdma,
-    io,
-    memory,
-    noState,
+pub enum MemState {
+    Ppuctrl,
+    Ppumask,
+    Ppustatus,
+    Oamaddr,
+    Oamdata,
+    Ppuscroll,
+    Ppuaddr,
+    Ppudata,
+    Oamdma,
+    Io,
+    Memory,
+    NoState,
 }
 
-impl fmt::Display for memState{
+impl fmt::Display for MemState{
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{}",
             match *self {
-                memState::ppuctrl   => "ppuctrl",
-                memState::ppumask   => "ppumask",
-                memState::ppustatus => "ppustatus",
-                memState::oamaddr   => "oamaddr",
-                memState::oamdata   => "oamdata",
-                memState::ppuscroll => "ppuscroll",
-                memState::ppuaddr   => "ppuaddr",
-                memState::ppudata   => "ppudata",
-                memState::oamdma    => "oamdma",
-                memState::memory    => "memory",
-                memState::io        => "io",
-                memState::noState   => "noState",
+                MemState::Ppuctrl   => "ppuctrl",
+                MemState::Ppumask   => "ppumask",
+                MemState::Ppustatus => "ppustatus",
+                MemState::Oamaddr   => "oamaddr",
+                MemState::Oamdata   => "oamdata",
+                MemState::Ppuscroll => "ppuscroll",
+                MemState::Ppuaddr   => "ppuaddr",
+                MemState::Ppudata   => "ppudata",
+                MemState::Oamdma    => "oamdma",
+                MemState::Memory    => "memory",
+                MemState::Io        => "io",
+                MemState::NoState   => "noState",
         })
     }
 }
@@ -42,8 +41,8 @@ impl fmt::Display for memState{
 pub struct Memory {
     ram : [u8; 2048],
 
-    pub read_status     : memState,
-    pub write_status    : memState,
+    pub read_status     : MemState,
+    pub write_status    : MemState,
 
     // Some registers may be removed later.
     pub ppuctrl         : u8,
@@ -59,12 +58,12 @@ pub struct Memory {
 }
 
 impl Memory {
-    pub fn new (ppu : Ppu) -> Memory {
+    pub fn new () -> Memory {
         Memory {
             ram : [0;  2048],
-            read_status      : memState::noState,
-            write_status          : memState::noState,
-            
+            read_status     : MemState::NoState,
+            write_status    : MemState::NoState,            
+
             // Some registers may be removed later.
             ppuctrl         : 0,
             ppumask         : 0,
@@ -82,30 +81,30 @@ impl Memory {
     pub fn load (&mut self, address: W<u16>) -> W<u8> {
         let address = address.0; 
         W(if address < 0x2000 {
-            self.read_status = memState::memory;
+            self.read_status = MemState::Memory;
             self.ram[(address & 0x7ff) as usize]
         } else if address < 0x4000 {
            match (address % 0x2000) & 0x7 {
                 // En teoria los registros comentados son read only
                 // 0 => self.ppuctrl
                 // 1 => self.ppumask,
-                2 =>    {   self.read_status = memState::ppustatus; 
+                2 =>    {   self.read_status = MemState::Ppustatus; 
                             self.ppustatus
                         },
                 // 3 => self.oamaddr,
-                4 =>    {   self.read_status = memState::oamdata;
+                4 =>    {   self.read_status = MemState::Oamdata;
                             self.oamdata
                         },
                 // 5 => self.ppuscroll,
                 // 6 => self.ppuaddr,
-                7 =>    {   self.read_status = memState::ppudata;
+                7 =>    {   self.read_status = MemState::Ppudata;
                             self.ppudata
                         },
                 _ => 0 // fuck you.
             }
         } else if address < 0x4020 {
             /* Apu AND IO TODO*/
-            self.read_status = memState::io;
+            self.read_status = MemState::Io;
             match address {
                 0x4000 => 0,
                 0x4001 => 0,
@@ -127,7 +126,7 @@ impl Memory {
                 0x4011 => 0,
                 0x4012 => 0,
                 0x4013 => 0,
-                0x4014 =>   {   self.read_status = memState::oamdma;
+                0x4014 =>   {   self.read_status = MemState::Oamdma;
                                 self.oamdma
                             },
                 0x4015 => 0,
@@ -145,15 +144,15 @@ impl Memory {
             }
         } else if address < 0x6000 {
             /* Cartridge expansion ROM the f */
-            self.read_status = memState::memory;
+            self.read_status = MemState::Memory;
             0
         } else if address < 0x8000 {
             /* SRAM */
-            self.read_status = memState::memory;
+            self.read_status = MemState::Memory;
             0
         } else /* 0x8000 <= addr < 0xC000*/ {
             /* PRG-ROM */
-            self.read_status = memState::memory;
+            self.read_status = MemState::Memory;
             0
         })
     }
@@ -162,37 +161,37 @@ impl Memory {
         let address = address.0; 
         let val = value.0;
         if address < 0x2000 {
-            self.write_status = memState::memory;
+            self.write_status = MemState::Memory;
             self.ram[(address & 0x7ff) as usize] = val
         } else if address < 0x4000 {
             match (address % 0x2000) & 0x7 {
-                0 =>    {   self.write_status = memState::ppuctrl;
+                0 =>    {   self.write_status = MemState::Ppuctrl;
                             self.ppuctrl = val
                         },
-                1 =>    {   self.write_status = memState::ppumask;
+                1 =>    {   self.write_status = MemState::Ppumask;
                             self.ppumask = val 
                         },
                 // 2 => self.ppustatus = value, Este registro es read only
-                3 =>    {   self.write_status = memState::oamaddr;
+                3 =>    {   self.write_status = MemState::Oamaddr;
                             self.oamaddr = val
                         },
-                4 =>    {   self.write_status = memState::oamdata;
+                4 =>    {   self.write_status = MemState::Oamdata;
                             self.oamdata = val
                         },
-                5 =>    {   self.write_status = memState::ppuscroll;
+                5 =>    {   self.write_status = MemState::Ppuscroll;
                             self.ppuscroll = val
                         },
-                6 =>    {   self.write_status = memState::ppuaddr;
+                6 =>    {   self.write_status = MemState::Ppuaddr;
                             self.ppuaddr = val
                         },
-                7 =>    {   self.write_status = memState::ppudata;
+                7 =>    {   self.write_status = MemState::Ppudata;
                             self.ppudata = val
                         },
                 _ =>    (), //self.ppuctrl = self.ppuctrl  // epic.
             };
         } else if address < 0x4020 {
             /* Apu AND IO TODO*/
-            self.write_status = memState::io;
+            self.write_status = MemState::Io;
             match address {
                 0x4000 =>   (),
                 0x4001 =>   (),
@@ -218,7 +217,7 @@ impl Memory {
                                 // the cpu locks down and fills the
                                 // the oam memory with the selected page.
                                 // (value in oamdma).
-                            {   self.write_status = memState::oamdma;
+                            {   self.write_status = MemState::Oamdma;
                                 self.oamdma = val
                             },
                 0x4015 =>   (),
@@ -236,13 +235,13 @@ impl Memory {
             }
         } else if address < 0x6000 {
             /* Cartridge expansion ROM the f */
-            self.write_status = memState::memory;
+            self.write_status = MemState::Memory;
         } else if address < 0x8000 {
             /* SRAM */
-            self.write_status = memState::memory;
+            self.write_status = MemState::Memory;
         } else /* 0x8000 <= address < 0xC000*/ {
             /* PRG-ROM */
-            self.write_status = memState::memory;
+            self.write_status = MemState::Memory;
         }
     }
 

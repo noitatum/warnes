@@ -1,5 +1,5 @@
 use std::fmt;
-use mem::{Memory as Mem, memState};
+use mem::{Memory as Mem, MemState};
 use std::num::Wrapping as W;
 
 
@@ -84,24 +84,27 @@ impl Ppu {
 
     pub fn execute(&mut self, memory: &mut Mem) -> u32 {
         match memory.write_status {
-            memState::ppuaddr => {  if self.upper {
+            MemState::Ppuaddr => {  if self.upper {
                                         self.upper = false;
                                         self.vram_address = (memory.ppuaddr as u16) << 8;
                                     } else {
                                         self.upper = true;
                                         self.vram_address |= memory.ppuaddr as u16;
                                     }
+                                    memory.write_status = MemState::NoState;
                                     return 2;
                                  },
-            memState::oamdata => {  self.oamaddr += 1;
+            MemState::Oamdata => {  self.oamaddr += 1;
+                                    memory.write_status = MemState::NoState;
                                     return 2;
                                  }
             _ => (), // do something probably update internal registers.
         }
 
         match memory.read_status {
-            memState::ppudata => {   
-                                    memory.ppudata = self.vram[self.vram_address as usize]; 
+            MemState::Ppudata => {   
+                                    memory.ppudata = self.vram[self.vram_address as usize];
+                                    memory.read_status = MemState::NoState;
                                     return 2;
                                  },
             _ => (),
