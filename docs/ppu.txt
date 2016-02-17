@@ -1,0 +1,29 @@
+short reference on the ppu (our registers are mappd to the memory as if they were a single latch, the ppu then must reinterpret what happened last and act accordingly. 
+(read write status are for the CPU only).
+
+ppuctrl     (register, read).
+    no reg update (just internal)
+ppumask     (register, read).
+    no reg update.
+
+ppustatus   (register, read):
+    Status on sprite overflow and vertical blank.
+    Reading this register will clear the ppuaddr and ppuscroll latchs.
+
+oamaddr     (port, write):
+    Some weird case between oam and oamaddr, when oamaddr < 8.
+
+oamdata     (port, read/write):
+    Writes to oamdata increment oamaddr. 
+
+ppuscroll   (reg, write[twice]):
+    Cpu writes to this register to scroll the map.
+
+ppuaddr     (reg, write[twice]):
+    After reading ppustatus the CPU can write to ppuaddr the two bytes for an adress in vram.
+
+ppudata     (reg, read/write):
+    After the CPU reads this register the ppu must update the actual value with the adress indicated by ppuaddr.
+
+oamdma      (reg, write):
+    This register is used to indicate the page that will be copied through a dma to the oam memory of the ppu.
