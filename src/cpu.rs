@@ -175,13 +175,17 @@ const BRANCH_FLAG_TABLE : [u8; 4] =
 
 #[allow(non_snake_case)]
 pub struct CPU {
-    A       : W<u8>,  // Accumulator
-    X       : W<u8>,  // Indexes
-    Y       : W<u8>,  
-    Flags   : u8,     // Status
-    SP      : W<u8>,  // Stack pointer
-    PC      : W<u16>, // Program counter
-}
+    A       : W<u8>,    // Accumulator
+    X       : W<u8>,    // Indexes
+    Y       : W<u8>,    //
+    Flags   : u8,       // Status
+    SP      : W<u8>,    // Stack pointer
+    PC      : W<u16>,   // Program counter
+
+    cycles  : u32     // stores the cycle so we can execute on the last cycle
+                        // different calls to execute will decrement this value until 
+                        // the operation is executed (last cycle).
+} 
 
 impl CPU {
     pub fn new() -> CPU {
@@ -192,6 +196,8 @@ impl CPU {
             Flags   : 0x34, 
             SP      : W(0xfd),
             PC      : W(0),
+
+            cycles  : 0,
         }
     }
 
@@ -210,16 +216,24 @@ impl CPU {
 
     pub fn execute(&mut self, memory: &mut Mem) -> u32 {
         let opcode = memory.load(self.PC).0;
-        if opcode & OP_BRANCH_MASK == OP_BRANCH {
-            self.branch(memory, opcode)
+        if self.cycles == 1 {
+            if opcode & OP_BRANCH_MASK == OP_BRANCH {
+                self.branch(memory, opcode)
+            } else {
+                let instruction = OPCODE_TABLE[opcode as usize]; 
+                // Get address from mode
+                let (address, crossed) = instruction.0(self, memory);
+                // Execute the instruction
+                instruction.1(self, memory, address);
+                // Add the extra cycle if needed
+                return 1; //instruction.2 + (instruction.3 && crossed) as u32
+            }
+        } else if self.cycles  == 0 {
+            self.cycles = OPCODE_TABLE[opcode as usize].2;
+            return 1;
         } else {
-            let instruction = OPCODE_TABLE[opcode as usize]; 
-            // Get address from mode
-            let (address, crossed) = instruction.0(self, memory);
-            // Execute the instruction
-            instruction.1(self, memory, address);
-            // Add the extra cycle if needed
-            instruction.2 + (instruction.3 && crossed) as u32
+            self.cycles -= 1;
+            return 1;
         }
     }
 }
