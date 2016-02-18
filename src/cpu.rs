@@ -1,156 +1,6 @@
 use std::fmt;
-use mem::Memory as Mem;
+use mem::{MemState, Memory as Mem};
 use std::num::Wrapping as W;
-
-/* WARNING: Branch instructions are replaced with jumps */
-/* Addressing, Instruction, Cycles, Has Penalty */
-
-const OPCODE_TABLE : [(fn(&mut CPU, &mut Mem) -> (W<u16>, u32),
-                       fn(&mut CPU, &mut Mem, W<u16>), u32, bool); 256] = [
-    (CPU::imp, CPU::brk, 7, false), (CPU::idx, CPU::ora, 6, false), 
-    (CPU::imp, CPU::nop, 2, false), (CPU::imp, CPU::nop, 2, false), 
-    (CPU::imp, CPU::nop, 2, false), (CPU::zpg, CPU::ora, 3, false),
-    (CPU::zpg, CPU::asl, 5, false), (CPU::imp, CPU::nop, 2, false),
-    (CPU::imp, CPU::php, 3, false), (CPU::imm, CPU::ora, 2, false),
-    (CPU::imp, CPU::sal, 2, false), (CPU::imp, CPU::nop, 2, false), 
-    (CPU::imp, CPU::nop, 2, false), (CPU::abs, CPU::ora, 4, false),
-    (CPU::abs, CPU::asl, 6, false), (CPU::imp, CPU::nop, 2, false), 
-    
-    (CPU::rel, CPU::jmp, 2, true), (CPU::idy, CPU::ora, 5, true), 
-    (CPU::imp, CPU::nop, 2, false), (CPU::imp, CPU::nop, 2, false),
-    (CPU::imp, CPU::nop, 2, false), (CPU::zpx, CPU::ora, 4, false),
-    (CPU::zpx, CPU::asl, 6, false), (CPU::imp, CPU::nop, 2, false),
-    (CPU::imp, CPU::clc, 2, false), (CPU::aby, CPU::ora, 4, true),
-    (CPU::imp, CPU::nop, 2, false), (CPU::imp, CPU::nop, 2, false),
-    (CPU::imp, CPU::nop, 2, false), (CPU::abx, CPU::ora, 4, true), 
-    (CPU::abx, CPU::asl, 7, false), (CPU::imp, CPU::nop, 2, false),
-
-    (CPU::abs, CPU::jsr, 6, false), (CPU::idx, CPU::and, 6, false), 
-    (CPU::imp, CPU::nop, 2, false), (CPU::imp, CPU::nop, 6, false),
-    (CPU::zpg, CPU::bit, 3, false), (CPU::zpg, CPU::and, 3, false),
-    (CPU::zpg, CPU::rol, 5, false), (CPU::imp, CPU::nop, 2, false),
-    (CPU::imp, CPU::plp, 4, false), (CPU::imm, CPU::and, 2, false),
-    (CPU::imp, CPU::ral, 2, false), (CPU::imp, CPU::nop, 2, false),
-    (CPU::abs, CPU::bit, 4, false), (CPU::abs, CPU::and, 4, false),
-    (CPU::abs, CPU::rol, 6, false), (CPU::imp, CPU::nop, 2, false),
-
-    (CPU::rel, CPU::jmp, 2, true), (CPU::idy, CPU::and, 5, true),
-    (CPU::imp, CPU::nop, 2, false), (CPU::imp, CPU::nop, 2, false),
-    (CPU::imp, CPU::nop, 2, false), (CPU::zpx, CPU::and, 4, false),
-    (CPU::zpx, CPU::rol, 6, false), (CPU::imp, CPU::nop, 2, false),
-    (CPU::imp, CPU::sec, 2, false), (CPU::aby, CPU::and, 4, true),
-    (CPU::imp, CPU::nop, 2, false), (CPU::imp, CPU::nop, 2, true),
-    (CPU::imp, CPU::nop, 2, false), (CPU::abx, CPU::and, 4, true),
-    (CPU::abx, CPU::rol, 7, false), (CPU::imp, CPU::nop, 2, false),
-
-    (CPU::imp, CPU::rti, 6, false), (CPU::idx, CPU::eor, 6, false),
-    (CPU::imp, CPU::nop, 2, false), (CPU::imp, CPU::nop, 2, false),
-    (CPU::imp, CPU::nop, 2, false), (CPU::zpg, CPU::eor, 3, false), 
-    (CPU::zpg, CPU::lsr, 5, false), (CPU::imp, CPU::nop, 2, false),
-    (CPU::imp, CPU::pha, 3, false), (CPU::imm, CPU::eor, 2, false),
-    (CPU::imp, CPU::sar, 2, false), (CPU::imp, CPU::nop, 2, false),
-    (CPU::abs, CPU::jmp, 3, false), (CPU::abs, CPU::eor, 4, false),
-    (CPU::abs, CPU::lsr, 6, false), (CPU::imp, CPU::nop, 2, false),
-
-    (CPU::rel, CPU::jmp, 2, true), (CPU::idy, CPU::eor, 5, true), 
-    (CPU::imp, CPU::nop, 2, false), (CPU::imp, CPU::nop, 2, false),
-    (CPU::imp, CPU::nop, 2, false), (CPU::zpx, CPU::eor, 4, false),
-    (CPU::zpx, CPU::lsr, 6, false), (CPU::imp, CPU::nop, 2, false),
-    (CPU::imp, CPU::cli, 2, false), (CPU::aby, CPU::eor, 4, true), 
-    (CPU::imp, CPU::nop, 2, false), (CPU::imp, CPU::nop, 2, false), 
-    (CPU::imp, CPU::nop, 2, false), (CPU::abx, CPU::eor, 4, true),
-    (CPU::abx, CPU::lsr, 7, false), (CPU::imp, CPU::nop, 2, false),
-
-    (CPU::imp, CPU::rts, 6, false), (CPU::idx, CPU::adc, 6, false),
-    (CPU::imp, CPU::nop, 2, false), (CPU::imp, CPU::nop, 2, false),
-    (CPU::imp, CPU::nop, 2, false), (CPU::zpg, CPU::adc, 3, false),
-    (CPU::zpg, CPU::ror, 5, false), (CPU::imp, CPU::nop, 2, false),
-    (CPU::imp, CPU::pla, 4, false), (CPU::imm, CPU::adc, 2, false),
-    (CPU::imp, CPU::rar, 2, false), (CPU::imp, CPU::nop, 2, false),
-    (CPU::ind, CPU::jmp, 5, false), (CPU::abs, CPU::adc, 4, false),
-    (CPU::abs, CPU::ror, 6, false), (CPU::imp, CPU::nop, 2, false),
-
-    (CPU::rel, CPU::jmp, 2, true), (CPU::idy, CPU::adc, 5, true),
-    (CPU::imp, CPU::nop, 2, false), (CPU::imp, CPU::nop, 2, false),
-    (CPU::imp, CPU::nop, 2, false), (CPU::zpx, CPU::adc, 4, false),
-    (CPU::zpx, CPU::ror, 6, false), (CPU::imp, CPU::nop, 2, false),
-    (CPU::imp, CPU::sei, 2, false), (CPU::aby, CPU::adc, 4, true),
-    (CPU::imp, CPU::nop, 2, false), (CPU::imp, CPU::nop, 2, false), 
-    (CPU::imp, CPU::nop, 2, false), (CPU::abx, CPU::adc, 4, true),
-    (CPU::abx, CPU::ror, 7, false), (CPU::imp, CPU::nop, 2, false),
-
-    (CPU::imp, CPU::nop, 2, false), (CPU::idx, CPU::sta, 6, false),
-    (CPU::imp, CPU::nop, 2, false), (CPU::imp, CPU::nop, 2, false),
-    (CPU::zpg, CPU::sty, 3, false), (CPU::zpg, CPU::sta, 3, false),
-    (CPU::zpg, CPU::stx, 3, false), (CPU::imp, CPU::nop, 2, false),
-    (CPU::imp, CPU::dey, 2, false), (CPU::imp, CPU::nop, 2, false),
-    (CPU::imp, CPU::txa, 2, false), (CPU::imp, CPU::nop, 2, false),
-    (CPU::abs, CPU::sty, 4, false), (CPU::abs, CPU::sta, 4, false),
-    (CPU::abs, CPU::stx, 4, false), (CPU::imp, CPU::nop, 2, false),
-
-    (CPU::rel, CPU::jmp, 2, true), (CPU::idy, CPU::sta, 6, false),
-    (CPU::imp, CPU::nop, 2, false), (CPU::imp, CPU::nop, 2, false), 
-    (CPU::zpx, CPU::sty, 4, false), (CPU::zpx, CPU::sta, 4, false),
-    (CPU::zpy, CPU::stx, 4, false), (CPU::imp, CPU::nop, 2, false),
-    (CPU::imp, CPU::tya, 2, false), (CPU::aby, CPU::sta, 5, false), 
-    (CPU::imp, CPU::txs, 2, false), (CPU::imp, CPU::nop, 2, false), 
-    (CPU::imp, CPU::nop, 2, false), (CPU::abx, CPU::sta, 5, false),
-    (CPU::imp, CPU::nop, 2, false), (CPU::imp, CPU::nop, 2, false),
-
-    (CPU::imm, CPU::ldy, 2, false), (CPU::idx, CPU::lda, 6, false), 
-    (CPU::imm, CPU::ldx, 2, false), (CPU::imp, CPU::nop, 2, false),
-    (CPU::zpg, CPU::ldy, 3, false), (CPU::zpg, CPU::lda, 3, false),
-    (CPU::zpg, CPU::ldx, 3, false), (CPU::imp, CPU::nop, 2, false),
-    (CPU::imp, CPU::tay, 2, false), (CPU::imm, CPU::lda, 2, false),
-    (CPU::imp, CPU::tax, 2, false), (CPU::imp, CPU::nop, 2, false),
-    (CPU::abs, CPU::ldy, 4, false), (CPU::abs, CPU::lda, 4, false),
-    (CPU::abs, CPU::ldx, 4, false), (CPU::imp, CPU::nop, 4, false),
-
-    (CPU::rel, CPU::jmp, 2, true), (CPU::idy, CPU::lda, 5, true), 
-    (CPU::imp, CPU::nop, 2, false), (CPU::imp, CPU::nop, 2, false),
-    (CPU::zpx, CPU::ldy, 4, false), (CPU::zpx, CPU::lda, 4, false),
-    (CPU::zpy, CPU::ldx, 4, false), (CPU::imp, CPU::nop, 2, false),
-    (CPU::imp, CPU::clv, 2, false), (CPU::aby, CPU::lda, 4, true), 
-    (CPU::imp, CPU::tsx, 2, false), (CPU::imp, CPU::nop, 2, false),
-    (CPU::abx, CPU::ldy, 4, true),  (CPU::abx, CPU::lda, 4, true),
-    (CPU::aby, CPU::ldx, 4, true),  (CPU::imp, CPU::nop, 2, false),
-
-    (CPU::imm, CPU::cpy, 2, false), (CPU::idx, CPU::cmp, 6, false), 
-    (CPU::imp, CPU::nop, 2, false), (CPU::imp, CPU::nop, 2, false), 
-    (CPU::zpg, CPU::cpy, 3, false), (CPU::zpg, CPU::cmp, 3, false),
-    (CPU::zpg, CPU::dec, 5, false), (CPU::imp, CPU::nop, 2, false),
-    (CPU::imp, CPU::iny, 2, false), (CPU::imm, CPU::cmp, 2, false),
-    (CPU::imp, CPU::dex, 2, false), (CPU::imp, CPU::nop, 2, false),
-    (CPU::abs, CPU::cpy, 4, false), (CPU::abs, CPU::cmp, 4, false),
-    (CPU::abs, CPU::dec, 6, false), (CPU::imp, CPU::nop, 2, false),
-
-    (CPU::rel, CPU::jmp, 2, true), (CPU::idy, CPU::cmp, 5, true),
-    (CPU::imp, CPU::nop, 2, false), (CPU::imp, CPU::nop, 2, false),
-    (CPU::imp, CPU::nop, 2, false), (CPU::zpx, CPU::cmp, 4, false),
-    (CPU::zpx, CPU::dec, 6, false), (CPU::imp, CPU::nop, 2, false),
-    (CPU::imp, CPU::cld, 2, false), (CPU::aby, CPU::cmp, 4, true),
-    (CPU::imp, CPU::nop, 2, false), (CPU::imp, CPU::nop, 2, false),
-    (CPU::imp, CPU::nop, 2, false), (CPU::abx, CPU::cmp, 4, true),
-    (CPU::abx, CPU::dec, 7, false), (CPU::imp, CPU::nop, 2, false),
-
-    (CPU::imm, CPU::cpx, 2, false), (CPU::idx, CPU::sbc, 6, false), 
-    (CPU::imp, CPU::nop, 2, false), (CPU::imp, CPU::nop, 2, false),
-    (CPU::zpg, CPU::cpx, 3, false), (CPU::zpg, CPU::sbc, 3, false),
-    (CPU::zpg, CPU::inc, 6, false), (CPU::imp, CPU::nop, 2, false),
-    (CPU::imp, CPU::inx, 2, false), (CPU::imm, CPU::sbc, 2, false),
-    (CPU::imp, CPU::nop, 2, false), (CPU::imp, CPU::nop, 2, false),
-    (CPU::abs, CPU::cpx, 4, false), (CPU::abs, CPU::sbc, 4, false),
-    (CPU::abs, CPU::inc, 6, false), (CPU::imp, CPU::nop, 2, false),
-
-    (CPU::rel, CPU::jmp, 2, true), (CPU::idy, CPU::sbc, 5, true), 
-    (CPU::imp, CPU::nop, 2, false), (CPU::imp, CPU::nop, 2, false),
-    (CPU::imp, CPU::nop, 2, false), (CPU::zpx, CPU::sbc, 4, false),
-    (CPU::zpx, CPU::inc, 6, false), (CPU::imp, CPU::nop, 2, false),
-    (CPU::imp, CPU::sed, 2, false), (CPU::aby, CPU::sbc, 4, true), 
-    (CPU::imp, CPU::nop, 2, false), (CPU::imp, CPU::nop, 2, false), 
-    (CPU::imp, CPU::nop, 2, false), (CPU::abx, CPU::sbc, 4, true),
-    (CPU::abx, CPU::inc, 7, false), (CPU::imp, CPU::nop, 2, false),
-    ];
 
 /* Branch flag types */
 const BRANCH_FLAG_TABLE : [u8; 4] = 
@@ -171,63 +21,120 @@ const FLAG_PUSHED       : u8 = 0x20;
 const FLAG_OVERFLOW     : u8 = 0x40;
 const FLAG_SIGN         : u8 = 0x80;
 
+const PPUCTRL           : W<u16> = W(0x2000);
+const PPUMASK           : W<u16> = W(0x2001);
+const PPUSTATUS         : W<u16> = W(0x2002);
+const OAMADDR           : W<u16> = W(0x2003);
+const OAMDATA           : W<u16> = W(0x2004);
+const PPUSCROLL         : W<u16> = W(0x2005);
+const PPUADDR           : W<u16> = W(0x2006);
+const PPUDATA           : W<u16> = W(0x2007);
+const OAMDMA            : W<u16> = W(0x4014);
+
 #[allow(non_snake_case)]
 pub struct CPU {
-    A       : W<u8>,    // Accumulator
-    X       : W<u8>,    // Indexes
-    Y       : W<u8>,    //
-    Flags   : u8,       // Status
-    SP      : W<u8>,    // Stack pointer
-    PC      : W<u16>,   // Program counter
+    A               : W<u8>,    // Accumulator
+    X               : W<u8>,    // Indexes
+    Y               : W<u8>,    //
+    Flags           : u8,       // Status
+    SP              : W<u8>,    // Stack pointer
+    PC              : W<u16>,   // Program counter
 
     // Stores the cycles left to execute next_inst
-    cycles_left : u32,      
+    cycles_left     : u32,      
     // The instruction to execute when cycles_left is 0
-    next_inst   : fn(&mut CPU, &mut Mem, W<u16>), 
+    next_inst       : fn(&mut CPU, &mut Mem, W<u16>), 
     // The address for the instruction
-    next_addr   : W<u16>,
+    next_addr       : W<u16>,
+
+    dma_address     : W<u16>,
+    cycle_parity    : bool,
+    dma_cycles      : u16,
+    dma_read        : bool,
+    dma_length      : u16,
+    dma_value       : W<u8>,
 } 
 
 impl CPU {
     pub fn new() -> CPU {
         CPU {
-            A       : W(0),
-            X       : W(0),
-            Y       : W(0),
-            Flags   : 0x34, 
-            SP      : W(0xfd),
-            PC      : W(0),
+            A               : W(0),
+            X               : W(0),
+            Y               : W(0),
+            Flags           : 0x34, 
+            SP              : W(0xfd),
+            PC              : W(0),
 
-            cycles_left : 0,
-            next_inst   : CPU::nop,
-            next_addr   : W(0),
+            cycles_left     : 0,
+            next_inst       : CPU::nop,
+            next_addr       : W(0),
+            
+
+            dma_address     : W(0),
+            cycle_parity    : true,
+            dma_cycles      : 0,
+            dma_read        : true,
+            dma_length      : 513,
+            dma_value       : W(0),
         }
     }
 
     pub fn execute(&mut self, memory: &mut Mem) {
-        if self.cycles_left == 0 {
-            // Execute the next instruction
-            let inst = self.next_inst;
-            let addr = self.next_addr;
-            inst(self, memory, addr);
-            // Load next opcode
-            let opcode = memory.load(self.PC).0;
-            let instruction = OPCODE_TABLE[opcode as usize]; 
-            // Get address and extra cycles from mode
-            let (address, extra) = instruction.0(self, memory);
-            // Save the address for next instruction
-            self.next_addr = address;
-            // Add the extra cycle if needed
-            self.cycles_left = instruction.2; 
-            if instruction.3 {
-                self.cycles_left += extra;
+        if !memory.dma { 
+            if self.cycles_left == 0 {
+                // Execute the next instruction
+                let inst = self.next_inst;
+                let addr = self.next_addr;
+                inst(self, memory, addr);
+                // Load next opcode
+                let opcode = memory.load(self.PC).0;
+                let instruction = OPCODE_TABLE[opcode as usize]; 
+                // Get address and extra cycles from mode
+                let (address, extra) = instruction.0(self, memory);
+                // Save the address for next instruction
+                self.next_addr = address;
+                // Add the extra cycle if needed
+                self.cycles_left = instruction.2; 
+                if instruction.3 {
+                    self.cycles_left += extra;
+                }
+                self.next_inst = instruction.1;
             }
-            self.next_inst = instruction.1;
+            self.cycles_left -= 1;
+        } else {
+            self.dma(memory);
         }
-        self.cycles_left -= 1;
+        self.cycle_parity = !self.cycle_parity;
+    }
+
+    fn dma(&mut self, memory: &mut Mem){
+        match memory.write_status {
+            MemState::Oamdma => {  self.dma_address = W((memory.oamdma as u16) << 8); }, // We copy the page adress we wrote to oamdma. 
+            _                => (),
+        }
+
+        if !self.cycle_parity && self.dma_cycles < 2 {
+            // one cycle for parity
+            self.dma_length +=1;        // To see if we have to do 514 or 513 cycles.
+        } else if self.dma_cycles == 0 {
+        } else {
+            if self.dma_read {
+                self.dma_value = memory.load(self.dma_address);
+                self.dma_read = !self.dma_read;
+                self.dma_address = self.dma_address + W(1);
+            } else {
+                memory.store(OAMDATA, self.dma_value);
+                self.dma_read = !self.dma_read;
+            }
+        }
+        self.dma_cycles += 1;
+        if self.dma_cycles == self.dma_length { 
+            memory.dma = false;  
+            self.dma_cycles = 0;
+            self.dma_length = 513;
+        }   
     }
 }
-
 // Util functions
 
 impl CPU {
@@ -662,3 +569,154 @@ impl fmt::Debug for CPU {
         write!(f, "{}", output)
     }
 }
+
+
+/* WARNING: Branch instructions are replaced with jumps */
+/* Addressing, Instruction, Cycles, Has Penalty */
+const OPCODE_TABLE : [(fn(&mut CPU, &mut Mem) -> (W<u16>, u32),
+                       fn(&mut CPU, &mut Mem, W<u16>), u32, bool); 256] = [
+    (CPU::imp, CPU::brk, 7, false), (CPU::idx, CPU::ora, 6, false), 
+    (CPU::imp, CPU::nop, 2, false), (CPU::imp, CPU::nop, 2, false), 
+    (CPU::imp, CPU::nop, 2, false), (CPU::zpg, CPU::ora, 3, false),
+    (CPU::zpg, CPU::asl, 5, false), (CPU::imp, CPU::nop, 2, false),
+    (CPU::imp, CPU::php, 3, false), (CPU::imm, CPU::ora, 2, false),
+    (CPU::imp, CPU::sal, 2, false), (CPU::imp, CPU::nop, 2, false), 
+    (CPU::imp, CPU::nop, 2, false), (CPU::abs, CPU::ora, 4, false),
+    (CPU::abs, CPU::asl, 6, false), (CPU::imp, CPU::nop, 2, false), 
+    
+    (CPU::rel, CPU::jmp, 2, true), (CPU::idy, CPU::ora, 5, true), 
+    (CPU::imp, CPU::nop, 2, false), (CPU::imp, CPU::nop, 2, false),
+    (CPU::imp, CPU::nop, 2, false), (CPU::zpx, CPU::ora, 4, false),
+    (CPU::zpx, CPU::asl, 6, false), (CPU::imp, CPU::nop, 2, false),
+    (CPU::imp, CPU::clc, 2, false), (CPU::aby, CPU::ora, 4, true),
+    (CPU::imp, CPU::nop, 2, false), (CPU::imp, CPU::nop, 2, false),
+    (CPU::imp, CPU::nop, 2, false), (CPU::abx, CPU::ora, 4, true), 
+    (CPU::abx, CPU::asl, 7, false), (CPU::imp, CPU::nop, 2, false),
+
+    (CPU::abs, CPU::jsr, 6, false), (CPU::idx, CPU::and, 6, false), 
+    (CPU::imp, CPU::nop, 2, false), (CPU::imp, CPU::nop, 6, false),
+    (CPU::zpg, CPU::bit, 3, false), (CPU::zpg, CPU::and, 3, false),
+    (CPU::zpg, CPU::rol, 5, false), (CPU::imp, CPU::nop, 2, false),
+    (CPU::imp, CPU::plp, 4, false), (CPU::imm, CPU::and, 2, false),
+    (CPU::imp, CPU::ral, 2, false), (CPU::imp, CPU::nop, 2, false),
+    (CPU::abs, CPU::bit, 4, false), (CPU::abs, CPU::and, 4, false),
+    (CPU::abs, CPU::rol, 6, false), (CPU::imp, CPU::nop, 2, false),
+
+    (CPU::rel, CPU::jmp, 2, true), (CPU::idy, CPU::and, 5, true),
+    (CPU::imp, CPU::nop, 2, false), (CPU::imp, CPU::nop, 2, false),
+    (CPU::imp, CPU::nop, 2, false), (CPU::zpx, CPU::and, 4, false),
+    (CPU::zpx, CPU::rol, 6, false), (CPU::imp, CPU::nop, 2, false),
+    (CPU::imp, CPU::sec, 2, false), (CPU::aby, CPU::and, 4, true),
+    (CPU::imp, CPU::nop, 2, false), (CPU::imp, CPU::nop, 2, true),
+    (CPU::imp, CPU::nop, 2, false), (CPU::abx, CPU::and, 4, true),
+    (CPU::abx, CPU::rol, 7, false), (CPU::imp, CPU::nop, 2, false),
+
+    (CPU::imp, CPU::rti, 6, false), (CPU::idx, CPU::eor, 6, false),
+    (CPU::imp, CPU::nop, 2, false), (CPU::imp, CPU::nop, 2, false),
+    (CPU::imp, CPU::nop, 2, false), (CPU::zpg, CPU::eor, 3, false), 
+    (CPU::zpg, CPU::lsr, 5, false), (CPU::imp, CPU::nop, 2, false),
+    (CPU::imp, CPU::pha, 3, false), (CPU::imm, CPU::eor, 2, false),
+    (CPU::imp, CPU::sar, 2, false), (CPU::imp, CPU::nop, 2, false),
+    (CPU::abs, CPU::jmp, 3, false), (CPU::abs, CPU::eor, 4, false),
+    (CPU::abs, CPU::lsr, 6, false), (CPU::imp, CPU::nop, 2, false),
+
+    (CPU::rel, CPU::jmp, 2, true), (CPU::idy, CPU::eor, 5, true), 
+    (CPU::imp, CPU::nop, 2, false), (CPU::imp, CPU::nop, 2, false),
+    (CPU::imp, CPU::nop, 2, false), (CPU::zpx, CPU::eor, 4, false),
+    (CPU::zpx, CPU::lsr, 6, false), (CPU::imp, CPU::nop, 2, false),
+    (CPU::imp, CPU::cli, 2, false), (CPU::aby, CPU::eor, 4, true), 
+    (CPU::imp, CPU::nop, 2, false), (CPU::imp, CPU::nop, 2, false), 
+    (CPU::imp, CPU::nop, 2, false), (CPU::abx, CPU::eor, 4, true),
+    (CPU::abx, CPU::lsr, 7, false), (CPU::imp, CPU::nop, 2, false),
+
+    (CPU::imp, CPU::rts, 6, false), (CPU::idx, CPU::adc, 6, false),
+    (CPU::imp, CPU::nop, 2, false), (CPU::imp, CPU::nop, 2, false),
+    (CPU::imp, CPU::nop, 2, false), (CPU::zpg, CPU::adc, 3, false),
+    (CPU::zpg, CPU::ror, 5, false), (CPU::imp, CPU::nop, 2, false),
+    (CPU::imp, CPU::pla, 4, false), (CPU::imm, CPU::adc, 2, false),
+    (CPU::imp, CPU::rar, 2, false), (CPU::imp, CPU::nop, 2, false),
+    (CPU::ind, CPU::jmp, 5, false), (CPU::abs, CPU::adc, 4, false),
+    (CPU::abs, CPU::ror, 6, false), (CPU::imp, CPU::nop, 2, false),
+
+    (CPU::rel, CPU::jmp, 2, true), (CPU::idy, CPU::adc, 5, true),
+    (CPU::imp, CPU::nop, 2, false), (CPU::imp, CPU::nop, 2, false),
+    (CPU::imp, CPU::nop, 2, false), (CPU::zpx, CPU::adc, 4, false),
+    (CPU::zpx, CPU::ror, 6, false), (CPU::imp, CPU::nop, 2, false),
+    (CPU::imp, CPU::sei, 2, false), (CPU::aby, CPU::adc, 4, true),
+    (CPU::imp, CPU::nop, 2, false), (CPU::imp, CPU::nop, 2, false), 
+    (CPU::imp, CPU::nop, 2, false), (CPU::abx, CPU::adc, 4, true),
+    (CPU::abx, CPU::ror, 7, false), (CPU::imp, CPU::nop, 2, false),
+
+    (CPU::imp, CPU::nop, 2, false), (CPU::idx, CPU::sta, 6, false),
+    (CPU::imp, CPU::nop, 2, false), (CPU::imp, CPU::nop, 2, false),
+    (CPU::zpg, CPU::sty, 3, false), (CPU::zpg, CPU::sta, 3, false),
+    (CPU::zpg, CPU::stx, 3, false), (CPU::imp, CPU::nop, 2, false),
+    (CPU::imp, CPU::dey, 2, false), (CPU::imp, CPU::nop, 2, false),
+    (CPU::imp, CPU::txa, 2, false), (CPU::imp, CPU::nop, 2, false),
+    (CPU::abs, CPU::sty, 4, false), (CPU::abs, CPU::sta, 4, false),
+    (CPU::abs, CPU::stx, 4, false), (CPU::imp, CPU::nop, 2, false),
+
+    (CPU::rel, CPU::jmp, 2, true), (CPU::idy, CPU::sta, 6, false),
+    (CPU::imp, CPU::nop, 2, false), (CPU::imp, CPU::nop, 2, false), 
+    (CPU::zpx, CPU::sty, 4, false), (CPU::zpx, CPU::sta, 4, false),
+    (CPU::zpy, CPU::stx, 4, false), (CPU::imp, CPU::nop, 2, false),
+    (CPU::imp, CPU::tya, 2, false), (CPU::aby, CPU::sta, 5, false), 
+    (CPU::imp, CPU::txs, 2, false), (CPU::imp, CPU::nop, 2, false), 
+    (CPU::imp, CPU::nop, 2, false), (CPU::abx, CPU::sta, 5, false),
+    (CPU::imp, CPU::nop, 2, false), (CPU::imp, CPU::nop, 2, false),
+
+    (CPU::imm, CPU::ldy, 2, false), (CPU::idx, CPU::lda, 6, false), 
+    (CPU::imm, CPU::ldx, 2, false), (CPU::imp, CPU::nop, 2, false),
+    (CPU::zpg, CPU::ldy, 3, false), (CPU::zpg, CPU::lda, 3, false),
+    (CPU::zpg, CPU::ldx, 3, false), (CPU::imp, CPU::nop, 2, false),
+    (CPU::imp, CPU::tay, 2, false), (CPU::imm, CPU::lda, 2, false),
+    (CPU::imp, CPU::tax, 2, false), (CPU::imp, CPU::nop, 2, false),
+    (CPU::abs, CPU::ldy, 4, false), (CPU::abs, CPU::lda, 4, false),
+    (CPU::abs, CPU::ldx, 4, false), (CPU::imp, CPU::nop, 4, false),
+
+    (CPU::rel, CPU::jmp, 2, true), (CPU::idy, CPU::lda, 5, true), 
+    (CPU::imp, CPU::nop, 2, false), (CPU::imp, CPU::nop, 2, false),
+    (CPU::zpx, CPU::ldy, 4, false), (CPU::zpx, CPU::lda, 4, false),
+    (CPU::zpy, CPU::ldx, 4, false), (CPU::imp, CPU::nop, 2, false),
+    (CPU::imp, CPU::clv, 2, false), (CPU::aby, CPU::lda, 4, true), 
+    (CPU::imp, CPU::tsx, 2, false), (CPU::imp, CPU::nop, 2, false),
+    (CPU::abx, CPU::ldy, 4, true),  (CPU::abx, CPU::lda, 4, true),
+    (CPU::aby, CPU::ldx, 4, true),  (CPU::imp, CPU::nop, 2, false),
+
+    (CPU::imm, CPU::cpy, 2, false), (CPU::idx, CPU::cmp, 6, false), 
+    (CPU::imp, CPU::nop, 2, false), (CPU::imp, CPU::nop, 2, false), 
+    (CPU::zpg, CPU::cpy, 3, false), (CPU::zpg, CPU::cmp, 3, false),
+    (CPU::zpg, CPU::dec, 5, false), (CPU::imp, CPU::nop, 2, false),
+    (CPU::imp, CPU::iny, 2, false), (CPU::imm, CPU::cmp, 2, false),
+    (CPU::imp, CPU::dex, 2, false), (CPU::imp, CPU::nop, 2, false),
+    (CPU::abs, CPU::cpy, 4, false), (CPU::abs, CPU::cmp, 4, false),
+    (CPU::abs, CPU::dec, 6, false), (CPU::imp, CPU::nop, 2, false),
+
+    (CPU::rel, CPU::jmp, 2, true), (CPU::idy, CPU::cmp, 5, true),
+    (CPU::imp, CPU::nop, 2, false), (CPU::imp, CPU::nop, 2, false),
+    (CPU::imp, CPU::nop, 2, false), (CPU::zpx, CPU::cmp, 4, false),
+    (CPU::zpx, CPU::dec, 6, false), (CPU::imp, CPU::nop, 2, false),
+    (CPU::imp, CPU::cld, 2, false), (CPU::aby, CPU::cmp, 4, true),
+    (CPU::imp, CPU::nop, 2, false), (CPU::imp, CPU::nop, 2, false),
+    (CPU::imp, CPU::nop, 2, false), (CPU::abx, CPU::cmp, 4, true),
+    (CPU::abx, CPU::dec, 7, false), (CPU::imp, CPU::nop, 2, false),
+
+    (CPU::imm, CPU::cpx, 2, false), (CPU::idx, CPU::sbc, 6, false), 
+    (CPU::imp, CPU::nop, 2, false), (CPU::imp, CPU::nop, 2, false),
+    (CPU::zpg, CPU::cpx, 3, false), (CPU::zpg, CPU::sbc, 3, false),
+    (CPU::zpg, CPU::inc, 6, false), (CPU::imp, CPU::nop, 2, false),
+    (CPU::imp, CPU::inx, 2, false), (CPU::imm, CPU::sbc, 2, false),
+    (CPU::imp, CPU::nop, 2, false), (CPU::imp, CPU::nop, 2, false),
+    (CPU::abs, CPU::cpx, 4, false), (CPU::abs, CPU::sbc, 4, false),
+    (CPU::abs, CPU::inc, 6, false), (CPU::imp, CPU::nop, 2, false),
+
+    (CPU::rel, CPU::jmp, 2, true), (CPU::idy, CPU::sbc, 5, true), 
+    (CPU::imp, CPU::nop, 2, false), (CPU::imp, CPU::nop, 2, false),
+    (CPU::imp, CPU::nop, 2, false), (CPU::zpx, CPU::sbc, 4, false),
+    (CPU::zpx, CPU::inc, 6, false), (CPU::imp, CPU::nop, 2, false),
+    (CPU::imp, CPU::sed, 2, false), (CPU::aby, CPU::sbc, 4, true), 
+    (CPU::imp, CPU::nop, 2, false), (CPU::imp, CPU::nop, 2, false), 
+    (CPU::imp, CPU::nop, 2, false), (CPU::abx, CPU::sbc, 4, true),
+    (CPU::abx, CPU::inc, 7, false), (CPU::imp, CPU::nop, 2, false),
+    ];
+

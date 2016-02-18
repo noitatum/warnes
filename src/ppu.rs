@@ -45,7 +45,6 @@ pub struct Ppu {
     pub ppumask         : u8,
     pub ppustatus       : u8,
     pub oamaddr         : u8,
-    pub oamdata         : u8,
     pub ppuscroll       : u8,
     pub ppuaddr         : u8,
     pub ppudata         : u8,
@@ -74,7 +73,6 @@ impl Ppu {
             ppumask         : 0,
             ppustatus       : 0,
             oamaddr         : 0,
-            oamdata         : 0,
             ppuscroll       : 0,
             ppuaddr         : 0,
             ppudata         : 0,
@@ -82,8 +80,15 @@ impl Ppu {
         }
     }
 
-    pub fn execute(&mut self, memory: &mut Mem) -> u32 {
+    pub fn execute(&mut self, memory: &mut Mem) {
         match memory.write_status {
+            MemState::Oamaddr => {  self.oamaddr = memory.oamaddr;
+                                 }
+
+            MemState::Oamdata => {  self.oam[self.oamaddr as usize] = memory.oamdata;
+                                    self.oamaddr += 1;
+                                    memory.write_status = MemState::NoState;
+                                 }
             MemState::Ppuaddr => {  if self.upper {
                                         self.upper = false;
                                         self.vram_address = (memory.ppuaddr as u16) << 8;
@@ -92,12 +97,8 @@ impl Ppu {
                                         self.vram_address |= memory.ppuaddr as u16;
                                     }
                                     memory.write_status = MemState::NoState;
-                                    return 2;
                                  },
-            MemState::Oamdata => {  self.oamaddr += 1;
-                                    memory.write_status = MemState::NoState;
-                                    return 2;
-                                 }
+            MemState::NoState => (),
             _ => (), // do something probably update internal registers.
         }
 
@@ -105,11 +106,10 @@ impl Ppu {
             MemState::Ppudata => {   
                                     memory.ppudata = self.vram[self.vram_address as usize];
                                     memory.read_status = MemState::NoState;
-                                    return 2;
                                  },
+            MemState::NoState => (),
             _ => (),
         }
-        0 //return
     }
 
     pub fn load_oam (&self, address: W<u16>) -> W<u8> {

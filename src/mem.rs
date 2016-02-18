@@ -22,18 +22,18 @@ impl fmt::Display for MemState{
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{}",
             match *self {
-                MemState::Ppuctrl   => "ppuctrl",
-                MemState::Ppumask   => "ppumask",
-                MemState::Ppustatus => "ppustatus",
-                MemState::Oamaddr   => "oamaddr",
-                MemState::Oamdata   => "oamdata",
-                MemState::Ppuscroll => "ppuscroll",
-                MemState::Ppuaddr   => "ppuaddr",
-                MemState::Ppudata   => "ppudata",
-                MemState::Oamdma    => "oamdma",
-                MemState::Memory    => "memory",
-                MemState::Io        => "io",
-                MemState::NoState   => "noState",
+                MemState::Ppuctrl   => "Ppuctrl",
+                MemState::Ppumask   => "Ppumask",
+                MemState::Ppustatus => "Ppustatus",
+                MemState::Oamaddr   => "Oamaddr",
+                MemState::Oamdata   => "Oamdata",
+                MemState::Ppuscroll => "Ppuscroll",
+                MemState::Ppuaddr   => "Ppuaddr",
+                MemState::Ppudata   => "Ppudata",
+                MemState::Oamdma    => "Oamdma",
+                MemState::Memory    => "Memory",
+                MemState::Io        => "Io",
+                MemState::NoState   => "NoState",
         })
     }
 }
@@ -55,6 +55,8 @@ pub struct Memory {
     pub ppudata         : u8,
     pub oamdma          : u8,
 
+    pub dma             : bool,
+
 }
 
 impl Memory {
@@ -75,6 +77,7 @@ impl Memory {
             ppudata         : 0,
             oamdma          : 0,
 
+            dma             : false,
         }
     }
 
@@ -218,6 +221,7 @@ impl Memory {
                                 // the oam memory with the selected page.
                                 // (value in oamdma).
                             {   self.write_status = MemState::Oamdma;
+                                self.dma = true;
                                 self.oamdma = val
                             },
                 0x4015 =>   (),
