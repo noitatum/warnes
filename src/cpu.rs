@@ -113,11 +113,7 @@ impl CPU {
             memory.write_status = MemState::NoState;
         } // We copy the page adress we wrote to oamdma. 
 
-        if !self.cycle_parity && self.dma_cycles < 2 {
-            // one cycle for parity
-            self.dma_length +=1;        // To see if we have to do 514 or 513 cycles.
-        } else if self.dma_cycles == 0 {
-        } else {
+        if self.cycle_parity && self.dma_cycles == 1 || self.dma_cycles > 2 {
             if self.dma_read {
                 self.dma_value = memory.load(self.dma_address);
                 self.dma_read = !self.dma_read;
@@ -126,13 +122,20 @@ impl CPU {
                 memory.store(OAMDATA, self.dma_value);
                 self.dma_read = !self.dma_read;
             }
+        } else if self.dma_cycles == 0 {
+        
+        } else {
+            // one cycle more for parity
+            self.dma_length +=1;        // To see if we have to do 514 or 513 cycles.
         }
+
         self.dma_cycles += 1;
-        if self.dma_cycles == self.dma_length { 
-            memory.dma = false;  
+
+        if self.dma_cycles == self.dma_length {
+            memory.dma = false;
             self.dma_cycles = 0;
             self.dma_length = 513;
-        }   
+        }
     }
 }
 // Util functions
