@@ -108,10 +108,10 @@ impl CPU {
     }
 
     fn dma(&mut self, memory: &mut Mem){
-        match memory.write_status {
-            MemState::Oamdma => {  self.dma_address = W((memory.oamdma as u16) << 8); }, // We copy the page adress we wrote to oamdma. 
-            _                => (),
-        }
+        if let MemState::Oamdma = memory.write_status {
+            self.dma_address = W((memory.oamdma as u16) << 8); 
+            memory.write_status = MemState::NoState;
+        } // We copy the page adress we wrote to oamdma. 
 
         if !self.cycle_parity && self.dma_cycles < 2 {
             // one cycle for parity
