@@ -2,10 +2,10 @@ use std::fmt;
 use mem::Memory as Mem;
 use std::num::Wrapping as W;
 
-/* WARNING: Branch instructions are replaced with nops */
+/* WARNING: Branch instructions are replaced with jumps */
 /* Addressing, Instruction, Cycles, Has Penalty */
 
-const OPCODE_TABLE : [(fn(&mut CPU, &mut Mem) -> (W<u16>, bool),
+const OPCODE_TABLE : [(fn(&mut CPU, &mut Mem) -> (W<u16>, u32),
                        fn(&mut CPU, &mut Mem, W<u16>), u32, bool); 256] = [
     (CPU::imp, CPU::brk, 7, false), (CPU::idx, CPU::ora, 6, false), 
     (CPU::imp, CPU::nop, 2, false), (CPU::imp, CPU::nop, 2, false), 
@@ -16,7 +16,7 @@ const OPCODE_TABLE : [(fn(&mut CPU, &mut Mem) -> (W<u16>, bool),
     (CPU::imp, CPU::nop, 2, false), (CPU::abs, CPU::ora, 4, false),
     (CPU::abs, CPU::asl, 6, false), (CPU::imp, CPU::nop, 2, false), 
     
-    (CPU::imp, CPU::nop, 2, false), (CPU::idy, CPU::ora, 5, true), 
+    (CPU::rel, CPU::jmp, 2, false), (CPU::idy, CPU::ora, 5, true), 
     (CPU::imp, CPU::nop, 2, false), (CPU::imp, CPU::nop, 2, false),
     (CPU::imp, CPU::nop, 2, false), (CPU::zpx, CPU::ora, 4, false),
     (CPU::zpx, CPU::asl, 6, false), (CPU::imp, CPU::nop, 2, false),
@@ -34,7 +34,7 @@ const OPCODE_TABLE : [(fn(&mut CPU, &mut Mem) -> (W<u16>, bool),
     (CPU::abs, CPU::bit, 4, false), (CPU::abs, CPU::and, 4, false),
     (CPU::abs, CPU::rol, 6, false), (CPU::imp, CPU::nop, 2, false),
 
-    (CPU::imp, CPU::nop, 2, false), (CPU::idy, CPU::and, 5, true),
+    (CPU::rel, CPU::jmp, 2, false), (CPU::idy, CPU::and, 5, true),
     (CPU::imp, CPU::nop, 2, false), (CPU::imp, CPU::nop, 2, false),
     (CPU::imp, CPU::nop, 2, false), (CPU::zpx, CPU::and, 4, false),
     (CPU::zpx, CPU::rol, 6, false), (CPU::imp, CPU::nop, 2, false),
@@ -52,7 +52,7 @@ const OPCODE_TABLE : [(fn(&mut CPU, &mut Mem) -> (W<u16>, bool),
     (CPU::abs, CPU::jmp, 3, false), (CPU::abs, CPU::eor, 4, false),
     (CPU::abs, CPU::lsr, 6, false), (CPU::imp, CPU::nop, 2, false),
 
-    (CPU::imp, CPU::nop, 2, false), (CPU::idy, CPU::eor, 5, true), 
+    (CPU::rel, CPU::jmp, 2, false), (CPU::idy, CPU::eor, 5, true), 
     (CPU::imp, CPU::nop, 2, false), (CPU::imp, CPU::nop, 2, false),
     (CPU::imp, CPU::nop, 2, false), (CPU::zpx, CPU::eor, 4, false),
     (CPU::zpx, CPU::lsr, 6, false), (CPU::imp, CPU::nop, 2, false),
@@ -70,7 +70,7 @@ const OPCODE_TABLE : [(fn(&mut CPU, &mut Mem) -> (W<u16>, bool),
     (CPU::ind, CPU::jmp, 5, false), (CPU::abs, CPU::adc, 4, false),
     (CPU::abs, CPU::ror, 6, false), (CPU::imp, CPU::nop, 2, false),
 
-    (CPU::imp, CPU::nop, 2, false), (CPU::idy, CPU::adc, 5, true),
+    (CPU::rel, CPU::jmp, 2, false), (CPU::idy, CPU::adc, 5, true),
     (CPU::imp, CPU::nop, 2, false), (CPU::imp, CPU::nop, 2, false),
     (CPU::imp, CPU::nop, 2, false), (CPU::zpx, CPU::adc, 4, false),
     (CPU::zpx, CPU::ror, 6, false), (CPU::imp, CPU::nop, 2, false),
@@ -88,7 +88,7 @@ const OPCODE_TABLE : [(fn(&mut CPU, &mut Mem) -> (W<u16>, bool),
     (CPU::abs, CPU::sty, 4, false), (CPU::abs, CPU::sta, 4, false),
     (CPU::abs, CPU::stx, 4, false), (CPU::imp, CPU::nop, 2, false),
 
-    (CPU::imp, CPU::nop, 2, false), (CPU::idy, CPU::sta, 6, false),
+    (CPU::rel, CPU::jmp, 2, false), (CPU::idy, CPU::sta, 6, false),
     (CPU::imp, CPU::nop, 2, false), (CPU::imp, CPU::nop, 2, false), 
     (CPU::zpx, CPU::sty, 4, false), (CPU::zpx, CPU::sta, 4, false),
     (CPU::zpy, CPU::stx, 4, false), (CPU::imp, CPU::nop, 2, false),
@@ -106,7 +106,7 @@ const OPCODE_TABLE : [(fn(&mut CPU, &mut Mem) -> (W<u16>, bool),
     (CPU::abs, CPU::ldy, 4, false), (CPU::abs, CPU::lda, 4, false),
     (CPU::abs, CPU::ldx, 4, false), (CPU::imp, CPU::nop, 4, false),
 
-    (CPU::imp, CPU::nop, 2, false), (CPU::idy, CPU::lda, 5, true), 
+    (CPU::rel, CPU::jmp, 2, false), (CPU::idy, CPU::lda, 5, true), 
     (CPU::imp, CPU::nop, 2, false), (CPU::imp, CPU::nop, 2, false),
     (CPU::zpx, CPU::ldy, 4, false), (CPU::zpx, CPU::lda, 4, false),
     (CPU::zpy, CPU::ldx, 4, false), (CPU::imp, CPU::nop, 2, false),
@@ -124,7 +124,7 @@ const OPCODE_TABLE : [(fn(&mut CPU, &mut Mem) -> (W<u16>, bool),
     (CPU::abs, CPU::cpy, 4, false), (CPU::abs, CPU::cmp, 4, false),
     (CPU::abs, CPU::dec, 6, false), (CPU::imp, CPU::nop, 2, false),
 
-    (CPU::imp, CPU::nop, 2, false), (CPU::idy, CPU::cmp, 5, true),
+    (CPU::rel, CPU::jmp, 2, false), (CPU::idy, CPU::cmp, 5, true),
     (CPU::imp, CPU::nop, 2, false), (CPU::imp, CPU::nop, 2, false),
     (CPU::imp, CPU::nop, 2, false), (CPU::zpx, CPU::cmp, 4, false),
     (CPU::zpx, CPU::dec, 6, false), (CPU::imp, CPU::nop, 2, false),
@@ -142,7 +142,7 @@ const OPCODE_TABLE : [(fn(&mut CPU, &mut Mem) -> (W<u16>, bool),
     (CPU::abs, CPU::cpx, 4, false), (CPU::abs, CPU::sbc, 4, false),
     (CPU::abs, CPU::inc, 6, false), (CPU::imp, CPU::nop, 2, false),
 
-    (CPU::imp, CPU::nop, 2, false), (CPU::idy, CPU::sbc, 5, true), 
+    (CPU::rel, CPU::jmp, 2, false), (CPU::idy, CPU::sbc, 5, true), 
     (CPU::imp, CPU::nop, 2, false), (CPU::imp, CPU::nop, 2, false),
     (CPU::imp, CPU::nop, 2, false), (CPU::zpx, CPU::sbc, 4, false),
     (CPU::zpx, CPU::inc, 6, false), (CPU::imp, CPU::nop, 2, false),
@@ -151,6 +151,10 @@ const OPCODE_TABLE : [(fn(&mut CPU, &mut Mem) -> (W<u16>, bool),
     (CPU::imp, CPU::nop, 2, false), (CPU::abx, CPU::sbc, 4, true),
     (CPU::abx, CPU::inc, 7, false), (CPU::imp, CPU::nop, 2, false),
     ];
+
+/* Branch flag types */
+const BRANCH_FLAG_TABLE : [u8; 4] = 
+    [FLAG_SIGN, FLAG_OVERFLOW, FLAG_CARRY, FLAG_ZERO];
 
 /* Memory */
 const STACK_PAGE        : W<u16> = W(0x0100 as u16); 
@@ -167,12 +171,6 @@ const FLAG_PUSHED       : u8 = 0x20;
 const FLAG_OVERFLOW     : u8 = 0x40;
 const FLAG_SIGN         : u8 = 0x80;
 
-const CYCLES_BRANCH     : u32 = 2;
-const OP_BRANCH         : u8 = 0x10;
-const OP_BRANCH_MASK    : u8 = 0x1F;
-const BRANCH_FLAG_TABLE : [u8; 4] = 
-    [FLAG_SIGN, FLAG_OVERFLOW, FLAG_CARRY, FLAG_ZERO];
-
 #[allow(non_snake_case)]
 pub struct CPU {
     A       : W<u8>,    // Accumulator
@@ -182,9 +180,12 @@ pub struct CPU {
     SP      : W<u8>,    // Stack pointer
     PC      : W<u16>,   // Program counter
 
-    cycles  : u32     // stores the cycle so we can execute on the last cycle
-                        // different calls to execute will decrement this value until 
-                        // the operation is executed (last cycle).
+    // Stores the cycles left to execute next_inst
+    cycles_left : u32,      
+    // The instruction to execute when cycles_left is 0
+    next_inst   : fn(&mut CPU, &mut Mem, W<u16>), 
+    // The address for the instruction
+    next_addr   : W<u16>,
 } 
 
 impl CPU {
@@ -197,44 +198,33 @@ impl CPU {
             SP      : W(0xfd),
             PC      : W(0),
 
-            cycles  : 0,
+            cycles_left : 0,
+            next_inst   : CPU::nop,
+            next_addr   : W(0),
         }
     }
 
-    fn branch(&mut self, memory: &mut Mem, opcode: u8) -> u32 {
-        let index = opcode >> 6;
-        let check = ((opcode >> 5) & 1) != 0;
-        self.PC = self.PC + W(2);
-        if is_flag_set!(self.Flags, BRANCH_FLAG_TABLE[index as usize]) != check {
-            return CYCLES_BRANCH;
-        }
-        let pc = self.PC;
-        self.PC = pc + W(memory.load(pc - W(1)).0 as i8 as u16);
-        // Additional cycle if branch taken and page boundary crossed
-        CYCLES_BRANCH + 1 + ((self.PC & PAGE_MASK) != (pc & PAGE_MASK)) as u32
-    }
-
-    pub fn execute(&mut self, memory: &mut Mem) -> u32 {
-        let opcode = memory.load(self.PC).0;
-        if self.cycles == 1 {
-            if opcode & OP_BRANCH_MASK == OP_BRANCH {
-                self.branch(memory, opcode)
-            } else {
-                let instruction = OPCODE_TABLE[opcode as usize]; 
-                // Get address from mode
-                let (address, crossed) = instruction.0(self, memory);
-                // Execute the instruction
-                instruction.1(self, memory, address);
-                // Add the extra cycle if needed
-                return 1; //instruction.2 + (instruction.3 && crossed) as u32
+    pub fn execute(&mut self, memory: &mut Mem) {
+        if self.cycles_left == 0 {
+            // Execute the next instruction
+            let inst = self.next_inst;
+            let addr = self.next_addr;
+            inst(self, memory, addr);
+            // Load next opcode
+            let opcode = memory.load(self.PC).0;
+            let instruction = OPCODE_TABLE[opcode as usize]; 
+            // Get address and extra cycles from mode
+            let (address, extra) = instruction.0(self, memory);
+            // Save the address for next instruction
+            self.next_addr = address;
+            // Add the extra cycle if needed
+            self.cycles_left = instruction.2; 
+            if instruction.3 {
+                self.cycles_left += extra;
             }
-        } else if self.cycles  == 0 {
-            self.cycles = OPCODE_TABLE[opcode as usize].2;
-            return 1;
-        } else {
-            self.cycles -= 1;
-            return 1;
+            self.next_inst = instruction.1;
         }
+        self.cycles_left -= 1;
     }
 }
 
@@ -267,69 +257,86 @@ impl CPU {
 
 impl CPU {
 
-    fn imp(&mut self, _: &mut Mem) -> (W<u16>, bool) {
+    fn imp(&mut self, _: &mut Mem) -> (W<u16>, u32) {
         self.PC = self.PC + W(1);
-        (W(0), false)
+        (W(0), 0)
     }
 
-    fn imm(&mut self, _: &mut Mem) -> (W<u16>, bool) {
+    fn imm(&mut self, _: &mut Mem) -> (W<u16>, u32) {
         self.PC = self.PC + W(2);
-        (self.PC - W(1), false)
+        (self.PC - W(1), 0)
     }
 
-    fn ind(&mut self, memory: &mut Mem) -> (W<u16>, bool) {
+    fn ind(&mut self, memory: &mut Mem) -> (W<u16>, u32) {
         let address = memory.load_word(self.PC + W(1));
         self.PC = self.PC + W(3);
-        (memory.load_word_page_wrap(address), false)
+        (memory.load_word_page_wrap(address), 0)
     }
 
-    fn idx(&mut self, memory: &mut Mem) -> (W<u16>, bool) {
+    fn idx(&mut self, memory: &mut Mem) -> (W<u16>, u32) {
         let address = W16!(memory.load(self.PC + W(1)) + self.X);
         self.PC = self.PC + W(2);
-        (memory.load_word_page_wrap(address), false)
+        (memory.load_word_page_wrap(address), 0)
     }
 
-    fn idy(&mut self, memory: &mut Mem) -> (W<u16>, bool) {
+    fn idy(&mut self, memory: &mut Mem) -> (W<u16>, u32) {
         let addr = W16!(memory.load(self.PC + W(1))); 
         let dest = W16!(memory.load_word_page_wrap(addr) + W16!(self.Y));
         self.PC = self.PC + W(2);
-        (dest, W8!(dest) < self.Y)
+        (dest, (W8!(dest) < self.Y) as u32)
     }
 
-    fn zpg(&mut self, memory: &mut Mem) -> (W<u16>, bool) {
+    fn zpg(&mut self, memory: &mut Mem) -> (W<u16>, u32) {
         let address = W16!(memory.load(self.PC + W(1)));
         self.PC = self.PC + W(2);
-        (address, false)
+        (address, 0)
     }
 
-    fn zpx(&mut self, memory: &mut Mem) -> (W<u16>, bool) {
+    fn zpx(&mut self, memory: &mut Mem) -> (W<u16>, u32) {
         let address = W16!(memory.load(self.PC + W(1)) + self.X);
         self.PC = self.PC + W(2);
-        (address, false)
+        (address, 0)
     }
 
-    fn zpy(&mut self, memory: &mut Mem) -> (W<u16>, bool) {
+    fn zpy(&mut self, memory: &mut Mem) -> (W<u16>, u32) {
         let address = W16!(memory.load(self.PC + W(1)) + self.Y);
         self.PC = self.PC + W(2);
-        (address, false)
+        (address, 0)
     }
 
-    fn abs(&mut self, memory: &mut Mem) -> (W<u16>, bool) {
+    fn abs(&mut self, memory: &mut Mem) -> (W<u16>, u32) {
         let address = memory.load_word(self.PC + W(1));
         self.PC = self.PC + W(3);
-        (address, false)
+        (address, 0)
     }
 
-    fn abx(&mut self, memory: &mut Mem) -> (W<u16>, bool) {
+    fn abx(&mut self, memory: &mut Mem) -> (W<u16>, u32) {
         let address = memory.load_word(self.PC + W(1)) + W16!(self.X);
         self.PC = self.PC + W(3);
-        (address, W8!(address) < self.X)
+        (address, (W8!(address) < self.X) as u32)
     }
 
-    fn aby(&mut self, memory: &mut Mem) -> (W<u16>, bool) {
+    fn aby(&mut self, memory: &mut Mem) -> (W<u16>, u32) {
         let address = memory.load_word(self.PC + W(1)) + W16!(self.Y);
         self.PC = self.PC + W(3);
-        (address, W8!(address) < self.Y)
+        (address, (W8!(address) < self.Y) as u32)
+    }
+
+    fn rel(&mut self, memory: &mut Mem) -> (W<u16>, u32) {
+        let opcode = memory.load(self.PC).0;
+        let index = opcode >> 6;
+        let check = ((opcode >> 5) & 1) != 0;
+        let next_opcode = self.PC + W(2);
+        if is_flag_set!(self.Flags, BRANCH_FLAG_TABLE[index as usize]) != check {
+            (next_opcode, 0)
+        } else {
+            // Branch taken
+            let offset = W(memory.load(self.PC + W(1)).0 as i8 as u16);  
+            let branch = next_opcode + offset;
+            let crossed = (branch & PAGE_MASK) != (next_opcode & PAGE_MASK); 
+            // Additional cycle if branch taken and page boundary crossed
+            (branch, 1 + crossed as u32) 
+        }
     }
 }
 
