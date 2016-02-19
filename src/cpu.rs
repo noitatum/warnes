@@ -31,6 +31,8 @@ const PPUADDR           : W<u16> = W(0x2006);
 const PPUDATA           : W<u16> = W(0x2007);
 const OAMDMA            : W<u16> = W(0x4014);
 
+const DMA_CYCLES        : u64 = 512;
+
 #[allow(non_snake_case)]
 pub struct CPU {
     A               : W<u8>,    // Accumulator
@@ -40,19 +42,19 @@ pub struct CPU {
     SP              : W<u8>,    // Stack pointer
     PC              : W<u16>,   // Program counter
 
+    // Cycle count since power up
+    cycles          : u64,
+
     // Stores the cycles left to execute next_inst
-    cycles_left     : u32,      
+    next_cycle      : u64,      
     // The instruction to execute when cycles_left is 0
     next_inst       : fn(&mut CPU, &mut Mem, W<u16>), 
     // The address for the instruction
     next_addr       : W<u16>,
 
     dma_address     : W<u16>,
-    cycle_parity    : bool,
-    dma_cycles      : u16,
-    dma_read        : bool,
-    dma_length      : u16,
     dma_value       : W<u8>,
+    dma_cycle_end   : u64,
 } 
 
 impl CPU {
@@ -65,23 +67,21 @@ impl CPU {
             SP              : W(0xfd),
             PC              : W(0),
 
-            cycles_left     : 0,
+            cycles          : 0,
+
+            next_cycle      : 0,
             next_inst       : CPU::nop,
             next_addr       : W(0),
-            
 
             dma_address     : W(0),
-            cycle_parity    : true,
-            dma_cycles      : 0,
-            dma_read        : true,
-            dma_length      : 513,
             dma_value       : W(0),
+            dma_cycle_end   : 0,
         }
     }
 
     pub fn execute(&mut self, memory: &mut Mem) {
         if !memory.dma { 
-            if self.cycles_left == 0 {
+            if self.cycles == self.next_cycle {
                 // Execute the next instruction
                 let inst = self.next_inst;
                 let addr = self.next_addr;
@@ -93,48 +93,40 @@ impl CPU {
                 let (address, extra) = instruction.0(self, memory);
                 // Save the address for next instruction
                 self.next_addr = address;
-                // Add the extra cycle if needed
-                self.cycles_left = instruction.2; 
+                self.next_cycle = self.cycles + instruction.2 as u64; 
+                // Add the extra cycles if needed
                 if instruction.3 {
-                    self.cycles_left += extra;
+                    self.next_cycle += extra as u64;
                 }
                 self.next_inst = instruction.1;
             }
-            self.cycles_left -= 1;
         } else {
             self.dma(memory);
         }
-        self.cycle_parity = !self.cycle_parity;
+        self.cycles += 1;
     }
 
     fn dma(&mut self, memory: &mut Mem){
+        // We copy the page adress we wrote to oamdma. 
         if let MemState::Oamdma = memory.write_status {
             self.dma_address = W((memory.oamdma as u16) << 8); 
+            // Additional cycle if on odd cycle
+            self.dma_cycle_end = self.cycles + DMA_CYCLES + self.cycles & 1;
             memory.write_status = MemState::NoState;
-        } // We copy the page adress we wrote to oamdma. 
+        } 
 
-        if self.cycle_parity && self.dma_cycles == 1 || self.dma_cycles > 2 {
-            if self.dma_read {
+        if self.dma_cycle_end - self.cycles < DMA_CYCLES {
+            // Read on odd cycles and write on even cycles
+            if self.cycles & 1 == 1 {
                 self.dma_value = memory.load(self.dma_address);
-                self.dma_read = !self.dma_read;
                 self.dma_address = self.dma_address + W(1);
             } else {
                 memory.store(OAMDATA, self.dma_value);
-                self.dma_read = !self.dma_read;
             }
-        } else if self.dma_cycles == 0 {
-        
-        } else {
-            // one cycle more for parity
-            self.dma_length +=1;        // To see if we have to do 514 or 513 cycles.
         }
 
-        self.dma_cycles += 1;
-
-        if self.dma_cycles == self.dma_length {
+        if self.cycles == self.dma_cycle_end {
             memory.dma = false;
-            self.dma_cycles = 0;
-            self.dma_length = 513;
         }
     }
 }
