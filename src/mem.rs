@@ -55,8 +55,6 @@ pub struct Memory {
     pub ppudata         : u8,
     pub oamdma          : u8,
 
-    pub dma             : bool,
-
 }
 
 impl Memory {
@@ -76,8 +74,6 @@ impl Memory {
             ppuaddr         : 0,
             ppudata         : 0,
             oamdma          : 0,
-
-            dma             : false,
         }
     }
 
@@ -221,7 +217,6 @@ impl Memory {
                                 // the oam memory with the selected page.
                                 // (value in oamdma).
                             {   self.write_status = MemState::Oamdma;
-                                self.dma = true;
                                 self.oamdma = val
                             },
                 0x4015 =>   (),

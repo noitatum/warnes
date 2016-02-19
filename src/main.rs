@@ -5,11 +5,11 @@ mod mem;
 mod ppu;
 
 fn main() {
-    let mut cpu = cpu::CPU::new();
+    let mut cpu : cpu::CPU = Default::default();
     let mut ppu = ppu::Ppu::new();
     println!("{:?}", ppu);
     let mut memory = mem::Memory::new();
     println!("{:?}", memory);
-    cpu.execute(&mut memory);
+    cpu.single_cycle(&mut memory);
     println!("{}", cpu);
 }

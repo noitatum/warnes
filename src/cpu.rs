@@ -31,7 +31,7 @@ const PPUADDR           : W<u16> = W(0x2006);
 const PPUDATA           : W<u16> = W(0x2007);
 const OAMDMA            : W<u16> = W(0x4014);
 
-const DMA_CYCLES        : u64 = 512;
+const DMA_CYCLES        : u32 = 512;
 
 #[allow(non_snake_case)]
 pub struct CPU {
@@ -45,20 +45,35 @@ pub struct CPU {
     // Cycle count since power up
     cycles          : u64,
 
-    // Stores the cycles left to execute next_inst
-    next_cycle      : u64,      
-    // The instruction to execute when cycles_left is 0
-    next_inst       : fn(&mut CPU, &mut Mem, W<u16>), 
-    // The address for the instruction
-    next_addr       : W<u16>,
-
-    dma_address     : W<u16>,
-    dma_value       : W<u8>,
-    dma_cycle_end   : u64,
+    execution       : Execution,
+    dma             : DMA,
 } 
 
-impl CPU {
-    pub fn new() -> CPU {
+#[derive(Default)]
+struct DMA {
+    address     : W<u16>,
+    value       : W<u8>,
+    cycles_left : u32,
+}
+
+struct Execution {
+    cycles_left     : u32,
+    instruction     : fn(&mut CPU, &mut Mem, W<u16>),  
+    address         : W<u16>,
+}
+
+impl Default for Execution {
+    fn default() -> Execution {
+        Execution {
+            cycles_left     : 0,
+            instruction     : CPU::nop,
+            address         : W(0),
+        }
+    }
+}
+
+impl Default for CPU {
+    fn default() -> CPU {
         CPU {
             A               : W(0),
             X               : W(0),
@@ -69,65 +84,67 @@ impl CPU {
 
             cycles          : 0,
 
-            next_cycle      : 0,
-            next_inst       : CPU::nop,
-            next_addr       : W(0),
-
-            dma_address     : W(0),
-            dma_value       : W(0),
-            dma_cycle_end   : 0,
+            execution       : Default::default(),
+            dma             : Default::default(),
         }
     }
+}
 
-    pub fn execute(&mut self, memory: &mut Mem) {
-        if !memory.dma { 
-            if self.cycles == self.next_cycle {
-                // Execute the next instruction
-                let inst = self.next_inst;
-                let addr = self.next_addr;
-                inst(self, memory, addr);
-                // Load next opcode
-                let opcode = memory.load(self.PC).0;
-                let instruction = OPCODE_TABLE[opcode as usize]; 
-                // Get address and extra cycles from mode
-                let (address, extra) = instruction.0(self, memory);
-                // Save the address for next instruction
-                self.next_addr = address;
-                self.next_cycle = self.cycles + instruction.2 as u64; 
-                // Add the extra cycles if needed
-                if instruction.3 {
-                    self.next_cycle += extra as u64;
-                }
-                self.next_inst = instruction.1;
-            }
-        } else {
+impl CPU {
+
+    pub fn single_cycle(&mut self, memory: &mut Mem) {
+        // Dma takes priority
+        if self.dma.cycles_left > 0 {
             self.dma(memory);
+        } else if let MemState::Oamdma = memory.write_status {
+            self.start_dma(memory);
+        } else {
+            self.execute(memory);
         }
         self.cycles += 1;
     }
 
-    fn dma(&mut self, memory: &mut Mem){
-        // We copy the page adress we wrote to oamdma. 
-        if let MemState::Oamdma = memory.write_status {
-            self.dma_address = W((memory.oamdma as u16) << 8); 
-            // Additional cycle if on odd cycle
-            self.dma_cycle_end = self.cycles + DMA_CYCLES + self.cycles & 1;
-            memory.write_status = MemState::NoState;
-        } 
+    fn execute(&mut self, memory: &mut Mem) {
+        if self.execution.cycles_left == 0 {
+            // Execute the next instruction
+            let inst = self.execution.instruction;
+            let addr = self.execution.address;
+            inst(self, memory, addr);
+            // Load next opcode
+            let opcode = memory.load(self.PC).0;
+            let instruction = OPCODE_TABLE[opcode as usize]; 
+            // Get address and extra cycles from mode
+            let (address, extra) = instruction.0(self, memory);
+            // Save the address for next instruction
+            self.execution.address = address;
+            self.execution.cycles_left = instruction.2; 
+            // Add the extra cycles if needed
+            if instruction.3 {
+                self.execution.cycles_left += extra;
+            }
+            self.execution.instruction = instruction.1;
+        }
+        self.execution.cycles_left -= 1;
+    }
 
-        if self.dma_cycle_end - self.cycles < DMA_CYCLES {
+    fn start_dma(&mut self, memory: &mut Mem) {
+        self.dma.address = W((memory.oamdma as u16) << 8); 
+        // Additional cycle if on odd cycle
+        self.dma.cycles_left = DMA_CYCLES + (self.cycles as u32) & 1;
+    }
+
+    fn dma(&mut self, memory: &mut Mem) {
+        // Simulate idle cycles
+        if self.dma.cycles_left < DMA_CYCLES {
             // Read on odd cycles and write on even cycles
             if self.cycles & 1 == 1 {
-                self.dma_value = memory.load(self.dma_address);
-                self.dma_address = self.dma_address + W(1);
+                self.dma.value = memory.load(self.dma.address);
+                self.dma.address = self.dma.address + W(1);
             } else {
-                memory.store(OAMDATA, self.dma_value);
+                memory.store(OAMDATA, self.dma.value);
             }
         }
-
-        if self.cycles == self.dma_cycle_end {
-            memory.dma = false;
-        }
+        self.dma.cycles_left -= 1;
     }
 }
 // Util functions
