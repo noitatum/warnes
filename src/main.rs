@@ -11,5 +11,5 @@ fn main() {
     let mut memory = mem::Memory::new();
     println!("{:?}", memory);
     cpu.single_cycle(&mut memory);
-    println!("{}", cpu);
+    println!("{:?}", cpu);
 }

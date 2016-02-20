@@ -2,6 +2,8 @@ use std::fmt;
 use mem::{MemState, Memory as Mem};
 use std::num::Wrapping as W;
 
+type Fn_Instruction     = fn(&mut Regs, &mut Mem, W<u16>);  
+type Fn_Addressing      = fn(&mut Regs, &mut Mem) -> (W<u16>, u32); 
 /* Branch flag types */
 const BRANCH_FLAG_TABLE : [u8; 4] = 
     [FLAG_SIGN, FLAG_OVERFLOW, FLAG_CARRY, FLAG_ZERO];
@@ -33,123 +35,149 @@ const OAMDMA            : W<u16> = W(0x4014);
 
 const DMA_CYCLES        : u32 = 512;
 
-#[allow(non_snake_case)]
+#[derive(Default)]
+#[derive(Debug)]
 pub struct CPU {
-    A               : W<u8>,    // Accumulator
-    X               : W<u8>,    // Indexes
-    Y               : W<u8>,    //
-    Flags           : u8,       // Status
-    SP              : W<u8>,    // Stack pointer
-    PC              : W<u16>,   // Program counter
-
     // Cycle count since power up
-    cycles          : u64,
-
-    execution       : Execution,
-    dma             : DMA,
+    cycles      : u64,
+    regs        : Regs,
+    exec        : Execution,
+    dma         : DMA,
 } 
+
+impl CPU {
+    pub fn single_cycle(&mut self, memory: &mut Mem) {
+        // Dma takes priority
+        if !self.dma.single_cycle(memory, self.cycles) {
+            self.exec.single_cycle(memory, &mut self.regs);
+        }
+        self.cycles += 1;
+    }
+}
 
 #[derive(Default)]
 struct DMA {
+    cycles_left : u32,
     address     : W<u16>,
     value       : W<u8>,
-    cycles_left : u32,
+}
+
+impl fmt::Debug for DMA {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{{DMA: cycles_left: {}, address: {:#x}, value: {:#x}}}",
+               self.cycles_left, self.address.0, self.value.0)
+    }
+}
+
+impl DMA {
+    // Returns true if DMA is active
+    pub fn single_cycle(&mut self, memory: &mut Mem, cycles: u64) -> bool {
+        if self.cycles_left > 0 {
+            self.execute(memory);
+            true
+        } else if let MemState::Oamdma = memory.write_status {
+            self.start(memory, cycles as u32);
+            true
+        } else {
+            false
+        }
+    }
+
+    fn start(&mut self, memory: &mut Mem, cycles: u32) {
+        self.address = W((memory.oamdma as u16) << 8); 
+        // Additional cycle if on odd cycle
+        self.cycles_left = DMA_CYCLES + cycles & 1;
+    }
+
+    fn execute(&mut self, memory: &mut Mem) {
+        self.cycles_left -= 1;
+        // Simulate idle cycles
+        if self.cycles_left < DMA_CYCLES {
+            // Read on odd cycles and write on even cycles
+            if self.cycles_left & 1 == 1 {
+                self.value = memory.load(self.address);
+                self.address = self.address + W(1);
+            } else {
+                memory.store(OAMDATA, self.value);
+            }
+        }
+    }
 }
 
 struct Execution {
     cycles_left     : u32,
-    instruction     : fn(&mut CPU, &mut Mem, W<u16>),  
     address         : W<u16>,
+    instruction     : Fn_Instruction,
 }
 
 impl Default for Execution {
     fn default() -> Execution {
         Execution {
             cycles_left     : 0,
-            instruction     : CPU::nop,
+            instruction     : Regs::nop,
             address         : W(0),
         }
     }
 }
 
-impl Default for CPU {
-    fn default() -> CPU {
-        CPU {
+impl fmt::Debug for Execution {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{{Execution: cycles_left: {}, address: {:#x}}}",
+               self.cycles_left, self.address.0)
+    }
+}
+
+impl Execution {
+
+    pub fn single_cycle(&mut self, memory: &mut Mem, regs: &mut Regs) {
+        if self.cycles_left == 0 {
+            // Execute the next instruction
+            let inst = self.instruction;
+            inst(regs, memory, self.address);
+            // Load next opcode
+            let opcode = regs.load_opcode(memory);
+            let instruction = OPCODE_TABLE[opcode as usize]; 
+            // Get address and extra cycles from mode
+            let (address, extra) = instruction.0(regs, memory);
+            // Save the address for next instruction
+            self.address = address;
+            self.cycles_left = instruction.2; 
+            // Add the extra cycles if needed
+            if instruction.3 {
+                self.cycles_left += extra;
+            }
+            self.instruction = instruction.1;
+        }
+        self.cycles_left -= 1;
+    }
+}
+
+#[allow(non_snake_case)]
+struct Regs {
+    A           : W<u8>,    // Accumulator
+    X           : W<u8>,    // Indexes
+    Y           : W<u8>,    //
+    Flags       : u8,       // Status
+    SP          : W<u8>,    // Stack pointer
+    PC          : W<u16>,   // Program counter
+}
+
+impl Default for Regs {
+    fn default() -> Regs {
+        Regs {
             A               : W(0),
             X               : W(0),
             Y               : W(0),
             Flags           : 0x34, 
             SP              : W(0xfd),
             PC              : W(0),
-
-            cycles          : 0,
-
-            execution       : Default::default(),
-            dma             : Default::default(),
         }
     }
 }
 
-impl CPU {
-
-    pub fn single_cycle(&mut self, memory: &mut Mem) {
-        // Dma takes priority
-        if self.dma.cycles_left > 0 {
-            self.dma(memory);
-        } else if let MemState::Oamdma = memory.write_status {
-            self.start_dma(memory);
-        } else {
-            self.execute(memory);
-        }
-        self.cycles += 1;
-    }
-
-    fn execute(&mut self, memory: &mut Mem) {
-        if self.execution.cycles_left == 0 {
-            // Execute the next instruction
-            let inst = self.execution.instruction;
-            let addr = self.execution.address;
-            inst(self, memory, addr);
-            // Load next opcode
-            let opcode = memory.load(self.PC).0;
-            let instruction = OPCODE_TABLE[opcode as usize]; 
-            // Get address and extra cycles from mode
-            let (address, extra) = instruction.0(self, memory);
-            // Save the address for next instruction
-            self.execution.address = address;
-            self.execution.cycles_left = instruction.2; 
-            // Add the extra cycles if needed
-            if instruction.3 {
-                self.execution.cycles_left += extra;
-            }
-            self.execution.instruction = instruction.1;
-        }
-        self.execution.cycles_left -= 1;
-    }
-
-    fn start_dma(&mut self, memory: &mut Mem) {
-        self.dma.address = W((memory.oamdma as u16) << 8); 
-        // Additional cycle if on odd cycle
-        self.dma.cycles_left = DMA_CYCLES + (self.cycles as u32) & 1;
-    }
-
-    fn dma(&mut self, memory: &mut Mem) {
-        // Simulate idle cycles
-        if self.dma.cycles_left < DMA_CYCLES {
-            // Read on odd cycles and write on even cycles
-            if self.cycles & 1 == 1 {
-                self.dma.value = memory.load(self.dma.address);
-                self.dma.address = self.dma.address + W(1);
-            } else {
-                memory.store(OAMDATA, self.dma.value);
-            }
-        }
-        self.dma.cycles_left -= 1;
-    }
-}
 // Util functions
 
-impl CPU {
+impl Regs {
 
     fn pop(&mut self, memory: &mut Mem) -> W<u8> {
         self.SP = self.SP + W(1);
@@ -170,11 +198,15 @@ impl CPU {
         let low = W16!(self.pop(memory)); 
         (W16!(self.pop(memory)) << 8) | low
     }
+
+    fn load_opcode(&mut self, memory: &mut Mem) -> u8 {
+        memory.load(self.PC).0
+    }
 }
 
 // Addressing modes
 
-impl CPU {
+impl Regs {
 
     fn imp(&mut self, _: &mut Mem) -> (W<u16>, u32) {
         self.PC = self.PC + W(1);
@@ -242,7 +274,7 @@ impl CPU {
     }
 
     fn rel(&mut self, memory: &mut Mem) -> (W<u16>, u32) {
-        let opcode = memory.load(self.PC).0;
+        let opcode = self.load_opcode(memory);
         let index = opcode >> 6;
         let check = ((opcode >> 5) & 1) != 0;
         let next_opcode = self.PC + W(2);
@@ -261,7 +293,7 @@ impl CPU {
 
 // Instructions
 
-impl CPU {   
+impl Regs {   
     
     // Jump
 
@@ -566,169 +598,159 @@ impl CPU {
     }
 }
 
-impl fmt::Display for CPU {
+impl fmt::Debug for Regs {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{{ A: {:#x}, X: {:#x}, Y: {:#x}, P: {:#x}, SP: {:#x}, PC: {:#x} }}",
+        write!(f, "{{Regs: A: {:#x}, X: {:#x}, Y: {:#x}, P: {:#x}, SP: {:#x}, PC: {:#x} }}",
                self.A.0 , self.X.0 , self.Y.0 , self.Flags , self.SP.0 , self.PC.0)
-    }
-}
-
-impl fmt::Debug for CPU {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let mut output = "CPU: ".to_string();
-        output.push_str(&format!("{{ A: {:#x}, X: {:#x}, Y: {:#x}, P: {:#x}, SP: {:#x}, PC: {:#x} }}",
-               self.A.0 , self.X.0 , self.Y.0 , self.Flags , self.SP.0 , self.PC.0));
-        write!(f, "{}", output)
     }
 }
 
 
 /* WARNING: Branch instructions are replaced with jumps */
 /* Addressing, Instruction, Cycles, Has Penalty */
-const OPCODE_TABLE : [(fn(&mut CPU, &mut Mem) -> (W<u16>, u32),
-                       fn(&mut CPU, &mut Mem, W<u16>), u32, bool); 256] = [
-    (CPU::imp, CPU::brk, 7, false), (CPU::idx, CPU::ora, 6, false), 
-    (CPU::imp, CPU::nop, 2, false), (CPU::imp, CPU::nop, 2, false), 
-    (CPU::imp, CPU::nop, 2, false), (CPU::zpg, CPU::ora, 3, false),
-    (CPU::zpg, CPU::asl, 5, false), (CPU::imp, CPU::nop, 2, false),
-    (CPU::imp, CPU::php, 3, false), (CPU::imm, CPU::ora, 2, false),
-    (CPU::imp, CPU::sal, 2, false), (CPU::imp, CPU::nop, 2, false), 
-    (CPU::imp, CPU::nop, 2, false), (CPU::abs, CPU::ora, 4, false),
-    (CPU::abs, CPU::asl, 6, false), (CPU::imp, CPU::nop, 2, false), 
+const OPCODE_TABLE : [(Fn_Addressing, Fn_Instruction, u32, bool); 256] = [
+    (Regs::imp, Regs::brk, 7, false), (Regs::idx, Regs::ora, 6, false), 
+    (Regs::imp, Regs::nop, 2, false), (Regs::imp, Regs::nop, 2, false), 
+    (Regs::imp, Regs::nop, 2, false), (Regs::zpg, Regs::ora, 3, false),
+    (Regs::zpg, Regs::asl, 5, false), (Regs::imp, Regs::nop, 2, false),
+    (Regs::imp, Regs::php, 3, false), (Regs::imm, Regs::ora, 2, false),
+    (Regs::imp, Regs::sal, 2, false), (Regs::imp, Regs::nop, 2, false), 
+    (Regs::imp, Regs::nop, 2, false), (Regs::abs, Regs::ora, 4, false),
+    (Regs::abs, Regs::asl, 6, false), (Regs::imp, Regs::nop, 2, false), 
     
-    (CPU::rel, CPU::jmp, 2, true), (CPU::idy, CPU::ora, 5, true), 
-    (CPU::imp, CPU::nop, 2, false), (CPU::imp, CPU::nop, 2, false),
-    (CPU::imp, CPU::nop, 2, false), (CPU::zpx, CPU::ora, 4, false),
-    (CPU::zpx, CPU::asl, 6, false), (CPU::imp, CPU::nop, 2, false),
-    (CPU::imp, CPU::clc, 2, false), (CPU::aby, CPU::ora, 4, true),
-    (CPU::imp, CPU::nop, 2, false), (CPU::imp, CPU::nop, 2, false),
-    (CPU::imp, CPU::nop, 2, false), (CPU::abx, CPU::ora, 4, true), 
-    (CPU::abx, CPU::asl, 7, false), (CPU::imp, CPU::nop, 2, false),
+    (Regs::rel, Regs::jmp, 2, true),  (Regs::idy, Regs::ora, 5, true), 
+    (Regs::imp, Regs::nop, 2, false), (Regs::imp, Regs::nop, 2, false),
+    (Regs::imp, Regs::nop, 2, false), (Regs::zpx, Regs::ora, 4, false),
+    (Regs::zpx, Regs::asl, 6, false), (Regs::imp, Regs::nop, 2, false),
+    (Regs::imp, Regs::clc, 2, false), (Regs::aby, Regs::ora, 4, true),
+    (Regs::imp, Regs::nop, 2, false), (Regs::imp, Regs::nop, 2, false),
+    (Regs::imp, Regs::nop, 2, false), (Regs::abx, Regs::ora, 4, true), 
+    (Regs::abx, Regs::asl, 7, false), (Regs::imp, Regs::nop, 2, false),
 
-    (CPU::abs, CPU::jsr, 6, false), (CPU::idx, CPU::and, 6, false), 
-    (CPU::imp, CPU::nop, 2, false), (CPU::imp, CPU::nop, 6, false),
-    (CPU::zpg, CPU::bit, 3, false), (CPU::zpg, CPU::and, 3, false),
-    (CPU::zpg, CPU::rol, 5, false), (CPU::imp, CPU::nop, 2, false),
-    (CPU::imp, CPU::plp, 4, false), (CPU::imm, CPU::and, 2, false),
-    (CPU::imp, CPU::ral, 2, false), (CPU::imp, CPU::nop, 2, false),
-    (CPU::abs, CPU::bit, 4, false), (CPU::abs, CPU::and, 4, false),
-    (CPU::abs, CPU::rol, 6, false), (CPU::imp, CPU::nop, 2, false),
+    (Regs::abs, Regs::jsr, 6, false), (Regs::idx, Regs::and, 6, false), 
+    (Regs::imp, Regs::nop, 2, false), (Regs::imp, Regs::nop, 6, false),
+    (Regs::zpg, Regs::bit, 3, false), (Regs::zpg, Regs::and, 3, false),
+    (Regs::zpg, Regs::rol, 5, false), (Regs::imp, Regs::nop, 2, false),
+    (Regs::imp, Regs::plp, 4, false), (Regs::imm, Regs::and, 2, false),
+    (Regs::imp, Regs::ral, 2, false), (Regs::imp, Regs::nop, 2, false),
+    (Regs::abs, Regs::bit, 4, false), (Regs::abs, Regs::and, 4, false),
+    (Regs::abs, Regs::rol, 6, false), (Regs::imp, Regs::nop, 2, false),
 
-    (CPU::rel, CPU::jmp, 2, true), (CPU::idy, CPU::and, 5, true),
-    (CPU::imp, CPU::nop, 2, false), (CPU::imp, CPU::nop, 2, false),
-    (CPU::imp, CPU::nop, 2, false), (CPU::zpx, CPU::and, 4, false),
-    (CPU::zpx, CPU::rol, 6, false), (CPU::imp, CPU::nop, 2, false),
-    (CPU::imp, CPU::sec, 2, false), (CPU::aby, CPU::and, 4, true),
-    (CPU::imp, CPU::nop, 2, false), (CPU::imp, CPU::nop, 2, true),
-    (CPU::imp, CPU::nop, 2, false), (CPU::abx, CPU::and, 4, true),
-    (CPU::abx, CPU::rol, 7, false), (CPU::imp, CPU::nop, 2, false),
+    (Regs::rel, Regs::jmp, 2, true),  (Regs::idy, Regs::and, 5, true),
+    (Regs::imp, Regs::nop, 2, false), (Regs::imp, Regs::nop, 2, false),
+    (Regs::imp, Regs::nop, 2, false), (Regs::zpx, Regs::and, 4, false),
+    (Regs::zpx, Regs::rol, 6, false), (Regs::imp, Regs::nop, 2, false),
+    (Regs::imp, Regs::sec, 2, false), (Regs::aby, Regs::and, 4, true),
+    (Regs::imp, Regs::nop, 2, false), (Regs::imp, Regs::nop, 2, true),
+    (Regs::imp, Regs::nop, 2, false), (Regs::abx, Regs::and, 4, true),
+    (Regs::abx, Regs::rol, 7, false), (Regs::imp, Regs::nop, 2, false),
 
-    (CPU::imp, CPU::rti, 6, false), (CPU::idx, CPU::eor, 6, false),
-    (CPU::imp, CPU::nop, 2, false), (CPU::imp, CPU::nop, 2, false),
-    (CPU::imp, CPU::nop, 2, false), (CPU::zpg, CPU::eor, 3, false), 
-    (CPU::zpg, CPU::lsr, 5, false), (CPU::imp, CPU::nop, 2, false),
-    (CPU::imp, CPU::pha, 3, false), (CPU::imm, CPU::eor, 2, false),
-    (CPU::imp, CPU::sar, 2, false), (CPU::imp, CPU::nop, 2, false),
-    (CPU::abs, CPU::jmp, 3, false), (CPU::abs, CPU::eor, 4, false),
-    (CPU::abs, CPU::lsr, 6, false), (CPU::imp, CPU::nop, 2, false),
+    (Regs::imp, Regs::rti, 6, false), (Regs::idx, Regs::eor, 6, false),
+    (Regs::imp, Regs::nop, 2, false), (Regs::imp, Regs::nop, 2, false),
+    (Regs::imp, Regs::nop, 2, false), (Regs::zpg, Regs::eor, 3, false), 
+    (Regs::zpg, Regs::lsr, 5, false), (Regs::imp, Regs::nop, 2, false),
+    (Regs::imp, Regs::pha, 3, false), (Regs::imm, Regs::eor, 2, false),
+    (Regs::imp, Regs::sar, 2, false), (Regs::imp, Regs::nop, 2, false),
+    (Regs::abs, Regs::jmp, 3, false), (Regs::abs, Regs::eor, 4, false),
+    (Regs::abs, Regs::lsr, 6, false), (Regs::imp, Regs::nop, 2, false),
 
-    (CPU::rel, CPU::jmp, 2, true), (CPU::idy, CPU::eor, 5, true), 
-    (CPU::imp, CPU::nop, 2, false), (CPU::imp, CPU::nop, 2, false),
-    (CPU::imp, CPU::nop, 2, false), (CPU::zpx, CPU::eor, 4, false),
-    (CPU::zpx, CPU::lsr, 6, false), (CPU::imp, CPU::nop, 2, false),
-    (CPU::imp, CPU::cli, 2, false), (CPU::aby, CPU::eor, 4, true), 
-    (CPU::imp, CPU::nop, 2, false), (CPU::imp, CPU::nop, 2, false), 
-    (CPU::imp, CPU::nop, 2, false), (CPU::abx, CPU::eor, 4, true),
-    (CPU::abx, CPU::lsr, 7, false), (CPU::imp, CPU::nop, 2, false),
+    (Regs::rel, Regs::jmp, 2, true),  (Regs::idy, Regs::eor, 5, true), 
+    (Regs::imp, Regs::nop, 2, false), (Regs::imp, Regs::nop, 2, false),
+    (Regs::imp, Regs::nop, 2, false), (Regs::zpx, Regs::eor, 4, false),
+    (Regs::zpx, Regs::lsr, 6, false), (Regs::imp, Regs::nop, 2, false),
+    (Regs::imp, Regs::cli, 2, false), (Regs::aby, Regs::eor, 4, true), 
+    (Regs::imp, Regs::nop, 2, false), (Regs::imp, Regs::nop, 2, false), 
+    (Regs::imp, Regs::nop, 2, false), (Regs::abx, Regs::eor, 4, true),
+    (Regs::abx, Regs::lsr, 7, false), (Regs::imp, Regs::nop, 2, false),
 
-    (CPU::imp, CPU::rts, 6, false), (CPU::idx, CPU::adc, 6, false),
-    (CPU::imp, CPU::nop, 2, false), (CPU::imp, CPU::nop, 2, false),
-    (CPU::imp, CPU::nop, 2, false), (CPU::zpg, CPU::adc, 3, false),
-    (CPU::zpg, CPU::ror, 5, false), (CPU::imp, CPU::nop, 2, false),
-    (CPU::imp, CPU::pla, 4, false), (CPU::imm, CPU::adc, 2, false),
-    (CPU::imp, CPU::rar, 2, false), (CPU::imp, CPU::nop, 2, false),
-    (CPU::ind, CPU::jmp, 5, false), (CPU::abs, CPU::adc, 4, false),
-    (CPU::abs, CPU::ror, 6, false), (CPU::imp, CPU::nop, 2, false),
+    (Regs::imp, Regs::rts, 6, false), (Regs::idx, Regs::adc, 6, false),
+    (Regs::imp, Regs::nop, 2, false), (Regs::imp, Regs::nop, 2, false),
+    (Regs::imp, Regs::nop, 2, false), (Regs::zpg, Regs::adc, 3, false),
+    (Regs::zpg, Regs::ror, 5, false), (Regs::imp, Regs::nop, 2, false),
+    (Regs::imp, Regs::pla, 4, false), (Regs::imm, Regs::adc, 2, false),
+    (Regs::imp, Regs::rar, 2, false), (Regs::imp, Regs::nop, 2, false),
+    (Regs::ind, Regs::jmp, 5, false), (Regs::abs, Regs::adc, 4, false),
+    (Regs::abs, Regs::ror, 6, false), (Regs::imp, Regs::nop, 2, false),
 
-    (CPU::rel, CPU::jmp, 2, true), (CPU::idy, CPU::adc, 5, true),
-    (CPU::imp, CPU::nop, 2, false), (CPU::imp, CPU::nop, 2, false),
-    (CPU::imp, CPU::nop, 2, false), (CPU::zpx, CPU::adc, 4, false),
-    (CPU::zpx, CPU::ror, 6, false), (CPU::imp, CPU::nop, 2, false),
-    (CPU::imp, CPU::sei, 2, false), (CPU::aby, CPU::adc, 4, true),
-    (CPU::imp, CPU::nop, 2, false), (CPU::imp, CPU::nop, 2, false), 
-    (CPU::imp, CPU::nop, 2, false), (CPU::abx, CPU::adc, 4, true),
-    (CPU::abx, CPU::ror, 7, false), (CPU::imp, CPU::nop, 2, false),
+    (Regs::rel, Regs::jmp, 2, true),  (Regs::idy, Regs::adc, 5, true),
+    (Regs::imp, Regs::nop, 2, false), (Regs::imp, Regs::nop, 2, false),
+    (Regs::imp, Regs::nop, 2, false), (Regs::zpx, Regs::adc, 4, false),
+    (Regs::zpx, Regs::ror, 6, false), (Regs::imp, Regs::nop, 2, false),
+    (Regs::imp, Regs::sei, 2, false), (Regs::aby, Regs::adc, 4, true),
+    (Regs::imp, Regs::nop, 2, false), (Regs::imp, Regs::nop, 2, false), 
+    (Regs::imp, Regs::nop, 2, false), (Regs::abx, Regs::adc, 4, true),
+    (Regs::abx, Regs::ror, 7, false), (Regs::imp, Regs::nop, 2, false),
 
-    (CPU::imp, CPU::nop, 2, false), (CPU::idx, CPU::sta, 6, false),
-    (CPU::imp, CPU::nop, 2, false), (CPU::imp, CPU::nop, 2, false),
-    (CPU::zpg, CPU::sty, 3, false), (CPU::zpg, CPU::sta, 3, false),
-    (CPU::zpg, CPU::stx, 3, false), (CPU::imp, CPU::nop, 2, false),
-    (CPU::imp, CPU::dey, 2, false), (CPU::imp, CPU::nop, 2, false),
-    (CPU::imp, CPU::txa, 2, false), (CPU::imp, CPU::nop, 2, false),
-    (CPU::abs, CPU::sty, 4, false), (CPU::abs, CPU::sta, 4, false),
-    (CPU::abs, CPU::stx, 4, false), (CPU::imp, CPU::nop, 2, false),
+    (Regs::imp, Regs::nop, 2, false), (Regs::idx, Regs::sta, 6, false),
+    (Regs::imp, Regs::nop, 2, false), (Regs::imp, Regs::nop, 2, false),
+    (Regs::zpg, Regs::sty, 3, false), (Regs::zpg, Regs::sta, 3, false),
+    (Regs::zpg, Regs::stx, 3, false), (Regs::imp, Regs::nop, 2, false),
+    (Regs::imp, Regs::dey, 2, false), (Regs::imp, Regs::nop, 2, false),
+    (Regs::imp, Regs::txa, 2, false), (Regs::imp, Regs::nop, 2, false),
+    (Regs::abs, Regs::sty, 4, false), (Regs::abs, Regs::sta, 4, false),
+    (Regs::abs, Regs::stx, 4, false), (Regs::imp, Regs::nop, 2, false),
 
-    (CPU::rel, CPU::jmp, 2, true), (CPU::idy, CPU::sta, 6, false),
-    (CPU::imp, CPU::nop, 2, false), (CPU::imp, CPU::nop, 2, false), 
-    (CPU::zpx, CPU::sty, 4, false), (CPU::zpx, CPU::sta, 4, false),
-    (CPU::zpy, CPU::stx, 4, false), (CPU::imp, CPU::nop, 2, false),
-    (CPU::imp, CPU::tya, 2, false), (CPU::aby, CPU::sta, 5, false), 
-    (CPU::imp, CPU::txs, 2, false), (CPU::imp, CPU::nop, 2, false), 
-    (CPU::imp, CPU::nop, 2, false), (CPU::abx, CPU::sta, 5, false),
-    (CPU::imp, CPU::nop, 2, false), (CPU::imp, CPU::nop, 2, false),
+    (Regs::rel, Regs::jmp, 2, true),  (Regs::idy, Regs::sta, 6, false),
+    (Regs::imp, Regs::nop, 2, false), (Regs::imp, Regs::nop, 2, false), 
+    (Regs::zpx, Regs::sty, 4, false), (Regs::zpx, Regs::sta, 4, false),
+    (Regs::zpy, Regs::stx, 4, false), (Regs::imp, Regs::nop, 2, false),
+    (Regs::imp, Regs::tya, 2, false), (Regs::aby, Regs::sta, 5, false), 
+    (Regs::imp, Regs::txs, 2, false), (Regs::imp, Regs::nop, 2, false), 
+    (Regs::imp, Regs::nop, 2, false), (Regs::abx, Regs::sta, 5, false),
+    (Regs::imp, Regs::nop, 2, false), (Regs::imp, Regs::nop, 2, false),
 
-    (CPU::imm, CPU::ldy, 2, false), (CPU::idx, CPU::lda, 6, false), 
-    (CPU::imm, CPU::ldx, 2, false), (CPU::imp, CPU::nop, 2, false),
-    (CPU::zpg, CPU::ldy, 3, false), (CPU::zpg, CPU::lda, 3, false),
-    (CPU::zpg, CPU::ldx, 3, false), (CPU::imp, CPU::nop, 2, false),
-    (CPU::imp, CPU::tay, 2, false), (CPU::imm, CPU::lda, 2, false),
-    (CPU::imp, CPU::tax, 2, false), (CPU::imp, CPU::nop, 2, false),
-    (CPU::abs, CPU::ldy, 4, false), (CPU::abs, CPU::lda, 4, false),
-    (CPU::abs, CPU::ldx, 4, false), (CPU::imp, CPU::nop, 4, false),
+    (Regs::imm, Regs::ldy, 2, false), (Regs::idx, Regs::lda, 6, false), 
+    (Regs::imm, Regs::ldx, 2, false), (Regs::imp, Regs::nop, 2, false),
+    (Regs::zpg, Regs::ldy, 3, false), (Regs::zpg, Regs::lda, 3, false),
+    (Regs::zpg, Regs::ldx, 3, false), (Regs::imp, Regs::nop, 2, false),
+    (Regs::imp, Regs::tay, 2, false), (Regs::imm, Regs::lda, 2, false),
+    (Regs::imp, Regs::tax, 2, false), (Regs::imp, Regs::nop, 2, false),
+    (Regs::abs, Regs::ldy, 4, false), (Regs::abs, Regs::lda, 4, false),
+    (Regs::abs, Regs::ldx, 4, false), (Regs::imp, Regs::nop, 4, false),
 
-    (CPU::rel, CPU::jmp, 2, true), (CPU::idy, CPU::lda, 5, true), 
-    (CPU::imp, CPU::nop, 2, false), (CPU::imp, CPU::nop, 2, false),
-    (CPU::zpx, CPU::ldy, 4, false), (CPU::zpx, CPU::lda, 4, false),
-    (CPU::zpy, CPU::ldx, 4, false), (CPU::imp, CPU::nop, 2, false),
-    (CPU::imp, CPU::clv, 2, false), (CPU::aby, CPU::lda, 4, true), 
-    (CPU::imp, CPU::tsx, 2, false), (CPU::imp, CPU::nop, 2, false),
-    (CPU::abx, CPU::ldy, 4, true),  (CPU::abx, CPU::lda, 4, true),
-    (CPU::aby, CPU::ldx, 4, true),  (CPU::imp, CPU::nop, 2, false),
+    (Regs::rel, Regs::jmp, 2, true),  (Regs::idy, Regs::lda, 5, true), 
+    (Regs::imp, Regs::nop, 2, false), (Regs::imp, Regs::nop, 2, false),
+    (Regs::zpx, Regs::ldy, 4, false), (Regs::zpx, Regs::lda, 4, false),
+    (Regs::zpy, Regs::ldx, 4, false), (Regs::imp, Regs::nop, 2, false),
+    (Regs::imp, Regs::clv, 2, false), (Regs::aby, Regs::lda, 4, true), 
+    (Regs::imp, Regs::tsx, 2, false), (Regs::imp, Regs::nop, 2, false),
+    (Regs::abx, Regs::ldy, 4, true),  (Regs::abx, Regs::lda, 4, true),
+    (Regs::aby, Regs::ldx, 4, true),  (Regs::imp, Regs::nop, 2, false),
 
-    (CPU::imm, CPU::cpy, 2, false), (CPU::idx, CPU::cmp, 6, false), 
-    (CPU::imp, CPU::nop, 2, false), (CPU::imp, CPU::nop, 2, false), 
-    (CPU::zpg, CPU::cpy, 3, false), (CPU::zpg, CPU::cmp, 3, false),
-    (CPU::zpg, CPU::dec, 5, false), (CPU::imp, CPU::nop, 2, false),
-    (CPU::imp, CPU::iny, 2, false), (CPU::imm, CPU::cmp, 2, false),
-    (CPU::imp, CPU::dex, 2, false), (CPU::imp, CPU::nop, 2, false),
-    (CPU::abs, CPU::cpy, 4, false), (CPU::abs, CPU::cmp, 4, false),
-    (CPU::abs, CPU::dec, 6, false), (CPU::imp, CPU::nop, 2, false),
+    (Regs::imm, Regs::cpy, 2, false), (Regs::idx, Regs::cmp, 6, false), 
+    (Regs::imp, Regs::nop, 2, false), (Regs::imp, Regs::nop, 2, false), 
+    (Regs::zpg, Regs::cpy, 3, false), (Regs::zpg, Regs::cmp, 3, false),
+    (Regs::zpg, Regs::dec, 5, false), (Regs::imp, Regs::nop, 2, false),
+    (Regs::imp, Regs::iny, 2, false), (Regs::imm, Regs::cmp, 2, false),
+    (Regs::imp, Regs::dex, 2, false), (Regs::imp, Regs::nop, 2, false),
+    (Regs::abs, Regs::cpy, 4, false), (Regs::abs, Regs::cmp, 4, false),
+    (Regs::abs, Regs::dec, 6, false), (Regs::imp, Regs::nop, 2, false),
 
-    (CPU::rel, CPU::jmp, 2, true), (CPU::idy, CPU::cmp, 5, true),
-    (CPU::imp, CPU::nop, 2, false), (CPU::imp, CPU::nop, 2, false),
-    (CPU::imp, CPU::nop, 2, false), (CPU::zpx, CPU::cmp, 4, false),
-    (CPU::zpx, CPU::dec, 6, false), (CPU::imp, CPU::nop, 2, false),
-    (CPU::imp, CPU::cld, 2, false), (CPU::aby, CPU::cmp, 4, true),
-    (CPU::imp, CPU::nop, 2, false), (CPU::imp, CPU::nop, 2, false),
-    (CPU::imp, CPU::nop, 2, false), (CPU::abx, CPU::cmp, 4, true),
-    (CPU::abx, CPU::dec, 7, false), (CPU::imp, CPU::nop, 2, false),
+    (Regs::rel, Regs::jmp, 2, true),  (Regs::idy, Regs::cmp, 5, true),
+    (Regs::imp, Regs::nop, 2, false), (Regs::imp, Regs::nop, 2, false),
+    (Regs::imp, Regs::nop, 2, false), (Regs::zpx, Regs::cmp, 4, false),
+    (Regs::zpx, Regs::dec, 6, false), (Regs::imp, Regs::nop, 2, false),
+    (Regs::imp, Regs::cld, 2, false), (Regs::aby, Regs::cmp, 4, true),
+    (Regs::imp, Regs::nop, 2, false), (Regs::imp, Regs::nop, 2, false),
+    (Regs::imp, Regs::nop, 2, false), (Regs::abx, Regs::cmp, 4, true),
+    (Regs::abx, Regs::dec, 7, false), (Regs::imp, Regs::nop, 2, false),
 
-    (CPU::imm, CPU::cpx, 2, false), (CPU::idx, CPU::sbc, 6, false), 
-    (CPU::imp, CPU::nop, 2, false), (CPU::imp, CPU::nop, 2, false),
-    (CPU::zpg, CPU::cpx, 3, false), (CPU::zpg, CPU::sbc, 3, false),
-    (CPU::zpg, CPU::inc, 6, false), (CPU::imp, CPU::nop, 2, false),
-    (CPU::imp, CPU::inx, 2, false), (CPU::imm, CPU::sbc, 2, false),
-    (CPU::imp, CPU::nop, 2, false), (CPU::imp, CPU::nop, 2, false),
-    (CPU::abs, CPU::cpx, 4, false), (CPU::abs, CPU::sbc, 4, false),
-    (CPU::abs, CPU::inc, 6, false), (CPU::imp, CPU::nop, 2, false),
+    (Regs::imm, Regs::cpx, 2, false), (Regs::idx, Regs::sbc, 6, false), 
+    (Regs::imp, Regs::nop, 2, false), (Regs::imp, Regs::nop, 2, false),
+    (Regs::zpg, Regs::cpx, 3, false), (Regs::zpg, Regs::sbc, 3, false),
+    (Regs::zpg, Regs::inc, 6, false), (Regs::imp, Regs::nop, 2, false),
+    (Regs::imp, Regs::inx, 2, false), (Regs::imm, Regs::sbc, 2, false),
+    (Regs::imp, Regs::nop, 2, false), (Regs::imp, Regs::nop, 2, false),
+    (Regs::abs, Regs::cpx, 4, false), (Regs::abs, Regs::sbc, 4, false),
+    (Regs::abs, Regs::inc, 6, false), (Regs::imp, Regs::nop, 2, false),
 
-    (CPU::rel, CPU::jmp, 2, true), (CPU::idy, CPU::sbc, 5, true), 
-    (CPU::imp, CPU::nop, 2, false), (CPU::imp, CPU::nop, 2, false),
-    (CPU::imp, CPU::nop, 2, false), (CPU::zpx, CPU::sbc, 4, false),
-    (CPU::zpx, CPU::inc, 6, false), (CPU::imp, CPU::nop, 2, false),
-    (CPU::imp, CPU::sed, 2, false), (CPU::aby, CPU::sbc, 4, true), 
-    (CPU::imp, CPU::nop, 2, false), (CPU::imp, CPU::nop, 2, false), 
-    (CPU::imp, CPU::nop, 2, false), (CPU::abx, CPU::sbc, 4, true),
-    (CPU::abx, CPU::inc, 7, false), (CPU::imp, CPU::nop, 2, false),
+    (Regs::rel, Regs::jmp, 2, true),  (Regs::idy, Regs::sbc, 5, true), 
+    (Regs::imp, Regs::nop, 2, false), (Regs::imp, Regs::nop, 2, false),
+    (Regs::imp, Regs::nop, 2, false), (Regs::zpx, Regs::sbc, 4, false),
+    (Regs::zpx, Regs::inc, 6, false), (Regs::imp, Regs::nop, 2, false),
+    (Regs::imp, Regs::sed, 2, false), (Regs::aby, Regs::sbc, 4, true), 
+    (Regs::imp, Regs::nop, 2, false), (Regs::imp, Regs::nop, 2, false), 
+    (Regs::imp, Regs::nop, 2, false), (Regs::abx, Regs::sbc, 4, true),
+    (Regs::abx, Regs::inc, 7, false), (Regs::imp, Regs::nop, 2, false),
     ];
 
