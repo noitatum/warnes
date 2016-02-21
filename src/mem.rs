@@ -4,15 +4,15 @@ use std::fmt;
 const PAGE_MASK         : W<u16> = W(0xFF00 as u16);
 
 pub enum MemState {
-    Ppuctrl,
-    Ppumask,
-    Ppustatus,
-    Oamaddr,
-    Oamdata,
-    Ppuscroll,
-    Ppuaddr,
-    Ppudata,
-    Oamdma,
+    PpuCtrl,
+    PpuMask,
+    PpuStatus,
+    OamAddr,
+    OamData,
+    PpuScroll,
+    PpuAddr,
+    PpuData,
+    OamDma,
     Io,
     Memory,
     NoState,
@@ -22,15 +22,15 @@ impl fmt::Display for MemState{
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{}",
             match *self {
-                MemState::Ppuctrl   => "Ppuctrl",
-                MemState::Ppumask   => "Ppumask",
-                MemState::Ppustatus => "Ppustatus",
-                MemState::Oamaddr   => "Oamaddr",
-                MemState::Oamdata   => "Oamdata",
-                MemState::Ppuscroll => "Ppuscroll",
-                MemState::Ppuaddr   => "Ppuaddr",
-                MemState::Ppudata   => "Ppudata",
-                MemState::Oamdma    => "Oamdma",
+                MemState::PpuCtrl   => "PpuCtrl",
+                MemState::PpuMask   => "PpuMask",
+                MemState::PpuStatus => "PpuStatus",
+                MemState::OamAddr   => "OamAddr",
+                MemState::OamData   => "OamData",
+                MemState::PpuScroll => "PpuScroll",
+                MemState::PpuAddr   => "PpuAddr",
+                MemState::PpuData   => "PpuData",
+                MemState::OamDma    => "OamDma",
                 MemState::Memory    => "Memory",
                 MemState::Io        => "Io",
                 MemState::NoState   => "NoState",
@@ -70,8 +70,8 @@ impl Memory {
             ppustatus       : 0,
             oamaddr         : 0,
             oamdata         : 0,
-            ppuscroll       : 0,
-            ppuaddr         : 0,
+            ppuscroll   : 0,
+            ppuaddr     : 0,
             ppudata         : 0,
             oamdma          : 0,
         }
@@ -87,16 +87,20 @@ impl Memory {
                 // En teoria los registros comentados son read only
                 // 0 => self.ppuctrl
                 // 1 => self.ppumask,
-                2 =>    {   self.read_status = MemState::Ppustatus; 
-                            self.ppustatus
+                2 =>    {   self.read_status     = MemState::PpuStatus;
+                            self.ppuscroll       = 0;
+                            self.ppuaddr         = 0;
+                            let status           = self.ppustatus;
+                            self.ppustatus       = self.ppustatus & !(0x9F);
+                            status
                         },
                 // 3 => self.oamaddr,
-                4 =>    {   self.read_status = MemState::Oamdata;
+                4 =>    {   self.read_status = MemState::OamData;
                             self.oamdata
                         },
                 // 5 => self.ppuscroll,
                 // 6 => self.ppuaddr,
-                7 =>    {   self.read_status = MemState::Ppudata;
+                7 =>    {   self.read_status = MemState::PpuData;
                             self.ppudata
                         },
                 _ => 0 // fuck you.
@@ -125,7 +129,7 @@ impl Memory {
                 0x4011 => 0,
                 0x4012 => 0,
                 0x4013 => 0,
-                0x4014 =>   {   self.read_status = MemState::Oamdma;
+                0x4014 =>   {   self.read_status = MemState::OamDma;
                                 self.oamdma
                             },
                 0x4015 => 0,
@@ -164,26 +168,26 @@ impl Memory {
             self.ram[(address & 0x7ff) as usize] = val
         } else if address < 0x4000 {
             match (address % 0x2000) & 0x7 {
-                0 =>    {   self.write_status = MemState::Ppuctrl;
+                0 =>    {   self.write_status = MemState::PpuCtrl;
                             self.ppuctrl = val
                         },
-                1 =>    {   self.write_status = MemState::Ppumask;
+                1 =>    {   self.write_status = MemState::PpuMask;
                             self.ppumask = val 
                         },
                 // 2 => self.ppustatus = value, Este registro es read only
-                3 =>    {   self.write_status = MemState::Oamaddr;
+                3 =>    {   self.write_status = MemState::OamAddr;
                             self.oamaddr = val
                         },
-                4 =>    {   self.write_status = MemState::Oamdata;
+                4 =>    {   self.write_status = MemState::OamData;
                             self.oamdata = val
                         },
-                5 =>    {   self.write_status = MemState::Ppuscroll;
+                5 =>    {   self.write_status = MemState::PpuScroll;
                             self.ppuscroll = val
                         },
-                6 =>    {   self.write_status = MemState::Ppuaddr;
+                6 =>    {   self.write_status = MemState::PpuAddr;
                             self.ppuaddr = val
                         },
-                7 =>    {   self.write_status = MemState::Ppudata;
+                7 =>    {   self.write_status = MemState::PpuData;
                             self.ppudata = val
                         },
                 _ =>    (), //self.ppuctrl = self.ppuctrl  // epic.
@@ -216,7 +220,7 @@ impl Memory {
                                 // the cpu locks down and fills the
                                 // the oam memory with the selected page.
                                 // (value in oamdma).
-                            {   self.write_status = MemState::Oamdma;
+                            {   self.write_status = MemState::OamDma;
                                 self.oamdma = val
                             },
                 0x4015 =>   (),

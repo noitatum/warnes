@@ -75,7 +75,7 @@ impl DMA {
         if self.cycles_left > 0 {
             self.execute(memory);
             true
-        } else if let MemState::Oamdma = memory.write_status {
+        } else if let MemState::OamDma = memory.write_status {
             self.start(memory, cycles as u32);
             true
         } else {

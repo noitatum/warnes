@@ -53,9 +53,11 @@ pub struct Ppu {
     pub oam_writable    : bool,
     pub oam_write_bytes : u8,
     pub vram_address    : u16,
-    pub upper           : bool,         // El cpu escribe a ppuaddr 2 bytes para direccionar en la vram
+    pub scroll_address  : u16,
+    pub upper_vram      : bool,         // El cpu escribe a ppuaddr 2 bytes para direccionar en la vram
                                         // Si upper es true es la parte alta sino la parte baja,
                                         // luego se resetea.
+    pub upper_scroll    : bool,
 }
 
 impl Ppu {
@@ -65,8 +67,10 @@ impl Ppu {
             vram            : [0;  0x4000],
             oam_writable    : false,
             oam_write_bytes : 0,
-            upper           : true,
             vram_address    : 0,
+            scroll_address  : 0,
+            upper_vram      : true,
+            upper_scroll    : true,
             
             // Registers, some may be removed later.
             ppuctrl         : 0,
@@ -82,32 +86,42 @@ impl Ppu {
 
     pub fn execute(&mut self, memory: &mut Mem) {
         match memory.write_status {
-            MemState::Oamaddr => {  self.oamaddr = memory.oamaddr;
-                                 }
-
-            MemState::Oamdata => {  self.oam[self.oamaddr as usize] = memory.oamdata;
-                                    self.oamaddr += 1;
-                                    memory.write_status = MemState::NoState;
-                                 }
-            MemState::Ppuaddr => {  if self.upper {
-                                        self.upper = false;
-                                        self.vram_address = (memory.ppuaddr as u16) << 8;
-                                    } else {
-                                        self.upper = true;
-                                        self.vram_address |= memory.ppuaddr as u16;
+            MemState::OamAddr   =>  {   self.oamaddr = memory.oamaddr;
                                     }
+
+            MemState::OamData   =>  {   self.oam[self.oamaddr as usize] = memory.oamdata;
+                                        self.oamaddr += 1;
+                                        memory.write_status = MemState::NoState;
+                                 }
+            MemState::PpuAddr   =>  {   if self.upper_vram {
+                                            self.upper_vram = false;
+                                            self.vram_address = (memory.ppuaddr as u16) << 8;
+                                        } else {
+                                            self.upper_vram = true;
+                                            self.vram_address |= memory.ppuaddr as u16;
+                                        }
                                     memory.write_status = MemState::NoState;
-                                 },
+                                    },
+
+            MemState::PpuScroll =>  {   if self.upper_scroll {
+                                            self.upper_scroll   = !self.upper_scroll;
+                                            self.scroll_address = (memory.ppuscroll as u16) << 8;
+                                        } else {
+                                            self.upper_scroll   = !self.upper_scroll;
+                                            self.scroll_address = memory.ppuaddr as u16;
+                                        }
+                                    },
             MemState::NoState => (),
             _ => (), // do something probably update internal registers.
         }
 
         match memory.read_status {
-            MemState::Ppudata => {   
-                                    memory.ppudata = self.vram[self.vram_address as usize];
-                                    memory.read_status = MemState::NoState;
-                                 },
-            MemState::NoState => (),
+            MemState::PpuData   =>  {   memory.ppudata = self.vram[self.vram_address as usize];
+                                        memory.read_status  = MemState::NoState;
+                                    },
+            MemState::PpuStatus =>  {   memory.read_status  = MemState::NoState;
+                                    },
+            MemState::NoState   =>  (),
             _ => (),
         }
     }
