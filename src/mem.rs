@@ -70,8 +70,8 @@ impl Memory {
             ppustatus       : 0,
             oamaddr         : 0,
             oamdata         : 0,
-            ppuscroll   : 0,
-            ppuaddr     : 0,
+            ppuscroll       : 0,
+            ppuaddr         : 0,
             ppudata         : 0,
             oamdma          : 0,
         }
