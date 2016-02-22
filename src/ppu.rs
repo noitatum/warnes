@@ -85,6 +85,11 @@ impl Ppu {
     }
 
     pub fn execute(&mut self, memory: &mut Mem) {
+        self.ls_latches(memory);
+    }
+    
+    /* load store latches */
+    fn ls_latches(&mut self, memory: &mut Mem){
         match memory.write_status {
             MemState::PpuMask   =>  {   self.ppumask = memory.ppumask;
                                         memory.write_status = MemState::NoState;
@@ -137,6 +142,7 @@ impl Ppu {
             MemState::NoState   =>  (),
             _ => (),
         }
+
     }
 
     pub fn load_oam (&self, address: W<u16>) -> W<u8> {
