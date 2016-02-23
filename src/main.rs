@@ -3,13 +3,16 @@ mod macros;
 mod cpu;
 mod mem;
 mod ppu;
+mod nes;
 
 fn main() {
+    /*
     let mut cpu : cpu::CPU = Default::default();
     let mut ppu = ppu::Ppu::new();
     println!("{:?}", ppu);
     let mut memory = mem::Memory::new();
     println!("{:?}", memory);
     cpu.single_cycle(&mut memory);
-    println!("{:?}", cpu);
+    println!("{:?}", cpu); */
+    let nes : nes::Nes = nes::Nes::new();
 }

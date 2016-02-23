@@ -279,4 +279,8 @@ impl fmt::Debug for Memory {
     }
 }
 
-
+impl Default for Memory {
+    fn default () -> Memory {
+        Memory::new()
+    }
+}

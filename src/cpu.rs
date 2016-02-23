@@ -39,7 +39,7 @@ const DMA_CYCLES        : u32 = 512;
 
 #[derive(Default)]
 #[derive(Debug)]
-pub struct CPU {
+pub struct Cpu {
     // Cycle count since power up
     cycles      : u64,
     regs        : Regs,
@@ -47,11 +47,11 @@ pub struct CPU {
     dma         : DMA,
 } 
 
-impl CPU {
-    pub fn single_cycle(&mut self, memory: &mut Mem) {
+impl Cpu {
+    pub fn cycle(&mut self, memory: &mut Mem) {
         // Dma takes priority
-        if !self.dma.single_cycle(memory, self.cycles) {
-            self.exec.single_cycle(memory, &mut self.regs);
+        if !self.dma.cycle(memory, self.cycles) {
+            self.exec.cycle(memory, &mut self.regs);
         }
         self.cycles += 1;
     }
@@ -73,7 +73,7 @@ impl fmt::Debug for DMA {
 
 impl DMA {
     // Returns true if DMA is active
-    pub fn single_cycle(&mut self, memory: &mut Mem, cycles: u64) -> bool {
+    pub fn cycle(&mut self, memory: &mut Mem, cycles: u64) -> bool {
         if self.cycles_left > 0 {
             self.execute(memory);
             true
@@ -131,7 +131,7 @@ impl fmt::Debug for Execution {
 
 impl Execution {
 
-    pub fn single_cycle(&mut self, memory: &mut Mem, regs: &mut Regs) {
+    pub fn cycle(&mut self, memory: &mut Mem, regs: &mut Regs) {
         if self.cycles_left == 0 {
             // Execute the next instruction
             let inst = self.instruction;

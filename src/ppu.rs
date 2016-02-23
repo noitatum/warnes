@@ -35,6 +35,7 @@ const STATUS_SPRITE_OVERFLOW    : u8 = 0x20;
 const STATUS_SPRITE_0_HIT       : u8 = 0x40;
 const STATUS_VERTICAL_BLANK     : u8 = 0x80; // set = in vertical blank
 
+
 pub struct Ppu {
 
     pub oam             : [u8; 256],    // Object atribute memory 
@@ -84,7 +85,7 @@ impl Ppu {
         }
     }
 
-    pub fn execute(&mut self, memory: &mut Mem) {
+    pub fn cycle(&mut self, memory: &mut Mem) {
         self.ls_latches(memory);
     }
     
@@ -212,5 +213,11 @@ impl fmt::Debug for Ppu {
         }
         output.push_str(&format!("{:#x}]", self.oam[255]));
         write!(f, "Vram addr: {:#x} \n {}", self.vram_address, output)
+    }
+}
+
+impl Default for Ppu {
+    fn default () -> Ppu {
+        Ppu::new()
     }
 }
