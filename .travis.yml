@@ -1,6 +1,8 @@
 before_install:
   - sudo apt-add-repository --yes ppa:zoogie/sdl2-snapshots
-  - sudo apt-get install libsdl2-dev
+  
+install:
+  - sudo apt-get install -qq libsdl2-dev libsdl2-image-dev
 
 language: rust
 rust:
