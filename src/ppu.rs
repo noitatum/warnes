@@ -1,6 +1,17 @@
+extern crate sdl2;
+
 use std::fmt;
 use mem::{Memory as Mem, MemState};
 use std::num::Wrapping as W;
+
+
+use sdl2::pixels::PixelFormatEnum;
+use sdl2::rect::Rect;
+use sdl2::event::Event;
+use sdl2::keyboard::Keycode;
+use sdl2::pixels::Color;
+use sdl2::video::{Window, WindowBuilder};
+use sdl2::rect::Point;
 
 
 // ppuctrl
@@ -85,8 +96,20 @@ impl Ppu {
         }
     }
 
-    pub fn cycle(&mut self, memory: &mut Mem) {
+    pub fn cycle(&mut self, memory: &mut Mem, renderer: &mut sdl2::render::Renderer ) {
         self.ls_latches(memory);
+
+        // Render a fully black window
+        renderer.set_draw_color(Color::RGB(0, 55, 0));
+        for i in 0..256 {
+            for j in 0..240 {
+                if i == 128 {
+                    renderer.set_draw_color(Color::RGB(55,0,0));
+                }
+                renderer.draw_point(Point::new(i, j));
+            }
+        }
+        renderer.present();
     }
     
     /* load store latches */
