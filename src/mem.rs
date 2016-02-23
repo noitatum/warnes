@@ -265,10 +265,9 @@ impl Memory {
 impl fmt::Debug for Memory {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let mut output = "ram: [".to_string();
-        for i in 0..2047{
-            output.push_str(&format!("{:#x}|", self.ram[i]));
+        for i in 0..2048 {
+            output.push_str(&format!("|{:02x}", self.ram[i]));
         }
-        output.push_str(&format!("{:#x}]", self.ram[2047]));
         write!(f, "{{ ppuctrl: {:#x}, ppumask: {:#x}, ppustatus: {:#x}, oamaddr: {:#x}, oamdata: {:#x}, ppuscroll: {:#x}, ppuaddr: {:#x}, ppudata: {:#x}, oamdma: {:#x}, read_status: {}, write_status: {}}}, \n {}", 
                       self.ppuctrl, self.ppumask, self.ppustatus, self.oamaddr, self.oamdata, self.ppuscroll, self.ppuaddr, 
                       self.ppudata, self.oamdma, self.read_status, self.write_status, output)

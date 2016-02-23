@@ -175,7 +175,7 @@ impl fmt::Debug for Ppu {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let mut output  = "oam: [".to_string();
         for i in 0..255 {
-            output.push_str(&format!("{:#x}|", self.oam[i]));
+            output.push_str(&format!("{:02x}|", self.oam[i]));
         }
         output.push_str(&format!("{:#x}]", self.oam[255]));
         write!(f, "Vram addr: {:#x} \n {}", self.vram_address, output)
