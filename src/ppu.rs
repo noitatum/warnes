@@ -133,6 +133,7 @@ impl Ppu {
             renderer.present();
             self.px_width = 0;
             self.px_height = 0;
+            self.cycles += 1;
         } else {
             self.px_width += 1;
         }
