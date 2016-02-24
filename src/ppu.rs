@@ -49,30 +49,28 @@ const STATUS_VERTICAL_BLANK     : u8 = 0x80; // set = in vertical blank
 
 pub struct Ppu {
 
-    pub oam             : [u8; 256],    // Object atribute memory 
-    pub vram            : [u8; 0x4000], // 16kb
+    oam             : [u8; 256],    // Object atribute memory 
+    vram            : [u8; 0x4000], // 16kb    
+    cycles              : u32,
 
-
-    pub ppuctrl         : u8,
-    pub ppumask         : u8,
-    pub ppustatus       : u8,
-    pub oamaddr         : u8,
-    pub ppuscroll       : u8,
-    pub ppuaddr         : u8,
-    pub ppudata         : u8,
-    pub oamdma          : u8,
     // status
-    pub oam_writable    : bool,
-    pub oam_write_bytes : u8,
-    pub vram_address    : u16,
-    pub scroll_address  : u16,
-    pub upper_vram      : bool,         // El cpu escribe a ppuaddr 2 bytes para direccionar en la vram
-                                        // Si upper es true es la parte alta sino la parte baja,
-                                        // luego se resetea.
-    pub upper_scroll    : bool,
+    vram_address    : u16,
+    scroll_address  : u16,
+    upper_vram      : bool,         // The CPU writes two bytes consecutively to ppuaddr to write a 16b address for addressing the vram
+    upper_scroll    : bool,         // If upper is set this mean we get the higher byte.
 
-    px_height           : u8,
-    px_width            : u8,
+    ppuctrl         : u8,
+    ppumask         : u8,
+    ppustatus       : u8,
+    oamaddr         : u8,
+    ppuscroll       : u8,
+    ppuaddr         : u8,
+    ppudata         : u8,
+    oamdma          : u8,
+
+    px_height       : usize,
+    px_width        : usize,
+    buffer          : [[(Point, Color); 240]; 256],
 }
 
 impl Ppu {
@@ -80,13 +78,13 @@ impl Ppu {
         Ppu {
             oam             : [0; 256],
             vram            : [0;  0x4000],
-            oam_writable    : false,
-            oam_write_bytes : 0,
+            cycles          : 0,
+
             vram_address    : 0,
             scroll_address  : 0,
             upper_vram      : true,
             upper_scroll    : true,
-            
+
             // Registers, some may be removed later.
             ppuctrl         : 0,
             ppumask         : 0,
@@ -99,6 +97,7 @@ impl Ppu {
 
             px_height       : 0,
             px_width        : 0,
+            buffer          : [[(Point::new(0,0), Color::RGB(0,0,0)); 240]; 256]
         }
     }
 
@@ -106,23 +105,25 @@ impl Ppu {
         self.ls_latches(memory);
 
         //needs to buffer the draws somehow
-        renderer.set_draw_color(Color::RGB(self.px_height, 55, 20));
-        renderer.draw_point(Point::new(self.px_height as i32, self.px_width as i32));
-
+        self.buffer[self.px_height][self.px_width] = (Point::new(self.px_height as i32, self.px_width as i32), Color::RGB(self.px_height as u8, self.px_width as u8, 20));
 
         if self.px_width == 239 && self.px_height < 255 {
             self.px_width = 0;
             self.px_height += 1;
         } else if self.px_width == 239 && self.px_height == 255 {
+            for i in 0..256 {
+                for j in 0..240 {
+                    renderer.set_draw_color(self.buffer[i][j].1);
+                    renderer.draw_point(self.buffer[i][j].0).ok().expect("Fail at drawing");
+                }
+            }
+            renderer.present();
             self.px_width = 0;
             self.px_height = 0;
         } else {
             self.px_width += 1;
         }
-
-        renderer.present();
     }
-    
     /* load store latches */
     fn ls_latches(&mut self, memory: &mut Mem){
         match memory.write_status {
