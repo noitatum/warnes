@@ -6,11 +6,11 @@ use std::num::Wrapping as W;
 
 
 use sdl2::pixels::PixelFormatEnum;
-use sdl2::rect::Rect;
-use sdl2::event::Event;
-use sdl2::keyboard::Keycode;
+//use sdl2::rect::Rect;
+//use sdl2::event::Event;
+//use sdl2::keyboard::Keycode;
 use sdl2::pixels::Color;
-use sdl2::video::{Window, WindowBuilder};
+//use sdl2::video::{Window, WindowBuilder};
 use sdl2::rect::Point;
 
 
@@ -35,7 +35,7 @@ const COORDINATE_Y              : u8 = 0x02;
 const MASK_GRAYSCALE            : u8 = 0x01;
 const MASK_SHOW_BACKGROUND_LEFT : u8 = 0x02; // set = show bacgrkound in leftmost 8 pixels of screen
 const MASK_SHOW_SPRITES_LEF     : u8 = 0x04; // set = show sprites in leftmost 8 pixels of screens
-const MASK_SHOW_BACKGROUND      : u8 = 0x08; 
+const MASK_SHOW_BACKGROUND      : u8 = 0x08;
 const MASK_SHOW_SPRITES         : u8 = 0x10;
 const MASK_EMPHASIZE_RED        : u8 = 0x20;
 const MASK_EMPHASIZE_GREEN      : u8 = 0x40;
@@ -70,6 +70,9 @@ pub struct Ppu {
                                         // Si upper es true es la parte alta sino la parte baja,
                                         // luego se resetea.
     pub upper_scroll    : bool,
+
+    px_height           : u8,
+    px_width            : u8,
 }
 
 impl Ppu {
@@ -93,22 +96,30 @@ impl Ppu {
             ppuaddr         : 0,
             ppudata         : 0,
             oamdma          : 0,
+
+            px_height       : 0,
+            px_width        : 0,
         }
     }
 
     pub fn cycle(&mut self, memory: &mut Mem, renderer: &mut sdl2::render::Renderer ) {
         self.ls_latches(memory);
 
-        // Render a fully black window
-        renderer.set_draw_color(Color::RGB(0, 55, 0));
-        for i in 0..256 {
-            for j in 0..240 {
-                if i == 128 {
-                    renderer.set_draw_color(Color::RGB(55,0,0));
-                }
-                renderer.draw_point(Point::new(i, j));
-            }
+        //needs to buffer the draws somehow
+        renderer.set_draw_color(Color::RGB(self.px_height, 55, 20));
+        renderer.draw_point(Point::new(self.px_height as i32, self.px_width as i32));
+
+
+        if self.px_width == 239 && self.px_height < 255 {
+            self.px_width = 0;
+            self.px_height += 1;
+        } else if self.px_width == 239 && self.px_height == 255 {
+            self.px_width = 0;
+            self.px_height = 0;
+        } else {
+            self.px_width += 1;
         }
+
         renderer.present();
     }
     
