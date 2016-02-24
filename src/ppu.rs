@@ -72,7 +72,7 @@ pub struct Ppu {
 
     px_height       : usize,
     px_width        : usize,
-    buffer          : [[(Point, Color); 240]; 256],
+    buffer          : [[(Point, Color); 256]; 240],
 }
 
 impl Ppu {
@@ -99,7 +99,7 @@ impl Ppu {
 
             px_height       : 0,
             px_width        : 0,
-            buffer          : [[(Point::new(0,0), Color::RGB(0,0,0)); 240]; 256]
+            buffer          : [[(Point::new(0,0), Color::RGB(0,0,0)); 256]; 240]
         }
     }
 
@@ -114,18 +114,22 @@ impl Ppu {
 
         if self.cycles == VBLANK_END {
             self.cycles = 0;
+            println!("frame");
         }
     }
-    fn draw(&mut self, memory: &mut Mem, renderer: &mut sdl2::render::Renderer) {
-        // buffers the points and their color in a 256x240 matrix.
-        self.buffer[self.px_height][self.px_width] = (Point::new(self.px_height as i32, self.px_width as i32), Color::RGB(self.px_height as u8, self.px_width as u8, 20));
 
-        if self.px_width == 239 && self.px_height < 255 {
+    #[inline(always)]
+    fn draw(&mut self, memory: &mut Mem, renderer: &mut sdl2::render::Renderer) {
+        // buffers the points and their color in a 256x240 matrix
+        //
+        // Point = (x, y) = (width, height) !!.
+        self.buffer[self.px_height][self.px_width] = (Point::new(self.px_width as i32, self.px_height as i32), Color::RGB(self.px_height as u8, self.px_width as u8, 20));
+        if self.px_width == 255 && self.px_height < 239 {
             self.px_width = 0;
-            self.px_height += 1;
-        } else if self.px_width == 239 && self.px_height == 255 {
-            for i in 0..256 {
-                for j in 0..240 {
+            self.px_height+= 1;
+        } else if self.px_width == 255 && self.px_height == 239 {
+            for i in 0..240 {
+                for j in 0..256 {
                     renderer.set_draw_color(self.buffer[i][j].1);
                     renderer.draw_point(self.buffer[i][j].0).ok().expect("Failed at drawing");
                 }
@@ -138,6 +142,7 @@ impl Ppu {
             self.px_width += 1;
         }
     }
+    
     /* load store latches */
     fn ls_latches(&mut self, memory: &mut Mem){
         match memory.write_status {
