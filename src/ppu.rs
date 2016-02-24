@@ -47,11 +47,13 @@ const STATUS_SPRITE_0_HIT       : u8 = 0x40;
 const STATUS_VERTICAL_BLANK     : u8 = 0x80; // set = in vertical blank
 
 
+const VBLANK_END                : u32 = 27902; 
+
 pub struct Ppu {
 
     oam             : [u8; 256],    // Object atribute memory 
     vram            : [u8; 0x4000], // 16kb    
-    cycles              : u32,
+    cycles          : u32,
 
     // status
     vram_address    : u16,
@@ -103,25 +105,37 @@ impl Ppu {
 
     pub fn cycle(&mut self, memory: &mut Mem, renderer: &mut sdl2::render::Renderer ) {
         self.ls_latches(memory);
+        self.draw(memory, renderer);
+    }
 
+    fn draw(&mut self, memory: &mut Mem, renderer: &mut sdl2::render::Renderer) {
         //needs to buffer the draws somehow
-        self.buffer[self.px_height][self.px_width] = (Point::new(self.px_height as i32, self.px_width as i32), Color::RGB(self.px_height as u8, self.px_width as u8, 20));
+        
+        if self.cycles == 0 {
+            self.buffer[self.px_height][self.px_width] = (Point::new(self.px_height as i32, self.px_width as i32), Color::RGB(self.px_height as u8, self.px_width as u8, 20));
 
-        if self.px_width == 239 && self.px_height < 255 {
-            self.px_width = 0;
-            self.px_height += 1;
-        } else if self.px_width == 239 && self.px_height == 255 {
-            for i in 0..256 {
-                for j in 0..240 {
-                    renderer.set_draw_color(self.buffer[i][j].1);
-                    renderer.draw_point(self.buffer[i][j].0).ok().expect("Fail at drawing");
+            if self.px_width == 239 && self.px_height < 255 {
+                self.px_width = 0;
+                self.px_height += 1;
+            } else if self.px_width == 239 && self.px_height == 255 {
+                for i in 0..256 {
+                    for j in 0..240 {
+                        renderer.set_draw_color(self.buffer[i][j].1);
+                        renderer.draw_point(self.buffer[i][j].0).ok().expect("Fail at drawing");
+                    }
                 }
+                renderer.present();
+                self.px_width = 0;
+                self.px_height = 0;
+            } else {
+                self.px_width += 1;
             }
-            renderer.present();
-            self.px_width = 0;
-            self.px_height = 0;
         } else {
-            self.px_width += 1;
+            self.cycles += 1;
+        }
+        
+        if self.cycles == VBLANK_END {
+            self.cycles = 0;
         }
     }
     /* load store latches */
