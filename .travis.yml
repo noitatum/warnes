@@ -1,12 +1,14 @@
-before_install:
-  - sudo apt-add-repository --yes ppa:zoogie/sdl2-snapshots
-  - sudo apt-get install libsdl2-dev
 
 language: rust
+sudo: required
 rust:
-  - stable
-  - beta
-  - nightly
+- beta
+- nightly
+- stable
+install:
+- sudo add-apt-repository ppa:team-xbmc/ppa -y
+- sudo apt-get update -q
+- sudo apt-get install libsdl2-dev
 matrix:
   allow_failures:
     - rust: nightly
