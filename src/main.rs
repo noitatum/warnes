@@ -6,6 +6,7 @@ mod cpu;
 mod mem;
 mod ppu;
 mod nes;
+mod joy;
 
 fn main() {
  

@@ -3,6 +3,7 @@ extern crate sdl2;
 use cpu::Cpu;
 use ppu::Ppu;
 use mem::Memory as Mem;
+use joy::read_joystick;
 
 //use sdl2::pixels::PixelFormatEnum;
 //use sdl2::rect::Rect;
@@ -63,6 +64,7 @@ impl Nes {
                     _                                      =>  {}
                 }
             }
+        read_joystick(&mut self.mem, &mut event_pump);
         self.cpu.cycle(&mut self.mem);
         self.ppu.cycle(&mut self.mem, &mut renderer);
         self.ppu.cycle(&mut self.mem, &mut renderer);
