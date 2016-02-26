@@ -16,24 +16,28 @@ pub enum MemState {
     Io,
     Memory,
     NoState,
+    ReadJoy1,
+    ReadJoy2,
 }
 
 impl fmt::Display for MemState{
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{}",
             match *self {
-                MemState::PpuCtrl   => "PpuCtrl",
-                MemState::PpuMask   => "PpuMask",
-                MemState::PpuStatus => "PpuStatus",
-                MemState::OamAddr   => "OamAddr",
-                MemState::OamData   => "OamData",
-                MemState::PpuScroll => "PpuScroll",
-                MemState::PpuAddr   => "PpuAddr",
-                MemState::PpuData   => "PpuData",
-                MemState::OamDma    => "OamDma",
-                MemState::Memory    => "Memory",
-                MemState::Io        => "Io",
-                MemState::NoState   => "NoState",
+                MemState::PpuCtrl       => "PpuCtrl",
+                MemState::PpuMask       => "PpuMask",
+                MemState::PpuStatus     => "PpuStatus",
+                MemState::OamAddr       => "OamAddr",
+                MemState::OamData       => "OamData",
+                MemState::PpuScroll     => "PpuScroll",
+                MemState::PpuAddr       => "PpuAddr",
+                MemState::PpuData       => "PpuData",
+                MemState::OamDma        => "OamDma",
+                MemState::Memory        => "Memory",
+                MemState::Io            => "Io",
+                MemState::NoState       => "NoState",
+                MemState::ReadJoy1      => "ReadJoy1",
+                MemState::ReadJoy2      => "ReadJoy2",
         })
     }
 }
@@ -55,6 +59,10 @@ pub struct Memory {
     pub ppudata         : u8,
     pub oamdma          : u8,
 
+    keystrobe1          : bool,
+    keystrobe2          : bool,
+    joy1                : u8,
+    joy2                : u8,
 }
 
 impl Memory {
@@ -74,6 +82,11 @@ impl Memory {
             ppuaddr         : 0,
             ppudata         : 0,
             oamdma          : 0,
+
+            keystrobe1      : false,
+            keystrobe2      : false,
+            joy1            : 0,
+            joy2            : 0,
         }
     }
 
@@ -107,7 +120,7 @@ impl Memory {
             }
         } else if address < 0x4020 {
             /* Apu AND IO TODO*/
-            self.read_status = MemState::Io;
+            //self.read_status = MemState::Io;
             match address {
                 0x4000 => 0,
                 0x4001 => 0,
@@ -128,13 +141,23 @@ impl Memory {
                 0x4010 => 0,
                 0x4011 => 0,
                 0x4012 => 0,
-                0x4013 => 0,
+                0x4013 => 0, 
                 0x4014 =>   {   self.read_status = MemState::OamDma;
                                 self.oamdma
                             },
                 0x4015 => 0,
-                0x4016 => 0,
-                0x4017 => 0,
+                0x4016 =>   {   if let MemState::ReadJoy1 = self.read_status {
+                                    self.joy1
+                                } else {
+                                    0
+                                }
+                            }
+                0x4017 =>   {   if let MemState::ReadJoy2 = self.read_status {
+                                    self.joy1
+                                } else {
+                                    0
+                                }
+                            }
                 0x4018 => 0,
                 0x4019 => 0,
                 0x401A => 0,
@@ -224,8 +247,28 @@ impl Memory {
                                 self.oamdma = val
                             },
                 0x4015 =>   (),
-                0x4016 =>   (),
-                0x4017 =>   (),
+                0x4016 =>   {   if let MemState::ReadJoy1 = self.read_status {
+                                    self.joy1 = val;
+                                }
+
+                                if self.keystrobe1 && ((self.joy1 & 1) == 0) {
+                                    self.read_status = MemState::ReadJoy1;
+                                    self.keystrobe2 = false;
+                                } else if self.joy1 & 1 > 0 {
+                                    self.keystrobe1 = true;
+                                }
+                            },
+                0x4017 =>   {   if let MemState::ReadJoy2 = self.read_status {
+                                    self.joy2 = val;
+                                }
+                    
+                                if self.keystrobe2 && ((self.joy2 & 1) == 0) {
+                                    self.read_status = MemState::ReadJoy2;
+                                    self.keystrobe2 = false;
+                                } else if self.joy2 & 1 > 0 {
+                                    self.keystrobe2 = true;
+                                }
+                            },
                 0x4018 =>   (),
                 0x4019 =>   (),
                 0x401A =>   (),
