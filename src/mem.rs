@@ -18,6 +18,8 @@ pub enum MemState {
     NoState,
     ReadJoy1,
     ReadJoy2,
+    StartReadJoy1,
+    StartReadJoy2,
 }
 
 impl fmt::Display for MemState{
@@ -38,6 +40,8 @@ impl fmt::Display for MemState{
                 MemState::NoState       => "NoState",
                 MemState::ReadJoy1      => "ReadJoy1",
                 MemState::ReadJoy2      => "ReadJoy2",
+                MemState::StartReadJoy1 => "StartReadJoy1",
+                MemState::StartReadJoy2 => "StartReadJoy2",
         })
     }
 }
@@ -252,7 +256,7 @@ impl Memory {
                                 }
 
                                 if self.keystrobe1 && ((self.joy1 & 1) == 0) {
-                                    self.read_status = MemState::ReadJoy1;
+                                    self.read_status = MemState::StartReadJoy1;
                                     self.keystrobe2 = false;
                                 } else if self.joy1 & 1 > 0 {
                                     self.keystrobe1 = true;
@@ -263,7 +267,7 @@ impl Memory {
                                 }
                     
                                 if self.keystrobe2 && ((self.joy2 & 1) == 0) {
-                                    self.read_status = MemState::ReadJoy2;
+                                    self.read_status = MemState::StartReadJoy2;
                                     self.keystrobe2 = false;
                                 } else if self.joy2 & 1 > 0 {
                                     self.keystrobe2 = true;
