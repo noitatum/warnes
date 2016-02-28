@@ -11,7 +11,7 @@ use sdl2::pixels::PixelFormatEnum;
 //use sdl2::keyboard::Keycode;
 use sdl2::pixels::Color;
 //use sdl2::video::{Window, WindowBuilder};
-use sdl2::rect::Point;
+use sdl2::rect::{Point, Rect};
 
 
 // ppuctrl
@@ -47,7 +47,7 @@ const STATUS_SPRITE_0_HIT       : u8 = 0x40;
 const STATUS_VERTICAL_BLANK     : u8 = 0x80; // set = in vertical blank
 
 
-const VBLANK_END                : u32 = 27902; 
+const VBLANK_END                : u32 = 6819; 
 
 pub struct Ppu {
 
@@ -72,7 +72,6 @@ pub struct Ppu {
 
     px_height       : usize,
     px_width        : usize,
-    //buffer          : [[(Point, Color); 256]; 240],
 }
 
 impl Ppu {
@@ -99,10 +98,10 @@ impl Ppu {
 
             px_height       : 0,
             px_width        : 0,
-            //buffer          : [[(Point::new(0,0), Color::RGB(0,0,0)); 256]; 240]
         }
     }
-
+    
+    #[inline(always)]
     pub fn cycle(&mut self, memory: &mut Mem, renderer: &mut sdl2::render::Renderer ) {
         self.ls_latches(memory);
 
@@ -114,11 +113,10 @@ impl Ppu {
 
         if self.cycles == VBLANK_END {
             self.cycles = 0;
-            println!("frame");
-        }
+            println!("f");
+        } 
     }
 
-    #[inline(always)]
     fn draw(&mut self, memory: &mut Mem, renderer: &mut sdl2::render::Renderer) {
         // buffers the points and their color in a 256x240 matrix
         //
@@ -130,12 +128,6 @@ impl Ppu {
             self.px_width = 0;
             self.px_height+= 1;
         } else if self.px_width == 255 && self.px_height == 239 {
-            /*for i in 0..240 {
-                for j in 0..256 {
-                    renderer.set_draw_color(self.buffer[i][j].1);
-                    renderer.draw_point(self.buffer[i][j].0).ok().expect("Failed at drawing");
-                }
-            }*/
             renderer.present();
             self.px_width = 0;
             self.px_height = 0;

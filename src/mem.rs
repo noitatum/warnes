@@ -16,10 +16,10 @@ pub enum MemState {
     Io,
     Memory,
     NoState,
-    ReadJoy1,
-    ReadJoy2,
-    StartReadJoy1,
-    StartReadJoy2,
+    ReadGamePad1,
+    ReadGamePad2,
+    StartReadGamePad1,
+    StartReadGamePad2,
 }
 
 impl fmt::Display for MemState{
@@ -38,10 +38,10 @@ impl fmt::Display for MemState{
                 MemState::Memory        => "Memory",
                 MemState::Io            => "Io",
                 MemState::NoState       => "NoState",
-                MemState::ReadJoy1      => "ReadJoy1",
-                MemState::ReadJoy2      => "ReadJoy2",
-                MemState::StartReadJoy1 => "StartReadJoy1",
-                MemState::StartReadJoy2 => "StartReadJoy2",
+                MemState::ReadGamePad1      => "ReadJoy1",
+                MemState::ReadGamePad2      => "ReadJoy2",
+                MemState::StartReadGamePad1 => "StartReadJoy1",
+                MemState::StartReadGamePad2 => "StartReadJoy2",
         })
     }
 }
@@ -150,13 +150,13 @@ impl Memory {
                                 self.oamdma
                             },
                 0x4015 => 0,
-                0x4016 =>   {   if let MemState::ReadJoy1 = self.read_status {
+                0x4016 =>   {   if let MemState::ReadGamePad1 = self.read_status {
                                     self.joy1
                                 } else {
                                     0
                                 }
                             }
-                0x4017 =>   {   if let MemState::ReadJoy2 = self.read_status {
+                0x4017 =>   {   if let MemState::ReadGamePad2 = self.read_status {
                                     self.joy1
                                 } else {
                                     0
@@ -172,17 +172,8 @@ impl Memory {
                 0x401F => 0,
                 _      => 0,
             }
-        } else if address < 0x6000 {
-            /* Cartridge expansion ROM the f */
-            self.read_status = MemState::Memory;
-            0
-        } else if address < 0x8000 {
-            /* SRAM */
-            self.read_status = MemState::Memory;
-            0
-        } else /* 0x8000 <= addr < 0xC000*/ {
-            /* PRG-ROM */
-            self.read_status = MemState::Memory;
+        } else {
+            //self.mapper.load()
             0
         })
     }
@@ -251,23 +242,23 @@ impl Memory {
                                 self.oamdma = val
                             },
                 0x4015 =>   (),
-                0x4016 =>   {   if let MemState::ReadJoy1 = self.read_status {
+                0x4016 =>   {   if let MemState::ReadGamePad1 = self.read_status {
                                     self.joy1 = val;
                                 }
 
                                 if self.keystrobe1 && ((self.joy1 & 1) == 0) {
-                                    self.read_status = MemState::StartReadJoy1;
+                                    self.read_status = MemState::StartReadGamePad1;
                                     self.keystrobe2 = false;
                                 } else if self.joy1 & 1 > 0 {
                                     self.keystrobe1 = true;
                                 }
                             },
-                0x4017 =>   {   if let MemState::ReadJoy2 = self.read_status {
+                0x4017 =>   {   if let MemState::ReadGamePad2 = self.read_status {
                                     self.joy2 = val;
                                 }
                     
                                 if self.keystrobe2 && ((self.joy2 & 1) == 0) {
-                                    self.read_status = MemState::StartReadJoy2;
+                                    self.read_status = MemState::StartReadGamePad2;
                                     self.keystrobe2 = false;
                                 } else if self.joy2 & 1 > 0 {
                                     self.keystrobe2 = true;
@@ -283,15 +274,8 @@ impl Memory {
                 0x401F =>   (),
                 _      =>   (),
             }
-        } else if address < 0x6000 {
-            /* Cartridge expansion ROM the f */
-            self.write_status = MemState::Memory;
-        } else if address < 0x8000 {
-            /* SRAM */
-            self.write_status = MemState::Memory;
-        } else /* 0x8000 <= address < 0xC000*/ {
-            /* PRG-ROM */
-            self.write_status = MemState::Memory;
+        } else {
+            //self.mapper.store()
         }
     }
 
