@@ -72,14 +72,14 @@ impl Nes {
             }*/
             let mut fps : bool = false;
             if echo.to(PreciseTime::now()) > time::Duration::seconds(1) {
-                fps = true;
+                self.ppu.print_fps();
                 echo = PreciseTime::now();
             }
             if !self.gamepad.read_keys(&mut self.mem, &mut event_pump) {
                 self.cpu.cycle(&mut self.mem);
-                self.ppu.cycle(&mut self.mem, &mut renderer, fps);
-                self.ppu.cycle(&mut self.mem, &mut renderer, false);
-                self.ppu.cycle(&mut self.mem, &mut renderer, false);
+                self.ppu.cycle(&mut self.mem, &mut renderer);
+                self.ppu.cycle(&mut self.mem, &mut renderer);
+                self.ppu.cycle(&mut self.mem, &mut renderer);
             } else {
                 break 'running
             }

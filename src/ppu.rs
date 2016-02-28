@@ -106,7 +106,7 @@ impl Ppu {
     }
     
     #[inline(always)]
-    pub fn cycle(&mut self, memory: &mut Mem, renderer: &mut sdl2::render::Renderer, fps : bool) {
+    pub fn cycle(&mut self, memory: &mut Mem, renderer: &mut sdl2::render::Renderer) {
         self.ls_latches(memory);
 
         if self.cycles == 0 {
@@ -119,11 +119,6 @@ impl Ppu {
             self.cycles = 0;
             self.fps = self.fps + W(1);
         } 
-
-        if fps {
-            println!("fps {}:", self.fps.0);
-            self.fps = W(0);
-        }
     }
 
     fn draw(&mut self, memory: &mut Mem, renderer: &mut sdl2::render::Renderer) {
@@ -145,7 +140,13 @@ impl Ppu {
             self.px_width += 1;
         }
     }
-    
+
+    #[inline(always)]
+    pub fn print_fps(&mut self) {
+        println!("fps: {}", self.fps.0);
+        self.fps = W(0);
+    }
+
     /* load store latches */
     fn ls_latches(&mut self, memory: &mut Mem){
         match memory.write_status {
