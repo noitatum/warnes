@@ -72,6 +72,8 @@ pub struct Ppu {
 
     px_height       : usize,
     px_width        : usize,
+    
+    fps             : W<u8>,
 }
 
 impl Ppu {
@@ -98,11 +100,13 @@ impl Ppu {
 
             px_height       : 0,
             px_width        : 0,
+
+            fps             : W(0),
         }
     }
     
     #[inline(always)]
-    pub fn cycle(&mut self, memory: &mut Mem, renderer: &mut sdl2::render::Renderer ) {
+    pub fn cycle(&mut self, memory: &mut Mem, renderer: &mut sdl2::render::Renderer, fps : bool) {
         self.ls_latches(memory);
 
         if self.cycles == 0 {
@@ -113,8 +117,13 @@ impl Ppu {
 
         if self.cycles == VBLANK_END {
             self.cycles = 0;
-            println!("f");
+            self.fps = self.fps + W(1);
         } 
+
+        if fps {
+            println!("fps {}:", self.fps.0);
+            self.fps = W(0);
+        }
     }
 
     fn draw(&mut self, memory: &mut Mem, renderer: &mut sdl2::render::Renderer) {

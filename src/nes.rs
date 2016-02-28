@@ -1,9 +1,12 @@
 extern crate sdl2;
+extern crate time;
 
 use cpu::Cpu;
 use ppu::Ppu;
 use mem::Memory as Mem;
 use gamepad::GamePad;
+
+use time::PreciseTime;
 
 //use sdl2::pixels::PixelFormatEnum;
 //use sdl2::rect::Rect;
@@ -54,7 +57,8 @@ impl Nes {
         let mut renderer = window.renderer().build().unwrap();
 
         let mut event_pump = self.sdl_context.event_pump().unwrap();
-
+        
+        let mut echo = PreciseTime::now();
         'running: loop {
             /*for event in event_pump.poll_iter() {
                 match event {
@@ -66,11 +70,16 @@ impl Nes {
                     _                                      =>  {}
                 }
             }*/
+            let mut fps : bool = false;
+            if echo.to(PreciseTime::now()) > time::Duration::seconds(1) {
+                fps = true;
+                echo = PreciseTime::now();
+            }
             if !self.gamepad.read_keys(&mut self.mem, &mut event_pump) {
                 self.cpu.cycle(&mut self.mem);
-                self.ppu.cycle(&mut self.mem, &mut renderer);
-                self.ppu.cycle(&mut self.mem, &mut renderer);
-                self.ppu.cycle(&mut self.mem, &mut renderer);
+                self.ppu.cycle(&mut self.mem, &mut renderer, fps);
+                self.ppu.cycle(&mut self.mem, &mut renderer, false);
+                self.ppu.cycle(&mut self.mem, &mut renderer, false);
             } else {
                 break 'running
             }
