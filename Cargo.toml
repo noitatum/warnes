@@ -6,3 +6,4 @@ authors = []
 [dependencies]
 
 sdl2 = "*"
+time = "*"
