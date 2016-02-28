@@ -67,8 +67,8 @@ impl Nes {
                 echo = PreciseTime::now();
                 for event in event_pump.poll_iter() {
                     match event {
-                        Event::Quit {..} 
-                        | Event::KeyDown
+                        //Event::Quit {..} |
+                        Event::KeyDown
                         { keycode: Some(Keycode::Escape), .. } =>  {
                                                                         break 'running
                                                                                     },
@@ -76,14 +76,11 @@ impl Nes {
                     }
                 }
             }
-            if !self.gamepad.read_keys(&mut self.mem, &mut event_pump) {
-                self.cpu.cycle(&mut self.mem);
-                self.ppu.cycle(&mut self.mem, &mut renderer);
-                self.ppu.cycle(&mut self.mem, &mut renderer);
-                self.ppu.cycle(&mut self.mem, &mut renderer);
-            } else {
-                break 'running
-            }
+            self.gamepad.read_keys(&mut self.mem, &mut event_pump);
+            self.cpu.cycle(&mut self.mem);
+            self.ppu.cycle(&mut self.mem, &mut renderer);
+            self.ppu.cycle(&mut self.mem, &mut renderer);
+            self.ppu.cycle(&mut self.mem, &mut renderer);
         }
     }
 }
