@@ -3,14 +3,15 @@ extern crate sdl2;
 use cpu::Cpu;
 use ppu::Ppu;
 use mem::Memory as Mem;
+use joy::JoyStick;
 
-use sdl2::pixels::PixelFormatEnum;
-use sdl2::rect::Rect;
+//use sdl2::pixels::PixelFormatEnum;
+//use sdl2::rect::Rect;
 use sdl2::event::Event;
 use sdl2::keyboard::Keycode;
-use sdl2::pixels::Color;
-use sdl2::video::{Window, WindowBuilder};
-use sdl2::rect::Point;
+//use sdl2::pixels::Color;
+//use sdl2::video::{Window, WindowBuilder};
+//use sdl2::rect::Point;
 use sdl2::Sdl;
 
 
@@ -23,6 +24,7 @@ pub struct Nes {
     ppu         : Ppu,
     mem         : Mem,
     sdl_context : Sdl,
+    joy         : JoyStick,
 }
 
 impl Nes {
@@ -32,6 +34,7 @@ impl Nes {
             ppu         : Ppu::new(),
             mem         : Mem::new(),
             sdl_context : sdl2::init().unwrap(),
+            joy         : JoyStick::new(),
             }
     }
 }
@@ -63,6 +66,7 @@ impl Nes {
                     _                                      =>  {}
                 }
             }
+        self.joy.read_keys(&mut self.mem, &mut event_pump);
         self.cpu.cycle(&mut self.mem);
         self.ppu.cycle(&mut self.mem, &mut renderer);
         self.ppu.cycle(&mut self.mem, &mut renderer);
