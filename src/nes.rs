@@ -3,12 +3,12 @@ extern crate sdl2;
 use cpu::Cpu;
 use ppu::Ppu;
 use mem::Memory as Mem;
-use joy::JoyStick;
+use gamepad::GamePad;
 
 //use sdl2::pixels::PixelFormatEnum;
 //use sdl2::rect::Rect;
 use sdl2::event::Event;
-use sdl2::keyboard::Keycode;
+use sdl2::keyboard::{Scancode, Keycode};
 //use sdl2::pixels::Color;
 //use sdl2::video::{Window, WindowBuilder};
 //use sdl2::rect::Point;
@@ -24,7 +24,7 @@ pub struct Nes {
     ppu         : Ppu,
     mem         : Mem,
     sdl_context : Sdl,
-    joy         : JoyStick,
+    gamepad         : GamePad,
 }
 
 impl Nes {
@@ -34,8 +34,8 @@ impl Nes {
             ppu         : Ppu::new(),
             mem         : Mem::new(),
             sdl_context : sdl2::init().unwrap(),
-            joy         : JoyStick::new(),
-            }
+            gamepad         : GamePad::new(),
+        }
     }
 }
 
@@ -56,7 +56,7 @@ impl Nes {
         let mut event_pump = self.sdl_context.event_pump().unwrap();
 
         'running: loop {
-            for event in event_pump.poll_iter() {
+            /*for event in event_pump.poll_iter() {
                 match event {
                     Event::Quit {..} 
                     | Event::KeyDown
@@ -65,12 +65,15 @@ impl Nes {
                                                                                 },
                     _                                      =>  {}
                 }
+            }*/
+            if !self.gamepad.read_keys(&mut self.mem, &mut event_pump) {
+                self.cpu.cycle(&mut self.mem);
+                self.ppu.cycle(&mut self.mem, &mut renderer);
+                self.ppu.cycle(&mut self.mem, &mut renderer);
+                self.ppu.cycle(&mut self.mem, &mut renderer);
+            } else {
+                break 'running
             }
-        self.joy.read_keys(&mut self.mem, &mut event_pump);
-        self.cpu.cycle(&mut self.mem);
-        self.ppu.cycle(&mut self.mem, &mut renderer);
-        self.ppu.cycle(&mut self.mem, &mut renderer);
-        self.ppu.cycle(&mut self.mem, &mut renderer);
         }
     }
 }
