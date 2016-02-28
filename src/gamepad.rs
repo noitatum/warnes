@@ -4,10 +4,11 @@ extern crate sdl2;
 use mem::{Memory, MemState};
 //sdl use
 //use sdl2::event::Event;
-use sdl2::keyboard::Scancode;
+use sdl2::event::Event;
+use sdl2::keyboard::Keycode;
+
 //sdl stuff
 use std::num::Wrapping as W;
-
 
 const GAMEPAD1  : W<u16> = W(0x4016);
 const GAMEPAD2  : W<u16> = W(0x4017);
@@ -29,7 +30,7 @@ impl GamePad {
 
 impl GamePad {
     // Reads the joystick (default to keyboard) and writes to memory accordingly.
-    pub fn read_keys(&mut self, mem: &mut Memory, pump: &mut sdl2::EventPump) -> bool{
+    pub fn read_keys(&mut self, mem: &mut Memory, pump: &mut sdl2::EventPump) {
         if let MemState::ReadGamePad1 = mem.write_status {    
             if self.key != 8 {
                 mem.store(GAMEPAD1, W(self.joykeys[self.key as usize]));
@@ -39,25 +40,29 @@ impl GamePad {
                 mem.write_status = MemState::NoState; 
             }
         }
-        
-        let key_state = pump.keyboard_state();
-        if let MemState::StartReadGamePad1 = mem.write_status  { 
-            // Keyboard to joy Z = A, X = B, S = Select, Enter = Enter, arrows = dpad
-            self.joykeys[0] = key_state.is_scancode_pressed(Scancode::Z) as u8;
-            self.joykeys[1] = key_state.is_scancode_pressed(Scancode::X) as u8;
-            self.joykeys[2] = key_state.is_scancode_pressed(Scancode::S) as u8;
-            self.joykeys[3] = key_state.is_scancode_pressed(Scancode::Return) as u8;
-            self.joykeys[4] = key_state.is_scancode_pressed(Scancode::Up) as u8;
-            self.joykeys[5] = key_state.is_scancode_pressed(Scancode::Down) as u8;  
-            self.joykeys[6] = key_state.is_scancode_pressed(Scancode::Left) as u8;            
-            self.joykeys[7] = key_state.is_scancode_pressed(Scancode::Right) as u8;   
-            mem.write_status = MemState::ReadGamePad1;
-        }
 
-        if key_state.is_scancode_pressed(Scancode::Escape) {
-            return true;
-        } else{
-            return false;
+        if let MemState::StartReadGamePad1 = mem.write_status {
+            for event in pump.poll_iter() { 
+                match event {
+                    // Keyboard to joy Z = A, X = B, S = Select, Enter = Enter, arrows = dpad
+                    Event::KeyDown { keycode: Some(key), .. } =>  {
+                        match key {
+                            Keycode::Z         => self.joykeys[0] = true as u8,
+                            Keycode::X         => self.joykeys[1] = true as u8,
+                            Keycode::S         => self.joykeys[2] = true as u8,
+                            Keycode::Return    => self.joykeys[3] = true as u8,
+                            Keycode::Up        => self.joykeys[4] = true as u8,
+                            Keycode::Down      => self.joykeys[5] = true as u8,
+                            Keycode::Left      => self.joykeys[6] = true as u8,
+                            Keycode::Right     => self.joykeys[7] = true as u8,
+                            _                  => {}, 
+                        }
+                    }
+                    _                                                        => {},
+                }
+            }
+            mem.write_status = MemState::ReadGamePad1;
         }
     }
 }
+                                                                          
