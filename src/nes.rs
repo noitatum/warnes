@@ -60,26 +60,27 @@ impl Nes {
         
         let mut echo = PreciseTime::now();
         'running: loop {
-            /*for event in event_pump.poll_iter() {
-                match event {
-                    Event::Quit {..} 
-                    | Event::KeyDown
-                    { keycode: Some(Keycode::Escape), .. } =>  {
-                                                                    break 'running
-                                                                                },
-                    _                                      =>  {}
-                }
-            }*/
+            
             let mut fps : bool = false;
             if echo.to(PreciseTime::now()) > time::Duration::seconds(1) {
-                fps = true;
+                self.ppu.print_fps();
                 echo = PreciseTime::now();
+                for event in event_pump.poll_iter() {
+                    match event {
+                        Event::Quit {..} 
+                        | Event::KeyDown
+                        { keycode: Some(Keycode::Escape), .. } =>  {
+                                                                        break 'running
+                                                                                    },
+                        _                                      =>  {}
+                    }
+                }
             }
             if !self.gamepad.read_keys(&mut self.mem, &mut event_pump) {
                 self.cpu.cycle(&mut self.mem);
-                self.ppu.cycle(&mut self.mem, &mut renderer, fps);
-                self.ppu.cycle(&mut self.mem, &mut renderer, false);
-                self.ppu.cycle(&mut self.mem, &mut renderer, false);
+                self.ppu.cycle(&mut self.mem, &mut renderer);
+                self.ppu.cycle(&mut self.mem, &mut renderer);
+                self.ppu.cycle(&mut self.mem, &mut renderer);
             } else {
                 break 'running
             }

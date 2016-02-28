@@ -38,10 +38,10 @@ impl fmt::Display for MemState{
                 MemState::Memory        => "Memory",
                 MemState::Io            => "Io",
                 MemState::NoState       => "NoState",
-                MemState::ReadGamePad1      => "ReadJoy1",
-                MemState::ReadGamePad2      => "ReadJoy2",
-                MemState::StartReadGamePad1 => "StartReadJoy1",
-                MemState::StartReadGamePad2 => "StartReadJoy2",
+                MemState::ReadGamePad1      => "ReadGamePad1",
+                MemState::ReadGamePad2      => "ReadGamePad2",
+                MemState::StartReadGamePad1 => "StartReadGamePad1",
+                MemState::StartReadGamePad2 => "StartReadGamePad2",
         })
     }
 }
