@@ -88,7 +88,6 @@ impl Ppu {
         }
     }
     
-    #[inline(always)]
     pub fn cycle(&mut self, memory: &mut Mem, renderer: &mut sdl2::render::Renderer) {
         self.ls_latches(memory);
 
@@ -105,17 +104,14 @@ impl Ppu {
     }
 
     fn draw(&mut self, memory: &mut Mem, renderer: &mut sdl2::render::Renderer) {
-        // buffers the points and their color in a 256x240 matrix
-        //
-        // Point = (x, y) = (width, height) !!.
-        //self.buffer[self.px_height][self.px_width] = (Point::new(self.px_width as i32, self.px_height as i32), Color::RGB(self.px_height as u8, self.px_width as u8, 20));
-        renderer.set_draw_color(
-                Color::RGB(self.px_height as u8, self.px_width as u8, 20));
+        renderer.set_draw_color(Color::RGB(self.px_height as u8, self.px_width as u8, 20));
         renderer.draw_point(Point::new(self.px_width as i32, self.px_height as i32));
         if self.px_width == 255 && self.px_height < 239 {
             self.px_width = 0;
             self.px_height+= 1;
         } else if self.px_width == 255 && self.px_height == 239 {
+            // Once entire image is draw we present the result and start counting until the next
+            // vblank
             renderer.present();
             self.px_width = 0;
             self.px_height = 0;
@@ -135,25 +131,13 @@ impl Ppu {
     fn ls_latches(&mut self, memory: &mut Mem){
         let (latch, status) = memory.get_latch();
         match status {
-            MemState::PpuMask   => {   
-                self.mask = latch;
-            },
-            MemState::OamAddr   => {
-                self.oam.set_addr(latch);
-            },
-            MemState::OamData   => {
-                self.oam.store_data(latch);
-            },
-            MemState::PpuScroll => {   
-                self.scroll.set(latch);
-            },
-            MemState::PpuAddr   => {
-                self.vram.set_addr(latch);
-            },
-            MemState::PpuData   => {
-                self.vram.store_data(latch);
-            },
-            // do something probably update internal registers.
+            MemState::PpuCtrl   => { self.ctrl = latch }, 
+            MemState::PpuMask   => { self.mask = latch; },
+            MemState::OamAddr   => { self.oam.set_addr(latch); },
+            MemState::OamData   => { self.oam.store_data(latch); },
+            MemState::PpuScroll => { self.scroll.set(latch); },
+            MemState::PpuAddr   => { self.vram.set_addr(latch); },
+            MemState::PpuData   => { self.vram.store_data(latch); },
             MemState::NoState   => (),
             _                   => (), 
         }
@@ -166,18 +150,10 @@ impl Ppu {
                 self.scroll.reset();
                 self.status &= 0x60;
             },
-            MemState::PpuData   => {
-                memory.set_latch(self.vram.load_data());
-            },
-            MemState::NoState   => (),
-            _                   => (),
+            MemState::PpuData   => { memory.set_latch(self.vram.load_data()); },
+            MemState::NoState   => {},
+            _                   => {},
         }
-    }
-}
-
-impl fmt::Debug for Ppu {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "PPU: \n OAM: {:?} \n VRAM: {:?}", self.oam, self.vram)
     }
 }
 
@@ -187,12 +163,20 @@ impl Default for Ppu {
     }
 }
 
+
+impl fmt::Debug for Ppu {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "PPU: \n OAM: {:?} \n VRAM: {:?}", self.oam, self.vram)
+    }
+}
+
 #[derive(Default)]
 struct AddressLatch {
     laddr   : W<u8>,
     haddr   : W<u8>,
     upper   : bool,
 }
+
 
 impl AddressLatch {
     pub fn reset(&mut self) {
@@ -313,21 +297,27 @@ impl fmt::Debug for Oam {
 }
 
 impl Oam {
+
+    #[inline]
     fn store_data(&mut self, value: W<u8>) {
         self.mem[self.addr.0 as usize] = value.0;
         self.addr = self.addr + W(1);
     }
-
+    
+    #[inline]
     fn set_addr(&mut self, value: W<u8>) {
         self.addr = value;
     }
 }
 
 impl LoadStore for Oam {
+
+    #[inline]
     fn load(&mut self, address: W<u16>) -> W<u8> {
        W(self.mem[address.0 as usize])
     }
 
+    #[inline]
     fn store(&mut self, address: W<u16>, value: W<u8>) { 
        self.mem[address.0 as usize] = value.0;
     }
