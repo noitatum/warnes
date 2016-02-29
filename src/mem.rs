@@ -1,7 +1,11 @@
 use loadstore::LoadStore;
+use utils::print_mem;
 
 use std::num::Wrapping as W;
 use std::fmt;
+
+const RAM_SIZE  : usize = 0x800;
+const VRAM_SIZE : usize = 0x800;
 
 #[derive(Clone, Copy)]
 pub enum MemState {
@@ -62,7 +66,8 @@ impl fmt::Display for IoState {
 }
 
 pub struct Memory {
-    ram : [u8; 2048],
+    ram             : [u8; RAM_SIZE],
+    vram            : [u8; VRAM_SIZE],
 
     read_status     : MemState,
     write_status    : MemState,
@@ -82,7 +87,9 @@ pub struct Memory {
 impl Memory {
     pub fn new () -> Memory {
         Memory {
-            ram : [0;  2048],
+            ram             : [0; RAM_SIZE],
+            vram            : [0; VRAM_SIZE], 
+
             read_status     : MemState::NoState,
             write_status    : MemState::NoState,            
 
@@ -120,6 +127,37 @@ impl Memory {
         self.oamdma = None;
         res
     }
+    
+    // FIXME Broken code, fix and move to mapper
+
+    pub fn chr_load(&mut self, address: W<u16>) -> W<u8> {
+        let value = if address.0 < 0x3000 {
+            self.vram[address.0 as usize]
+        } else if address.0 < 0x3F00 {
+            self.vram[(address.0 - 0x1000) as usize]
+        } else if address.0 < 0x3F20 {
+            self.vram[address.0 as usize]
+        } else if address.0 < 0x4000 {
+            self.vram[(address.0 - 0x100) as usize]
+        } else {
+            self.vram[(address.0 % 0x4000) as usize]
+        };
+        W(value)
+    }
+
+    pub fn chr_store(&mut self, address: W<u16>, value: W<u8>){
+        if address.0 < 0x3000 {
+            self.vram[address.0 as usize] = value.0;
+        } else if address.0 < 0x3F00 {
+            self.vram[(address.0 - 0x1000) as usize] = value.0;
+        } else if address.0 < 0x3F20 {
+            self.vram[address.0 as usize] = value.0;
+        } else if address.0 < 0x4000 {
+            self.vram[(address.0 - 0x100) as usize] = value.0;
+        } else {
+            self.vram[(address.0 % 0x4000) as usize] = value.0;
+        }
+    }
 }
 
 impl LoadStore for Memory {
@@ -130,7 +168,7 @@ impl LoadStore for Memory {
             self.ram[(address & 0x7ff) as usize]
         } else if address < 0x4000 {
             // FIXME: This is broken now for status and oamdata
-            self.read_status = match (address % 0x2000) & 0x7 {
+            self.read_status = match address & 0x7 {
                 // Other registers are read only
                 2 => MemState::PpuStatus,
                 4 => MemState::OamData,
@@ -285,10 +323,11 @@ impl LoadStore for Memory {
 
 impl fmt::Debug for Memory {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let mut output = "ram: [".to_string();
-        for i in 0..2048 {
-            output.push_str(&format!("|{:02x}", self.ram[i]));
-        }
+        let mut output = "RAM: \n".to_string();
+        output.push_str("RAM:\n");
+        print_mem(&mut output, &self.ram[..]);
+        output.push_str("VRAM:\n");
+        print_mem(&mut output, &self.vram[..]);
         write!(f, "{{ latch: {:#x}, oamdma: {:?}, read_status: {}, write_status: {}}}, \n {}", self.latch.0, self.oamdma, self.read_status, self.write_status, output)
     }
 }

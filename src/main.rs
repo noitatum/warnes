@@ -10,6 +10,7 @@ mod nes;
 mod gamepad;
 mod header;
 mod loadstore;
+mod utils;
 
 fn main() {
  

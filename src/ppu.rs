@@ -1,5 +1,6 @@
 extern crate sdl2;
 
+use utils::print_mem;
 use loadstore::LoadStore;
 use mem::{Memory as Mem, MemState};
 
@@ -53,7 +54,7 @@ const VBLANK_END                : u32 = 6819;
 
 pub struct Ppu {
     oam             : Oam,
-    vram            : Vram, 
+    vram            : AddressLatch, 
     scroll          : AddressLatch,
     cycles          : u32,
 
@@ -71,7 +72,7 @@ impl Ppu {
     pub fn new () -> Ppu {
         Ppu {
             oam             : Oam::default(), 
-            vram            : Vram::default(),
+            vram            : AddressLatch::default(),
             scroll          : AddressLatch::default(),
             cycles          : 0,
 
@@ -108,7 +109,7 @@ impl Ppu {
         renderer.draw_point(Point::new(self.px_width as i32, self.px_height as i32));
         if self.px_width == 255 && self.px_height < 239 {
             self.px_width = 0;
-            self.px_height+= 1;
+            self.px_height += 1;
         } else if self.px_width == 255 && self.px_height == 239 {
             // Once entire image is draw we present the result and start counting until the next
             // vblank
@@ -131,13 +132,15 @@ impl Ppu {
     fn ls_latches(&mut self, memory: &mut Mem){
         let (latch, status) = memory.get_latch();
         match status {
-            MemState::PpuCtrl   => { self.ctrl = latch }, 
+            MemState::PpuCtrl   => { self.ctrl = latch; }, 
             MemState::PpuMask   => { self.mask = latch; },
             MemState::OamAddr   => { self.oam.set_addr(latch); },
             MemState::OamData   => { self.oam.store_data(latch); },
             MemState::PpuScroll => { self.scroll.set(latch); },
-            MemState::PpuAddr   => { self.vram.set_addr(latch); },
-            MemState::PpuData   => { self.vram.store_data(latch); },
+            MemState::PpuAddr   => { self.vram.set(latch); },
+            MemState::PpuData   => { 
+                memory.chr_store(self.vram.get(), latch); 
+            },
             MemState::NoState   => (),
             _                   => (), 
         }
@@ -146,11 +149,14 @@ impl Ppu {
 
         match read_status {
             MemState::PpuStatus => {
-                self.vram.reset_addr();
+                self.vram.reset();
                 self.scroll.reset();
                 self.status &= 0x60;
             },
-            MemState::PpuData   => { memory.set_latch(self.vram.load_data()); },
+            MemState::PpuData   => { 
+                let value = memory.chr_load(self.vram.get()); 
+                memory.set_latch(value);
+            },
             MemState::NoState   => {},
             _                   => {},
         }
@@ -166,7 +172,8 @@ impl Default for Ppu {
 
 impl fmt::Debug for Ppu {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "PPU: \n OAM: {:?} \n VRAM: {:?}", self.oam, self.vram)
+        write!(f, "PPU: \n OAM: {:?}, scroll: {:?}, vram: {:?}", 
+               self.oam, self.scroll, self.vram)
     }
 }
 
@@ -197,78 +204,9 @@ impl AddressLatch {
     }
 }
 
-struct Vram {
-    mem     : [u8; 0x4000],
-    latch   : AddressLatch,
-}
-
-impl fmt::Debug for Vram {
+impl fmt::Debug for AddressLatch {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let mut output = "VRAM: mem: \n".to_string();
-        for i in 0..0x4000 {
-            output.push_str(&format!("{:02x}|", self.mem[i]));
-        }
-        write!(f, "{} addr: {:#x},", output, self.latch.get().0)
-    }
-}
-
-impl Default for Vram {
-    fn default() -> Vram {
-        Vram {
-            mem     : [0; 0x4000],
-            latch   : AddressLatch::default(),
-        }
-    }
-}
-
-impl Vram {
-    pub fn load_data(&mut self) -> W<u8> {
-        let addr = self.latch.get();
-        self.load(addr)
-    }
-
-    pub fn store_data(&mut self, value: W<u8>) {
-        let addr = self.latch.get();
-        self.store(addr, value);
-    }
-
-    pub fn set_addr(&mut self, value: W<u8>) {
-        self.latch.set(value);
-    }
-
-    pub fn reset_addr(&mut self) {
-        self.latch.reset();
-    }
-}
-
-impl LoadStore for Vram {
-    fn load(&mut self, address: W<u16>) -> W<u8> {
-        let value = if address.0 < 0x3000 {
-            self.mem[address.0 as usize]
-        } else if address.0 < 0x3F00 {
-            self.mem[(address.0 - 0x1000) as usize]
-        } else if address.0 < 0x3F20 {
-            self.mem[address.0 as usize]
-        } else if address.0 < 0x4000 {
-            self.mem[(address.0 - 0x100) as usize]
-        } else {
-            self.mem[(address.0 % 0x4000) as usize]
-        };
-        W(value)
-    }
-
-    fn store(&mut self, address: W<u16>, value: W<u8>){
-        if address.0 < 0x3000 {
-            self.mem[address.0 as usize] = value.0;
-        } else if address.0 < 0x3F00 {
-            self.mem[(address.0 - 0x1000) as usize] = value.0;
-        } else if address.0 < 0x3F20 {
-            self.mem[address.0 as usize] = value.0;
-        } else if address.0 < 0x4000 {
-            self.mem[(address.0 - 0x100) as usize] = value.0;
-        } else {
-            self.mem[(address.0 % 0x4000) as usize] = value.0;
-        }
+        write!(f, "{:?}", self.get())
     }
 }
 
@@ -289,9 +227,7 @@ impl Default for Oam {
 impl fmt::Debug for Oam {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let mut output = "OAM: mem: \n".to_string();
-        for i in 0..0x100 {
-            output.push_str(&format!("{:02x}|", self.mem[i]));
-        }
+        print_mem(&mut output, &self.mem[..]);
         write!(f, "{}, addr: {:#x}", output, self.addr.0)
     }
 }
