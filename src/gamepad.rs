@@ -1,13 +1,13 @@
 extern crate sdl2;
 
-//nes use
+// nes 
 use mem::{Memory, MemState};
-//sdl use
-//use sdl2::event::Event;
+
+// sdl2
 use sdl2::event::Event;
 use sdl2::keyboard::Keycode;
 
-//sdl stuff
+// std stuff
 use std::num::Wrapping as W;
 
 const GAMEPAD1  : W<u16> = W(0x4016);

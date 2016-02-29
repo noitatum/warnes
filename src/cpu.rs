@@ -6,6 +6,7 @@ use std::num::Wrapping as W;
 type fn_instruction     = fn(&mut Regs, &mut Mem, W<u16>);  
 #[allow(non_camel_case_types)]
 type fn_addressing      = fn(&mut Regs, &mut Mem) -> (W<u16>, u32); 
+
 /* Branch flag types */
 const BRANCH_FLAG_TABLE : [u8; 4] = 
     [FLAG_SIGN, FLAG_OVERFLOW, FLAG_CARRY, FLAG_ZERO];
