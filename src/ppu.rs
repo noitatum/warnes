@@ -50,7 +50,7 @@ const STATUS_SPRITE_0_HIT       : u8 = 0x40;
 const STATUS_VERTICAL_BLANK     : u8 = 0x80; // set = in vertical blank
 
 
-const VBLANK_END                : u32 = 6819; 
+const VBLANK_END                : u32 = 27901; 
 
 pub struct Ppu {
     oam             : Oam,
@@ -106,7 +106,7 @@ impl Ppu {
 
     fn draw(&mut self, memory: &mut Mem, renderer: &mut sdl2::render::Renderer) {
         renderer.set_draw_color(Color::RGB(self.px_height as u8, self.px_width as u8, 20));
-        renderer.draw_point(Point::new(self.px_width as i32, self.px_height as i32));
+        renderer.draw_point(Point::new(self.px_width as i32, self.px_height as i32)).unwrap();
         if self.px_width == 255 && self.px_height < 239 {
             self.px_width = 0;
             self.px_height += 1;
@@ -145,7 +145,7 @@ impl Ppu {
             _                   => (), 
         }
 
-        let read_status = memory.get_read_status();
+        let read_status = memory.get_mem_load_status();
 
         match read_status {
             MemState::PpuStatus => {

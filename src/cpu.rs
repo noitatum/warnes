@@ -3,8 +3,10 @@ use mem::{MemState, Memory as Mem};
 use loadstore::LoadStore;
 use std::num::Wrapping as W;
 
-type fn_instruction     = fn(&mut Regs, &mut Mem, W<u16>);  
-type fn_addressing      = fn(&mut Regs, &mut Mem) -> (W<u16>, u32); 
+#[allow(no_camel_case)] 
+type fn_instruction     = fn(&mut Regs, &mut Mem, W<u16>); 
+#[allow(no_camel_case)]
+type fn_addressing      = fn(&mut Regs, &mut Mem) -> (W<u16>, u32);
 
 /* Branch flag types */
 const BRANCH_FLAG_TABLE : [u8; 4] = 
@@ -746,4 +748,6 @@ const OPCODE_TABLE : [(fn_addressing, fn_instruction, u32, bool); 256] = [
     (Regs::imp, Regs::nop, 2, false), (Regs::abx, Regs::sbc, 4, true),
     (Regs::abx, Regs::inc, 7, false), (Regs::imp, Regs::nop, 2, false),
     ];
+
+
 

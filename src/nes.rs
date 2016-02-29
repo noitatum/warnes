@@ -13,7 +13,7 @@ use time::PreciseTime;
 
 // SDL2
 use sdl2::event::Event;
-use sdl2::keyboard::{Scancode, Keycode};
+use sdl2::keyboard::{Keycode};
 use sdl2::Sdl;
 
 const WIDTH  : u32 = 256;
@@ -61,7 +61,6 @@ impl Nes {
             if echo.to(PreciseTime::now()) > time::Duration::seconds(1) {
                 self.ppu.print_fps();
                 echo = PreciseTime::now();
-
                 for event in event_pump.poll_iter() {
                     match event {
                         Event::Quit {..} | Event::KeyDown
