@@ -3,13 +3,8 @@ use mem::{MemState, Memory as Mem};
 use loadstore::LoadStore;
 use std::num::Wrapping as W;
 
-#[allow(non_camel_case_types)]
 type fn_instruction     = fn(&mut Regs, &mut Mem, W<u16>);  
-#[allow(non_camel_case_types)]
 type fn_addressing      = fn(&mut Regs, &mut Mem) -> (W<u16>, u32); 
-
-type FnInstruction     = fn(&mut Regs, &mut Mem, W<u16>);  
-type FnAddressing      = fn(&mut Regs, &mut Mem) -> (W<u16>, u32); 
 
 /* Branch flag types */
 const BRANCH_FLAG_TABLE : [u8; 4] = 
@@ -114,7 +109,7 @@ impl DMA {
 struct Execution {
     cycles_left     : u32,
     address         : W<u16>,
-    instruction     : FnInstruction,
+    instruction     : fn_instruction,
 }
 
 impl Default for Execution {
@@ -615,7 +610,7 @@ impl fmt::Debug for Regs {
 
 /* WARNING: Branch instructions are replaced with jumps */
 /* Addressing, Instruction, Cycles, Has Penalty */
-const OPCODE_TABLE : [(FnAddressing, FnInstruction, u32, bool); 256] = [
+const OPCODE_TABLE : [(fn_addressing, fn_instruction, u32, bool); 256] = [
     (Regs::imp, Regs::brk, 7, false), (Regs::idx, Regs::ora, 6, false), 
     (Regs::imp, Regs::nop, 2, false), (Regs::imp, Regs::nop, 2, false), 
     (Regs::imp, Regs::nop, 2, false), (Regs::zpg, Regs::ora, 3, false),
