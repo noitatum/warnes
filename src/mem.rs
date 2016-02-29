@@ -20,10 +20,8 @@ pub enum MemState {
 
 #[derive(Clone, Copy)]
 pub enum IoState {
-    ReadGamePad1,
-    ReadGamePad2,
-    StartReadGamePad1,
-    StartReadGamePad2,
+    GamePad1,
+    GamePad2,
     NoState,
 }
 
@@ -51,11 +49,9 @@ impl fmt::Display for IoState {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{}",
             match *self {
-                IoState::ReadGamePad1      => "ReadGamePad1",
-                IoState::ReadGamePad2      => "ReadGamePad2",
-                IoState::StartReadGamePad1 => "StartReadGamePad1",
-                IoState::StartReadGamePad2 => "StartReadGamePad2",
-                IoState::NoState           => "NoState",
+                IoState::GamePad1      => "GamePad1",
+                IoState::GamePad2      => "GamePad2",
+                IoState::NoState       => "NoState",
             }
         )
     }
@@ -64,73 +60,90 @@ impl fmt::Display for IoState {
 pub struct Memory {
     ram : [u8; 2048],
 
-    read_status     : MemState,
-    write_status    : MemState,
+    mem_load_status     : MemState,
+    mem_store_status    : MemState,
 
-    io_read_status  : IoState,
-    pub io_write_status : IoState,
+    io_load_status      : IoState,
+    io_store_status     : IoState,
 
-    latch           : W<u8>,
-    oamdma          : Option<W<u8>>,
+    latch               : W<u8>,
+    oamdma              : Option<W<u8>>,
 
-    keystrobe1      : bool,
-    keystrobe2      : bool,
-    joy1            : u8,
-    joy2            : u8,
+    joy1                : u8,
+    joy2                : u8,
 }
 
 impl Memory {
     pub fn new () -> Memory {
         Memory {
             ram : [0;  2048],
-            read_status     : MemState::NoState,
-            write_status    : MemState::NoState,            
+            mem_load_status     : MemState::NoState,
+            mem_store_status    : MemState::NoState,            
 
-            io_read_status  : IoState::NoState,
-            io_write_status : IoState::NoState,
+            io_load_status      : IoState::NoState,
+            io_store_status     : IoState::NoState,
 
-            latch           : W(0),
-            oamdma          : None,
+            latch               : W(0),
+            oamdma              : None,
 
-            keystrobe1      : false,
-            keystrobe2      : false,
-            joy1            : 0,
-            joy2            : 0,
+            joy1                : 0,
+            joy2                : 0,
         }
     }
 
     pub fn get_latch(&mut self) -> (W<u8>, MemState) {
-        let res = (self.latch, self.write_status);
-        self.write_status = MemState::NoState;
-        res
+        let status = (self.latch, self.mem_store_status);
+        self.mem_store_status = MemState::NoState;
+        return status;
     }
 
     pub fn set_latch(&mut self, value: W<u8>) {
         self.latch = value;
     }
 
-    pub fn get_read_status(&mut self) -> MemState {
-        let res = self.read_status;
-        self.read_status = MemState::NoState;
-        res
+    pub fn get_mem_load_status(&mut self) -> MemState {
+        let status = self.mem_load_status;
+        self.mem_load_status = MemState::NoState;
+        return status;
     }
 
     pub fn get_oamdma(&mut self) -> Option<W<u8>> {
-        let res = self.oamdma;
+        let status = self.oamdma;
         self.oamdma = None;
-        res
+        return status;
     }
+
+    pub fn get_io_load_status(&mut self) -> bool {
+        if let IoState::GamePad1 = self.io_load_status {
+            true
+        } else{
+            false
+        }
+    } 
+
+    pub fn set_io_store(&mut self, state: IoState) {
+        self.io_store_status = state;
+    }
+
+    pub fn get_joy1(&self) -> u8 {
+        self.joy1 
+    }
+
+    pub fn get_joy2(&self) -> u8 {
+        self.joy2
+    }
+
 }
 
 impl LoadStore for Memory {
     fn load(&mut self, address: W<u16>) -> W<u8> {
         let address = address.0; 
         let value = if address < 0x2000 {
-            self.read_status = MemState::Memory;
+            self.mem_load_status = MemState::Memory;
             self.ram[(address & 0x7ff) as usize]
         } else if address < 0x4000 {
             // FIXME: This is broken now for status and oamdata
-            self.read_status = match (address % 0x2000) & 0x7 {
+            self.mem_load_status = match (address % 0x2000) & 0x7 {
                 // Other registers are read only
                 2 => MemState::PpuStatus,
                 4 => MemState::OamData,
@@ -140,7 +153,7 @@ impl LoadStore for Memory {
             self.latch.0
         } else if address < 0x4020 {
             /* Apu AND IO TODO*/
-            //self.read_status = MemState::Io;
+            //self.mem_load_status = MemState::Io;
             match address {
                 0x4000 => 0,
                 0x4001 => 0,
@@ -164,20 +177,12 @@ impl LoadStore for Memory {
                 0x4013 => 0, 
                 0x4014 => 0, // OAMDMA is Write only, TODO: Check what happens
                 0x4015 => 0,
-                0x4016 => {   
-                    if let IoState::ReadGamePad1 = self.io_read_status {
-                        self.joy1
-                    } else {
-                        0
-                    }
-                }
-                0x4017 => {
-                    if let IoState::ReadGamePad2 = self.io_read_status {
-                        self.joy1
-                    } else {
-                        0
-                    }
-                }
+                0x4016 => { self.io_load_status = IoState::GamePad1;
+                            self.joy1 
+                          }
+                0x4017 => { self.io_load_status = IoState::GamePad2;
+                            self.joy2 
+                          }
                 0x4018 => 0,
                 0x4019 => 0,
                 0x401A => 0,
@@ -199,10 +204,10 @@ impl LoadStore for Memory {
         let address = address.0; 
         let val = value.0;
         if address < 0x2000 {
-            self.write_status = MemState::Memory;
+            self.mem_store_status = MemState::Memory;
             self.ram[(address & 0x7ff) as usize] = val
         } else if address < 0x4000 {
-            self.write_status = match address & 0x7 {
+            self.mem_store_status = match address & 0x7 {
                 0 => MemState::PpuCtrl,
                 1 => MemState::PpuMask,
              // 2 => MemState::PpuStatus Read Only Register 
@@ -216,7 +221,7 @@ impl LoadStore for Memory {
             self.latch = value;
         } else if address < 0x4020 {
             /* Apu AND IO TODO*/
-            self.write_status = MemState::Io;
+            self.mem_store_status = MemState::Io;
             match address {
                 0x4000 => (),
                 0x4001 => (),
@@ -245,28 +250,20 @@ impl LoadStore for Memory {
                     self.oamdma = Some(value);
                 },
                 0x4015 => (),
-                0x4016 => {   
-                    if let IoState::ReadGamePad1 = self.io_read_status {
-                        self.joy1 = val;
-                    }
-                    if self.keystrobe1 && ((self.joy1 & 1) == 0) {
-                        self.io_read_status = IoState::StartReadGamePad1;
-                        self.keystrobe2 = false;
-                    } else if self.joy1 & 1 > 0 {
-                        self.keystrobe1 = true;
-                    }
-                },
-                0x4017 => {
-                    if let IoState::ReadGamePad2 = self.io_read_status {
+                0x4016 => { self.joy1 = val;
+                            self.io_store_status = IoState::GamePad1;
+                          },
+                0x4017 => { /*
+                    if let IoState::GamePad2 = self.io_load_status {
                         self.joy2 = val;
                     }
                     if self.keystrobe2 && ((self.joy2 & 1) == 0) {
-                        self.io_read_status = IoState::StartReadGamePad2;
+                        self.io_load_status = IoState::StartGamePad2;
                         self.keystrobe2 = false;
                     } else if self.joy2 & 1 > 0 {
                         self.keystrobe2 = true;
                     }
-                },
+                */},
                 0x4018 => (),
                 0x4019 => (),
                 0x401A => (),
@@ -289,7 +286,7 @@ impl fmt::Debug for Memory {
         for i in 0..2048 {
             output.push_str(&format!("|{:02x}", self.ram[i]));
         }
-        write!(f, "{{ latch: {:#x}, oamdma: {:?}, read_status: {}, write_status: {}}}, \n {}", self.latch.0, self.oamdma, self.read_status, self.write_status, output)
+        write!(f, "{{ latch: {:#x}, oamdma: {:?}, mem_load_status: {}, mem_store_status: {}}}, \n {}", self.latch.0, self.oamdma, self.mem_load_status, self.mem_store_status, output)
     }
 }
 
