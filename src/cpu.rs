@@ -1,5 +1,6 @@
 use std::fmt;
 use mem::{MemState, Memory as Mem};
+use loadstore::LoadStore;
 use std::num::Wrapping as W;
 
 type FnInstruction     = fn(&mut Regs, &mut Mem, W<u16>);  
@@ -75,16 +76,16 @@ impl DMA {
         if self.cycles_left > 0 {
             self.execute(memory);
             true
-        } else if let MemState::OamDma = memory.write_status {
-            self.start(memory, cycles as u32);
+        } else if let Some(page) = memory.get_oamdma() {
+            self.start(memory, page, cycles as u32);
             true
         } else {
             false
         }
     }
 
-    fn start(&mut self, memory: &mut Mem, cycles: u32) {
-        self.address = W((memory.oamdma as u16) << 8); 
+    fn start(&mut self, memory: &mut Mem, page: W<u8>, cycles: u32) {
+        self.address = W16!(page) << 8; 
         // Additional cycle if on odd cycle
         self.cycles_left = DMA_CYCLES + cycles & 1;
     }

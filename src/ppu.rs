@@ -1,7 +1,9 @@
 extern crate sdl2;
 
-use std::fmt;
+use loadstore::LoadStore;
 use mem::{Memory as Mem, MemState};
+
+use std::fmt;
 use std::num::Wrapping as W;
 
 
@@ -50,58 +52,39 @@ const STATUS_VERTICAL_BLANK     : u8 = 0x80; // set = in vertical blank
 const VBLANK_END                : u32 = 6819; 
 
 pub struct Ppu {
-
-    oam             : [u8; 256],    // Object atribute memory 
-    vram            : [u8; 0x4000], // 16kb    
+    oam             : Oam,
+    vram            : Vram, 
+    scroll          : AddressLatch,
     cycles          : u32,
 
-    // status
-    vram_address    : u16,
-    scroll_address  : u16,
-    upper_vram      : bool,         // The CPU writes two bytes consecutively to ppuaddr to write a 16b address for addressing the vram
-    upper_scroll    : bool,         // If upper is set this mean we get the higher byte.
-
-    ppuctrl         : u8,
-    ppumask         : u8,
-    ppustatus       : u8,
-    oamaddr         : u8,
-    ppuscroll       : u8,
-    ppuaddr         : u8,
-    ppudata         : u8,
-    oamdma          : u8,
+    ctrl            : W<u8>,
+    mask            : W<u8>,
+    status          : u8,
 
     px_height       : usize,
     px_width        : usize,
     
-    fps             : W<u8>,
+    fps             : u32,
 }
 
 impl Ppu {
     pub fn new () -> Ppu {
         Ppu {
-            oam             : [0; 256],
-            vram            : [0;  0x4000],
+            oam             : Oam::default(), 
+            vram            : Vram::default(),
+            scroll          : AddressLatch::default(),
             cycles          : 0,
 
-            vram_address    : 0,
-            scroll_address  : 0,
-            upper_vram      : true,
-            upper_scroll    : true,
 
             // Registers, some may be removed later.
-            ppuctrl         : 0,
-            ppumask         : 0,
-            ppustatus       : 0,
-            oamaddr         : 0,
-            ppuscroll       : 0,
-            ppuaddr         : 0,
-            ppudata         : 0,
-            oamdma          : 0,
+            ctrl            : W(0),
+            mask            : W(0),
+            status          : 0,
 
             px_height       : 0,
             px_width        : 0,
 
-            fps             : W(0),
+            fps             : 0,
         }
     }
     
@@ -117,7 +100,7 @@ impl Ppu {
 
         if self.cycles == VBLANK_END {
             self.cycles = 0;
-            self.fps = self.fps + W(1);
+            self.fps += 1;
         } 
     }
 
@@ -126,7 +109,8 @@ impl Ppu {
         //
         // Point = (x, y) = (width, height) !!.
         //self.buffer[self.px_height][self.px_width] = (Point::new(self.px_width as i32, self.px_height as i32), Color::RGB(self.px_height as u8, self.px_width as u8, 20));
-        renderer.set_draw_color(Color::RGB(self.px_height as u8, self.px_width as u8, 20));
+        renderer.set_draw_color(
+                Color::RGB(self.px_height as u8, self.px_width as u8, 20));
         renderer.draw_point(Point::new(self.px_width as i32, self.px_height as i32));
         if self.px_width == 255 && self.px_height < 239 {
             self.px_width = 0;
@@ -143,139 +127,208 @@ impl Ppu {
 
     #[inline(always)]
     pub fn print_fps(&mut self) {
-        println!("fps: {}", self.fps.0);
-        self.fps = W(0);
+        println!("fps: {}", self.fps);
+        self.fps = 0;
     }
 
     /* load store latches */
     fn ls_latches(&mut self, memory: &mut Mem){
-        match memory.write_status {
-            MemState::PpuMask   =>  {   self.ppumask = memory.ppumask;
-                                        memory.write_status = MemState::NoState;
-                                    },
-
-            MemState::OamAddr   =>  {   self.oamaddr = memory.oamaddr;
-                                        memory.write_status = MemState::NoState;
-                                    },
-
-            MemState::OamData   =>  {   self.oam[self.oamaddr as usize] = memory.oamdata;
-                                        self.oamaddr += 1;
-                                        memory.write_status = MemState::NoState;
-                                    },
-
-            MemState::PpuScroll =>  {   if self.upper_scroll {
-                                            self.upper_scroll   = !self.upper_scroll;
-                                            self.scroll_address = (memory.ppuscroll as u16) << 8;
-                                        } else {
-                                            self.upper_scroll   = !self.upper_scroll;
-                                            self.scroll_address = memory.ppuaddr as u16;
-                                        }
-                                        memory.write_status = MemState::NoState;
-                                    },
-
-            MemState::PpuAddr   =>  {   if self.upper_vram {
-                                            self.upper_vram = false;
-                                            self.vram_address = (memory.ppuaddr as u16) << 8;
-                                        } else {
-                                            self.upper_vram = true;
-                                            self.vram_address |= memory.ppuaddr as u16;
-                                        }
-                                        memory.write_status = MemState::NoState;
-                                    },
-
-            MemState::PpuData   =>  {   self.vram[self.vram_address as usize] = memory.ppudata;
-                                        memory.write_status = MemState::NoState;
-                                    },
-            MemState::NoState =>    (),
-            _ => (), // do something probably update internal registers.
+        let (latch, status) = memory.get_latch();
+        match status {
+            MemState::PpuMask   => {   
+                self.mask = latch;
+            },
+            MemState::OamAddr   => {
+                self.oam.set_addr(latch);
+            },
+            MemState::OamData   => {
+                self.oam.store_data(latch);
+            },
+            MemState::PpuScroll => {   
+                self.scroll.set(latch);
+            },
+            MemState::PpuAddr   => {
+                self.vram.set_addr(latch);
+            },
+            MemState::PpuData   => {
+                self.vram.store_data(latch);
+            },
+            // do something probably update internal registers.
+            MemState::NoState   => (),
+            _                   => (), 
         }
 
-        match memory.read_status {
-            MemState::PpuStatus =>  {   memory.read_status  = MemState::NoState;
-                                    },
+        let read_status = memory.get_read_status();
 
-            MemState::PpuData   =>  {   memory.ppudata = self.vram[self.vram_address as usize];
-                                        memory.read_status  = MemState::NoState;
-                                    },
-
-            MemState::NoState   =>  (),
-            _ => (),
-        }
-
-    }
-
-    pub fn load_oam (&self, address: W<u16>) -> W<u8> {
-       W(self.oam[address.0 as usize])
-    }
-
-    pub fn store_oam (&mut self, address: W<u16>, value: W<u8> ){ 
-       self.oam[address.0 as usize] = value.0;
-    }
-
-    pub fn load_word_oam (&self, address: W<u16>) -> W<u16> {
-       let low : W<u16> = W16!(self.load_oam(address));
-       low | W16!(self.load_oam(address + W(1)))
-    }
-
-    pub fn store_word_oam (&mut self, address: W<u16>,  word: W<u16>){ 
-        self.store_oam(address, W8!(word >> 8));
-        self.store_oam(address + W(1), W8!(word));
-    }
-
-
-    pub fn load_vram (&self, address: W<u16>) -> W<u8> {
-        W(if address.0 < 0x3000 {
-            self.vram[address.0 as usize]
-        }else if address.0 < 0x3F00 {
-            self.vram[(address.0 - 0x1000) as usize]
-        }else if address.0 < 0x3F20 {
-            self.vram[address.0 as usize]
-        }else if address.0 < 0x4000 {
-            self.vram[(address.0 - 0x100) as usize]
-        }else {
-            self.vram[(address.0 % 0x4000) as usize]
-        })
-    }
-
-    pub fn store_vram (&mut self, address: W<u16>, value: W<u8>){
-        if address.0 < 0x3000 {
-            self.vram[address.0 as usize] = value.0;
-        }else if address.0 < 0x3F00 {
-            self.vram[(address.0 - 0x1000) as usize] = value.0;
-        }else if address.0 < 0x3F20 {
-            self.vram[address.0 as usize] = value.0;
-        }else if address.0 < 0x4000 {
-            self.vram[(address.0 - 0x100) as usize] = value.0;
-        }else {
-            self.vram[(address.0 % 0x4000) as usize] = value.0;
+        match read_status {
+            MemState::PpuStatus => {
+                self.vram.reset_addr();
+                self.scroll.reset();
+                self.status &= 0x60;
+            },
+            MemState::PpuData   => {
+                memory.set_latch(self.vram.load_data());
+            },
+            MemState::NoState   => (),
+            _                   => (),
         }
     }
-
-    pub fn load_word_vram (&mut self, address: W<u16>) -> W<u16> {
-        let word : W<u16> = W16!(self.load_vram(address));
-        word | W16!(self.load_vram(address + W(1)) << 8)
-    }
-
-    pub fn store_word_vram (&mut self, address: W<u16>, word: W<u16>) {
-        self.store_vram(address, W8!(word >> 8));
-        self.store_vram(address + W(1), W8!(word));
-    }
-
 }
 
 impl fmt::Debug for Ppu {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let mut output  = "oam: [".to_string();
-        for i in 0..255 {
-            output.push_str(&format!("{:02x}|", self.oam[i]));
-        }
-        output.push_str(&format!("{:#x}]", self.oam[255]));
-        write!(f, "Vram addr: {:#x} \n {}", self.vram_address, output)
+        write!(f, "PPU: \n OAM: {:?} \n VRAM: {:?}", self.oam, self.vram)
     }
 }
 
 impl Default for Ppu {
     fn default () -> Ppu {
         Ppu::new()
+    }
+}
+
+#[derive(Default)]
+struct AddressLatch {
+    laddr   : W<u8>,
+    haddr   : W<u8>,
+    upper   : bool,
+}
+
+impl AddressLatch {
+    pub fn reset(&mut self) {
+        *self = AddressLatch::default();
+    }
+
+    pub fn get(&self) -> W<u16> {
+        W16!(self.haddr) << 8 | W16!(self.laddr)
+    }
+
+    pub fn set(&mut self, value: W<u8>) {
+        if self.upper {
+            self.haddr = value;
+        } else {
+            self.laddr = value;
+        }
+        self.upper = !self.upper;
+    }
+}
+
+struct Vram {
+    mem     : [u8; 0x4000],
+    latch   : AddressLatch,
+}
+
+impl fmt::Debug for Vram {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let mut output = "VRAM: mem: \n".to_string();
+        for i in 0..0x4000 {
+            output.push_str(&format!("{:02x}|", self.mem[i]));
+        }
+        write!(f, "{} addr: {:#x},", output, self.latch.get().0)
+    }
+}
+
+impl Default for Vram {
+    fn default() -> Vram {
+        Vram {
+            mem     : [0; 0x4000],
+            latch   : AddressLatch::default(),
+        }
+    }
+}
+
+impl Vram {
+    pub fn load_data(&mut self) -> W<u8> {
+        let addr = self.latch.get();
+        self.load(addr)
+    }
+
+    pub fn store_data(&mut self, value: W<u8>) {
+        let addr = self.latch.get();
+        self.store(addr, value);
+    }
+
+    pub fn set_addr(&mut self, value: W<u8>) {
+        self.latch.set(value);
+    }
+
+    pub fn reset_addr(&mut self) {
+        self.latch.reset();
+    }
+}
+
+impl LoadStore for Vram {
+    fn load(&mut self, address: W<u16>) -> W<u8> {
+        let value = if address.0 < 0x3000 {
+            self.mem[address.0 as usize]
+        } else if address.0 < 0x3F00 {
+            self.mem[(address.0 - 0x1000) as usize]
+        } else if address.0 < 0x3F20 {
+            self.mem[address.0 as usize]
+        } else if address.0 < 0x4000 {
+            self.mem[(address.0 - 0x100) as usize]
+        } else {
+            self.mem[(address.0 % 0x4000) as usize]
+        };
+        W(value)
+    }
+
+    fn store(&mut self, address: W<u16>, value: W<u8>){
+        if address.0 < 0x3000 {
+            self.mem[address.0 as usize] = value.0;
+        } else if address.0 < 0x3F00 {
+            self.mem[(address.0 - 0x1000) as usize] = value.0;
+        } else if address.0 < 0x3F20 {
+            self.mem[address.0 as usize] = value.0;
+        } else if address.0 < 0x4000 {
+            self.mem[(address.0 - 0x100) as usize] = value.0;
+        } else {
+            self.mem[(address.0 % 0x4000) as usize] = value.0;
+        }
+    }
+}
+
+struct Oam {
+    mem     : [u8; 0x100],
+    addr    : W<u8>,
+}
+
+impl Default for Oam {
+    fn default() -> Oam {
+        Oam {
+            mem  : [0; 0x100],
+            addr : W(0),
+        }
+    }
+}
+
+impl fmt::Debug for Oam {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let mut output = "OAM: mem: \n".to_string();
+        for i in 0..0x100 {
+            output.push_str(&format!("{:02x}|", self.mem[i]));
+        }
+        write!(f, "{}, addr: {:#x}", output, self.addr.0)
+    }
+}
+
+impl Oam {
+    fn store_data(&mut self, value: W<u8>) {
+        self.mem[self.addr.0 as usize] = value.0;
+        self.addr = self.addr + W(1);
+    }
+
+    fn set_addr(&mut self, value: W<u8>) {
+        self.addr = value;
+    }
+}
+
+impl LoadStore for Oam {
+    fn load(&mut self, address: W<u16>) -> W<u8> {
+       W(self.mem[address.0 as usize])
+    }
+
+    fn store(&mut self, address: W<u16>, value: W<u8>) { 
+       self.mem[address.0 as usize] = value.0;
     }
 }

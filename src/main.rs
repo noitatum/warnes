@@ -8,6 +8,8 @@ mod mem;
 mod ppu;
 mod nes;
 mod gamepad;
+mod header;
+mod loadstore;
 
 fn main() {
  
