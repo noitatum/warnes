@@ -1,9 +1,10 @@
 extern crate sdl2;
 
 // nes 
-use mem::{Memory, MemState};
+use mem::{Memory, IoState, MemState};
+use loadstore::LoadStore;
 
-// sdl2
+// sdl
 use sdl2::event::Event;
 use sdl2::keyboard::Keycode;
 
@@ -31,17 +32,17 @@ impl GamePad {
 impl GamePad {
     // Reads the joystick (default to keyboard) and writes to memory accordingly.
     pub fn read_keys(&mut self, mem: &mut Memory, pump: &mut sdl2::EventPump) {
-        if let MemState::ReadGamePad1 = mem.write_status {    
+        if let IoState::ReadGamePad1 = mem.io_write_status {    
             if self.key != 8 {
                 mem.store(GAMEPAD1, W(self.joykeys[self.key as usize]));
                 self.key += 1;
             } else {
                 self.key = 0;
-                mem.write_status = MemState::NoState; 
+                mem.io_write_status = IoState::NoState; 
             }
         }
 
-        if let MemState::StartReadGamePad1 = mem.write_status {
+        if let IoState::StartReadGamePad1 = mem.io_write_status {
             for event in pump.poll_iter() { 
                 match event {
                     // Keyboard to joy Z = A, X = B, S = Select, Enter = Enter, arrows = dpad
@@ -61,7 +62,7 @@ impl GamePad {
                     _                                                        => {},
                 }
             }
-            mem.write_status = MemState::ReadGamePad1;
+            mem.io_write_status = IoState::ReadGamePad1;
         }
     }
 }

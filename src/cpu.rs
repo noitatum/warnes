@@ -1,11 +1,15 @@
 use std::fmt;
 use mem::{MemState, Memory as Mem};
+use loadstore::LoadStore;
 use std::num::Wrapping as W;
 
 #[allow(non_camel_case_types)]
 type fn_instruction     = fn(&mut Regs, &mut Mem, W<u16>);  
 #[allow(non_camel_case_types)]
 type fn_addressing      = fn(&mut Regs, &mut Mem) -> (W<u16>, u32); 
+
+type FnInstruction     = fn(&mut Regs, &mut Mem, W<u16>);  
+type FnAddressing      = fn(&mut Regs, &mut Mem) -> (W<u16>, u32); 
 
 /* Branch flag types */
 const BRANCH_FLAG_TABLE : [u8; 4] = 
@@ -78,16 +82,16 @@ impl DMA {
         if self.cycles_left > 0 {
             self.execute(memory);
             true
-        } else if let MemState::OamDma = memory.write_status {
-            self.start(memory, cycles as u32);
+        } else if let Some(page) = memory.get_oamdma() {
+            self.start(memory, page, cycles as u32);
             true
         } else {
             false
         }
     }
 
-    fn start(&mut self, memory: &mut Mem, cycles: u32) {
-        self.address = W((memory.oamdma as u16) << 8); 
+    fn start(&mut self, memory: &mut Mem, page: W<u8>, cycles: u32) {
+        self.address = W16!(page) << 8; 
         // Additional cycle if on odd cycle
         self.cycles_left = DMA_CYCLES + cycles & 1;
     }
@@ -110,7 +114,7 @@ impl DMA {
 struct Execution {
     cycles_left     : u32,
     address         : W<u16>,
-    instruction     : fn_instruction,
+    instruction     : FnInstruction,
 }
 
 impl Default for Execution {
@@ -611,7 +615,7 @@ impl fmt::Debug for Regs {
 
 /* WARNING: Branch instructions are replaced with jumps */
 /* Addressing, Instruction, Cycles, Has Penalty */
-const OPCODE_TABLE : [(fn_addressing, fn_instruction, u32, bool); 256] = [
+const OPCODE_TABLE : [(FnAddressing, FnInstruction, u32, bool); 256] = [
     (Regs::imp, Regs::brk, 7, false), (Regs::idx, Regs::ora, 6, false), 
     (Regs::imp, Regs::nop, 2, false), (Regs::imp, Regs::nop, 2, false), 
     (Regs::imp, Regs::nop, 2, false), (Regs::zpg, Regs::ora, 3, false),
