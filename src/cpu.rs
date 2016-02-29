@@ -25,16 +25,7 @@ const FLAG_PUSHED       : u8 = 0x20;
 const FLAG_OVERFLOW     : u8 = 0x40;
 const FLAG_SIGN         : u8 = 0x80;
 
-const PPUCTRL           : W<u16> = W(0x2000);
-const PPUMASK           : W<u16> = W(0x2001);
-const PPUSTATUS         : W<u16> = W(0x2002);
-const OAMADDR           : W<u16> = W(0x2003);
 const OAMDATA           : W<u16> = W(0x2004);
-const PPUSCROLL         : W<u16> = W(0x2005);
-const PPUADDR           : W<u16> = W(0x2006);
-const PPUDATA           : W<u16> = W(0x2007);
-const OAMDMA            : W<u16> = W(0x4014);
-
 const DMA_CYCLES        : u32 = 512;
 
 #[derive(Default)]
