@@ -52,22 +52,22 @@ impl Nes {
     pub fn run(&mut self) {
     
         let video_subsystem = self.sdl_context.video().unwrap();
-        let  window  =  video_subsystem.window("RNES -----", WIDTH, HEIGHT)
-                            .position_centered()
-                            //.resizable() fullscreen lol
-                            .opengl()
-                            .build()
-                            .unwrap();
+        let window = video_subsystem.window("RNES -----", WIDTH, HEIGHT)
+                     .position_centered()
+                   //.resizable() fullscreen lol
+                     .opengl()
+                     .build()
+                     .unwrap();
 
         let mut renderer = window.renderer().build().unwrap();
         let mut event_pump = self.sdl_context.event_pump().unwrap();
 
-        let mut echo = PreciseTime::now();
+        let mut time = PreciseTime::now();
 
         'nes: loop {
-            if echo.to(PreciseTime::now()) > time::Duration::seconds(1) {
+            if time.to(PreciseTime::now()) > time::Duration::seconds(1) {
+                time = PreciseTime::now();
                 self.ppu.print_fps();
-                echo = PreciseTime::now();
                 for event in event_pump.poll_iter() {
                     match event {
                         Event::Quit {..} | Event::KeyDown
