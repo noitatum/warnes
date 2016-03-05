@@ -4,8 +4,10 @@ use utils::print_mem;
 use std::num::Wrapping as W;
 use std::fmt;
 
-const RAM_SIZE  : usize = 0x800;
-const VRAM_SIZE : usize = 0x800;
+use mapper::Mapper;
+
+const RAM_SIZE     : usize = 0x800;
+const VRAM_SIZE    : usize = 0x800;
 
 #[derive(Clone, Copy)]
 pub enum MemState {
@@ -62,8 +64,10 @@ impl fmt::Display for IoState {
 }
 
 pub struct Memory {
-    ram             : [u8; RAM_SIZE],
-    vram            : [u8; VRAM_SIZE],
+    ram                 : [u8; RAM_SIZE],
+    vram                : [u8; VRAM_SIZE],
+
+    mapper              : Box<Mapper>,
 
     mem_load_status     : MemState,
     mem_store_status    : MemState,
@@ -79,10 +83,12 @@ pub struct Memory {
 }
 
 impl Memory {
-    pub fn new () -> Memory {
+    pub fn new (mapper: Box<Mapper>) -> Memory {
         Memory {
-            ram             : [0; RAM_SIZE],
-            vram            : [0; VRAM_SIZE], 
+            ram                 : [0; RAM_SIZE],
+            vram                : [0; VRAM_SIZE], 
+
+            mapper              : mapper,
 
             mem_load_status     : MemState::NoState,
             mem_store_status    : MemState::NoState,            
@@ -120,35 +126,12 @@ impl Memory {
         return status;
     }
     
-    // FIXME Broken code, fix and move to mapper
-
     pub fn chr_load(&mut self, address: W<u16>) -> W<u8> {
-        let value = if address.0 < 0x3000 {
-            self.vram[address.0 as usize]
-        } else if address.0 < 0x3F00 {
-            self.vram[(address.0 - 0x1000) as usize]
-        } else if address.0 < 0x3F20 {
-            self.vram[address.0 as usize]
-        } else if address.0 < 0x4000 {
-            self.vram[(address.0 - 0x100) as usize]
-        } else {
-            self.vram[(address.0 % 0x4000) as usize]
-        };
-        W(value)
+        W(self.mapper.chr_load(&mut self.vram[..], address))
     }
 
     pub fn chr_store(&mut self, address: W<u16>, value: W<u8>){
-        if address.0 < 0x3000 {
-            self.vram[address.0 as usize] = value.0;
-        } else if address.0 < 0x3F00 {
-            self.vram[(address.0 - 0x1000) as usize] = value.0;
-        } else if address.0 < 0x3F20 {
-            self.vram[address.0 as usize] = value.0;
-        } else if address.0 < 0x4000 {
-            self.vram[(address.0 - 0x100) as usize] = value.0;
-        } else {
-            self.vram[(address.0 % 0x4000) as usize] = value.0;
-        }
+        self.mapper.chr_store(&mut self.vram[..], address, value.0);
     }
 
     pub fn get_io_load_status(&mut self) -> bool {
@@ -175,13 +158,13 @@ impl Memory {
 
 impl LoadStore for Memory {
     fn load(&mut self, address: W<u16>) -> W<u8> {
-        let address = address.0; 
-        let value = if address < 0x2000 {
+        let addr = address.0; 
+        let value = if addr < 0x2000 {
             self.mem_load_status = MemState::Memory;
-            self.ram[(address & 0x7ff) as usize]
-        } else if address < 0x4000 {
+            self.ram[(addr & 0x7ff) as usize]
+        } else if addr < 0x4000 {
             // FIXME: This is broken now for status and oamdata
-            self.mem_load_status = match address & 0x7 {
+            self.mem_load_status = match addr & 0x7 {
                 // Other registers are read only
                 2 => MemState::PpuStatus,
                 4 => MemState::OamData,
@@ -189,10 +172,10 @@ impl LoadStore for Memory {
                 _ => MemState::NoState,
             };
             self.latch.0
-        } else if address < 0x4020 {
+        } else if addr < 0x4020 {
             /* Apu AND IO TODO*/
             //self.mem_load_status = MemState::Io;
-            match address {
+            match addr {
                 0x4000 => 0,
                 0x4001 => 0,
                 0x4002 => 0,
@@ -232,20 +215,19 @@ impl LoadStore for Memory {
                 _      => 0,
             }
         } else {
-            //self.mapper.load()
-            0
+            self.mapper.prg_load(address)
         };
         W(value)
     }
 
     fn store (&mut self, address: W<u16>, value: W<u8>) {
-        let address = address.0; 
+        let addr = address.0; 
         let val = value.0;
-        if address < 0x2000 {
+        if addr < 0x2000 {
             self.mem_store_status = MemState::Memory;
-            self.ram[(address & 0x7ff) as usize] = val
-        } else if address < 0x4000 {
-            self.mem_store_status = match address & 0x7 {
+            self.ram[(addr & 0x7ff) as usize] = val
+        } else if addr < 0x4000 {
+            self.mem_store_status = match addr & 0x7 {
                 0 => MemState::PpuCtrl,
                 1 => MemState::PpuMask,
              // 2 => MemState::PpuStatus Read Only Register 
@@ -257,10 +239,10 @@ impl LoadStore for Memory {
                 _ => MemState::NoState, 
             };
             self.latch = value;
-        } else if address < 0x4020 {
+        } else if addr < 0x4020 {
             /* Apu AND IO TODO*/
             self.mem_store_status = MemState::Io;
-            match address {
+            match addr {
                 0x4000 => (),
                 0x4001 => (),
                 0x4002 => (),
@@ -313,7 +295,7 @@ impl LoadStore for Memory {
                 _      => (),
             }
         } else {
-            //self.mapper.store()
+            self.mapper.prg_store(address, val);
         }
     }
 }
@@ -326,11 +308,5 @@ impl fmt::Debug for Memory {
         output.push_str("VRAM:\n");
         print_mem(&mut output, &self.vram[..]);
         write!(f, "{{ latch: {:#x}, oamdma: {:?}, mem_load_status: {}, mem_store_status: {}}}, \n {}", self.latch.0, self.oamdma, self.mem_load_status, self.mem_store_status, output)
-    }
-}
-
-impl Default for Memory {
-    fn default () -> Memory {
-        Memory::new()
     }
 }

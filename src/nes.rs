@@ -1,8 +1,12 @@
 extern crate sdl2;
 extern crate time;
 
+// STD
+use std::io::{Error, ErrorKind};
+use std::path::Path;
 
 // Custom stuff
+use header::Header;
 use cpu::Cpu;
 use ppu::Ppu;
 use mem::Memory as Mem;
@@ -29,13 +33,20 @@ pub struct Nes {
 }
 
 impl Nes {
-    pub fn new () -> Nes {
-        Nes {
-            cpu         : Default::default(),
-            ppu         : Ppu::new(),
-            mem         : Mem::new(),
-            sdl_context : sdl2::init().unwrap(),
-            gamepad     : GamePad::new(),
+    pub fn new_from_file<P: AsRef<Path>>(path: P) -> Result<Nes, Error> {
+        let option = try!(Header::new_from_file(path)).get_mapper();
+        if let Some(mapper) = option {
+            Ok (
+                Nes {
+                    cpu         : Default::default(),
+                    ppu         : Ppu::new(),
+                    mem         : Mem::new(mapper),
+                    sdl_context : sdl2::init().unwrap(),
+                    gamepad     : GamePad::new(),
+                }
+            )
+        } else {
+            Err(Error::new(ErrorKind::Other, "Unrecognized Mapper"))
         }
     }
 }

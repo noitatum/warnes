@@ -49,42 +49,47 @@ const STATUS_SPRITE_OVERFLOW    : u8 = 0x20;
 const STATUS_SPRITE_0_HIT       : u8 = 0x40;
 const STATUS_VERTICAL_BLANK     : u8 = 0x80; // set = in vertical blank
 
+const PALETTE_SIZE              : usize = 0x20;
+const PALETTE_ADDRESS           : usize = 0x3F00;
+
+const PPU_ADDRESS_SPACE         : usize = 0x4000;
 
 const VBLANK_END                : u32 = 27901; 
 
 pub struct Ppu {
+    palette         : [u8; PALETTE_SIZE],
     oam             : Oam,
-    vram            : AddressLatch, 
-    scroll          : AddressLatch,
-    cycles          : u32,
 
-    ctrl            : W<u8>,
-    mask            : W<u8>,
+    // Registers
+    ctrl            : u8,
+    mask            : u8,
     status          : u8,
+    scroll          : AddressLatch,
+    addr            : AddressLatch, 
 
     px_height       : usize,
     px_width        : usize,
     
+    cycles          : u32,
     fps             : u32,
 }
 
 impl Ppu {
     pub fn new () -> Ppu {
         Ppu {
+            palette         : [0u8; PALETTE_SIZE], 
             oam             : Oam::default(), 
-            vram            : AddressLatch::default(),
-            scroll          : AddressLatch::default(),
-            cycles          : 0,
 
-
-            // Registers, some may be removed later.
-            ctrl            : W(0),
-            mask            : W(0),
+            ctrl            : 0,
+            mask            : 0,
             status          : 0,
+            scroll          : AddressLatch::default(),
+            addr            : AddressLatch::default(),
 
             px_height       : 0,
             px_width        : 0,
 
+            cycles          : 0,
             fps             : 0,
         }
     }
@@ -132,14 +137,14 @@ impl Ppu {
     fn ls_latches(&mut self, memory: &mut Mem){
         let (latch, status) = memory.get_latch();
         match status {
-            MemState::PpuCtrl   => { self.ctrl = latch; }, 
-            MemState::PpuMask   => { self.mask = latch; },
+            MemState::PpuCtrl   => { self.ctrl = latch.0; }, 
+            MemState::PpuMask   => { self.mask = latch.0; },
             MemState::OamAddr   => { self.oam.set_addr(latch); },
             MemState::OamData   => { self.oam.store_data(latch); },
             MemState::PpuScroll => { self.scroll.set(latch); },
-            MemState::PpuAddr   => { self.vram.set(latch); },
+            MemState::PpuAddr   => { self.addr.set(latch); },
             MemState::PpuData   => { 
-                memory.chr_store(self.vram.get(), latch); 
+                memory.chr_store(self.addr.get(), latch); 
             },
             MemState::NoState   => (),
             _                   => (), 
@@ -149,16 +154,54 @@ impl Ppu {
 
         match read_status {
             MemState::PpuStatus => {
-                self.vram.reset();
+                self.addr.reset();
                 self.scroll.reset();
                 self.status &= 0x60;
             },
             MemState::PpuData   => { 
-                let value = memory.chr_load(self.vram.get()); 
+                let value = memory.chr_load(self.addr.get()); 
                 memory.set_latch(value);
             },
             MemState::NoState   => {},
             _                   => {},
+        }
+    }
+
+    fn palette_mirror(&mut self, address: usize) -> usize {
+        let index = address & (PALETTE_SIZE - 1);
+        // Mirroring 0x10/0x14/0x18/0x1C to lower address
+        if (index & 0x3) == 0 {
+            index & 0xF
+        } else {
+            index
+        }
+    }
+
+    fn load(&mut self, memory: &mut Mem) -> W<u8> {
+        let address = self.addr.get();
+        let addr = address.0 as usize;
+        if addr < PALETTE_ADDRESS {
+            memory.chr_load(address)
+        } else {
+            if addr < PPU_ADDRESS_SPACE {
+                W(self.palette[self.palette_mirror(addr)])
+            } else {
+                panic!("PPUADDR >= 0x4000");
+            }
+        }
+    }
+
+    fn store(&mut self, memory: &mut Mem, value: W<u8>) {
+        let address = self.addr.get();
+        let addr = address.0 as usize;
+        if addr < PALETTE_ADDRESS {
+            memory.chr_store(address, value);
+        } else {
+            if addr < PPU_ADDRESS_SPACE {
+                self.palette[self.palette_mirror(addr)] = value.0;
+            } else {
+                panic!("PPUADDR >= 0x4000");
+            }
         }
     }
 }
@@ -172,8 +215,8 @@ impl Default for Ppu {
 
 impl fmt::Debug for Ppu {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "PPU: \n OAM: {:?}, scroll: {:?}, vram: {:?}", 
-               self.oam, self.scroll, self.vram)
+        write!(f, "PPU: \n OAM: {:?}, ctrl: {:?}, mask: {:?}, status: {:?}, scroll: {:?}, addr: {:?}", 
+               self.oam, self.ctrl, self.mask, self.status, self.scroll, self.addr)
     }
 }
 
