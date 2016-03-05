@@ -1,5 +1,4 @@
 use std::num::Wrapping as W;
-use header::Header;
 
 const VRAM_SIZE : usize = 0x800;
 
@@ -52,7 +51,7 @@ impl Mapper for Nrom {
         self.0.prg_rom[addr & mask]
     }
 
-    fn prg_store(&mut self, address: W<u16>, value: u8) {
+    fn prg_store(&mut self, _: W<u16>, _: u8) {
 
     }
 }

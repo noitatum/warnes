@@ -97,6 +97,10 @@ impl Ppu {
     pub fn cycle(&mut self, memory: &mut Mem, renderer: &mut sdl2::render::Renderer) {
         self.ls_latches(memory);
 
+        // TODO: PPU CODE
+        let val = self.load(memory);
+        self.store(memory, val);
+
         if self.cycles == 0 {
             self.draw(renderer);
         } else {

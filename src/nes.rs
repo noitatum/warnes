@@ -2,7 +2,7 @@ extern crate sdl2;
 extern crate time;
 
 // STD
-use std::io::{Error, ErrorKind};
+use std::io::Error;
 use std::path::Path;
 
 // Custom stuff
@@ -34,20 +34,16 @@ pub struct Nes {
 
 impl Nes {
     pub fn new_from_file<P: AsRef<Path>>(path: P) -> Result<Nes, Error> {
-        let option = try!(Header::new_from_file(path)).get_mapper();
-        if let Some(mapper) = option {
-            Ok (
-                Nes {
-                    cpu         : Default::default(),
-                    ppu         : Ppu::new(),
-                    mem         : Mem::new(mapper),
-                    sdl_context : sdl2::init().unwrap(),
-                    controller  : Controller::new(),
-                }
-            )
-        } else {
-            Err(Error::new(ErrorKind::Other, "Unrecognized Mapper"))
-        }
+        let mapper = try!(try!(Header::new_from_file(path)).get_mapper());
+        Ok (
+            Nes {
+                cpu         : Default::default(),
+                ppu         : Ppu::new(),
+                mem         : Mem::new(mapper),
+                sdl_context : sdl2::init().unwrap(),
+                controller  : Controller::new(),
+            }
+        )
     }
 }
 
