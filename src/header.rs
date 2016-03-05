@@ -3,8 +3,12 @@ use std::io::{Error, ErrorKind};
 use std::fs::File;
 use std::path::Path;
 
+
+// its not dead!!
+#[allow(dead_code)]
 const INES_SIGNATURE : [u8; 4] = [0x4E, 0x45, 0x53, 0x1A];
 
+#[allow(dead_code)]
 pub struct Header {
     rom_file     : File,
     mapper       : u8,
@@ -15,6 +19,7 @@ pub struct Header {
 }
 
 impl Header {
+    #[allow(dead_code)]
     pub fn new_from_file<P: AsRef<Path>>(path: P) -> Result<Header, Error> {
         let mut rom = try!(File::open(path));
         let mut file_header : [u8; 16] = [0; 16];

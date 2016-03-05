@@ -156,9 +156,10 @@ impl Memory {
     pub fn get_io_load_status(&mut self, gp : W<u16>) -> bool {
         if gp == GAMEPAD1 {
             return self.get_io_load_status_gp1();
-        } else {
+        } else if gp == GAMEPAD2 {
             return self.get_io_load_status_gp2();
         }
+        return false;
     }
 
     pub fn get_io_load_status_gp1(&mut self) -> bool {

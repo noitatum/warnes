@@ -51,8 +51,8 @@ impl GamePad {
 
 impl Controller {
     pub fn push_keys(&mut self, mem: &mut Memory, pump: &mut sdl2::EventPump) {
-        self.reading_gp1 = self.gamepad1.push_keys(self.reading_gp1, mem, pump);
-        self.reading_gp2 = self.gamepad2.push_keys(self.reading_gp2, mem, pump);
+        self.reading_gp1 = self.gamepad1.push_keys(self.reading_gp1, mem);
+        self.reading_gp2 = self.gamepad2.push_keys(self.reading_gp2, mem);
 
         if ((mem.get_strobe() & 1) > 0) && self.strobe == false{
             self.strobe = true;
@@ -68,7 +68,7 @@ impl Controller {
 
 impl GamePad {
     // Reads the joystick (default to keyboard) and writes to memory accordingly.
-    pub fn push_keys(&mut self, mut reading : bool, mem: &mut Memory, pump: &mut sdl2::EventPump) -> bool {
+    pub fn push_keys(&mut self, mut reading : bool, mem: &mut Memory) -> bool {
         // If reading it means a write of 1/0 to 0x4016 
         // we write to 0x4016 or 0x4017 the status of the key in gamepad
         if reading && mem.get_io_load_status(self.mem_pos) {
