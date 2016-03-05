@@ -70,7 +70,7 @@ impl Nes {
                 }
             }
 
-            self.controller.read_keys(&mut self.mem, &mut event_pump);
+            self.controller.push_keys(&mut self.mem, &mut event_pump);
             self.cpu.cycle(&mut self.mem);
             self.ppu.cycle(&mut self.mem, &mut renderer);
             self.ppu.cycle(&mut self.mem, &mut renderer);

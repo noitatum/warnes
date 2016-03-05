@@ -50,15 +50,15 @@ impl GamePad {
 }
 
 impl Controller {
-    pub fn read_keys(&mut self, mem: &mut Memory, pump: &mut sdl2::EventPump) {
-        self.reading_gp1 = self.gamepad1.read_keys(self.reading_gp1, mem, pump);
-        self.reading_gp2 = self.gamepad2.read_keys(self.reading_gp2, mem, pump);
+    pub fn push_keys(&mut self, mem: &mut Memory, pump: &mut sdl2::EventPump) {
+        self.reading_gp1 = self.gamepad1.push_keys(self.reading_gp1, mem, pump);
+        self.reading_gp2 = self.gamepad2.push_keys(self.reading_gp2, mem, pump);
 
-        if ((mem.get_joy1() & 1) > 0) && self.strobe == false{
+        if ((mem.get_strobe() & 1) > 0) && self.strobe == false{
             self.strobe = true;
-        } else if ((mem.get_joy1() & 1) == 0) && self.strobe == true {
-            self.gamepad1.get_state(pump);
-            self.gamepad2.get_state(pump);
+        } else if ((mem.get_strobe() & 1) == 0) && self.strobe == true {
+            self.gamepad1.get_keys(pump);
+            self.gamepad2.get_keys(pump);
             self.reading_gp1 = true;
             self.reading_gp2 = true;
             self.strobe = false;
@@ -68,7 +68,7 @@ impl Controller {
 
 impl GamePad {
     // Reads the joystick (default to keyboard) and writes to memory accordingly.
-    pub fn read_keys(&mut self, mut reading : bool, mem: &mut Memory, pump: &mut sdl2::EventPump) -> bool {
+    pub fn push_keys(&mut self, mut reading : bool, mem: &mut Memory, pump: &mut sdl2::EventPump) -> bool {
         // If reading it means a write of 1/0 to 0x4016 
         // we write to 0x4016 or 0x4017 the status of the key in gamepad
         if reading && mem.get_io_load_status(self.mem_pos) {
@@ -81,10 +81,14 @@ impl GamePad {
                 reading = false;
             }
         }
+        // If we finish reading reading will return a false status
+        // This guarantees that if we read all the first gamepad
+        // and wait to read the second we will still be able to with the original state
+        // writing 1/0 again to 0x4016 will re-load all the gamepad-keys on gp1 and gp2
         return reading;
     }
 
-    pub fn get_state (&mut self, pump: &mut sdl2::EventPump) {
+    pub fn get_keys (&mut self, pump: &mut sdl2::EventPump) {
         for event in pump.poll_iter() { 
             match event {
                 // Keyboard to joy Z = A, X = B, S = Select, Enter = Enter, arrows = dpad

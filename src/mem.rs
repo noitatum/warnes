@@ -181,13 +181,10 @@ impl Memory {
         self.io_store_status = state;
     }
 
-    pub fn get_joy1(&self) -> u8 {
+    pub fn get_strobe(&self) -> u8 {
         self.joy1 
     }
 
-    pub fn get_joy2(&self) -> u8 {
-        self.joy2
-    }
 }
 
 impl LoadStore for Memory {
@@ -233,9 +230,11 @@ impl LoadStore for Memory {
                 0x4014 => 0, // OAMDMA is Write only, TODO: Check what happens
                 0x4015 => 0,
                 0x4016 => { self.io_load_status = IoState::GamePad1;
+                            self.mem_load_status = MemState::Io;
                             self.joy1 
                           }
                 0x4017 => { self.io_load_status = IoState::GamePad2;
+                            self.mem_load_status = MemState::Io;
                             self.joy2 
                           }
                 0x4018 => 0,
@@ -308,17 +307,9 @@ impl LoadStore for Memory {
                 0x4016 => { self.joy1 = val;
                             self.io_store_status = IoState::GamePad1;
                           },
-                0x4017 => { /*
-                    if let IoState::GamePad2 = self.io_load_status {
-                        self.joy2 = val;
-                    }
-                    if self.keystrobe2 && ((self.joy2 & 1) == 0) {
-                        self.io_load_status = IoState::StartGamePad2;
-                        self.keystrobe2 = false;
-                    } else if self.joy2 & 1 > 0 {
-                        self.keystrobe2 = true;
-                    }
-                */},
+                0x4017 => { self.joy2 = val;
+                            self.mem_store_status = MemState::Io;
+                          },
                 0x4018 => (),
                 0x4019 => (),
                 0x401A => (),
