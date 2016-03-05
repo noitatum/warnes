@@ -146,9 +146,9 @@ impl Ppu {
             MemState::PpuMask   => { self.mask = latch.0; },
             MemState::OamAddr   => { self.oam.set_addr(latch); },
             MemState::OamData   => { self.oam.store_data(latch); },
-            MemState::PpuScroll => { self.scroll.set(latch); },
-            MemState::PpuAddr   => { self.addr.set(latch); },
-            MemState::PpuData   => { memory.chr_store(self.addr.get(), latch);}, 
+            MemState::PpuScroll => { self.scroll.set_address(latch); },
+            MemState::PpuAddr   => { self.addr.set_address(latch); },
+            MemState::PpuData   => { self.store(memory, latch);}, 
             _                   => (), 
         }
 
@@ -156,12 +156,12 @@ impl Ppu {
 
         match read_status {
             MemState::PpuStatus => {
-                self.addr.reset();
-                self.scroll.reset();
+                self.addr.reset_address();
+                self.scroll.reset_address();
                 self.status &= 0x60;
             },
             MemState::PpuData   => { 
-                let value = memory.chr_load(self.addr.get()); 
+                let value = self.load(memory); 
                 memory.set_latch(value);
             },
             _                   => {},
@@ -179,7 +179,7 @@ impl Ppu {
     }
 
     fn load(&mut self, memory: &mut Mem) -> W<u8> {
-        let address = self.addr.get();
+        let address = self.addr.get_address();
         let addr = address.0 as usize;
         if addr < PALETTE_ADDRESS {
             memory.chr_load(address)
@@ -193,7 +193,7 @@ impl Ppu {
     }
 
     fn store(&mut self, memory: &mut Mem, value: W<u8>) {
-        let address = self.addr.get();
+        let address = self.addr.get_address();
         let addr = address.0 as usize;
         if addr < PALETTE_ADDRESS {
             memory.chr_store(address, value);
@@ -230,15 +230,15 @@ struct AddressLatch {
 
 
 impl AddressLatch {
-    pub fn reset(&mut self) {
+    pub fn reset_address(&mut self) {
         *self = AddressLatch::default();
     }
 
-    pub fn get(&self) -> W<u16> {
+    pub fn get_address(&self) -> W<u16> {
         W16!(self.haddr) << 8 | W16!(self.laddr)
     }
 
-    pub fn set(&mut self, value: W<u8>) {
+    pub fn set_address(&mut self, value: W<u8>) {
         if self.upper {
             self.haddr = value;
         } else {
@@ -250,7 +250,7 @@ impl AddressLatch {
 
 impl fmt::Debug for AddressLatch {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{:?}", self.get())
+        write!(f, "{:?}", self.get_address())
     }
 }
 
