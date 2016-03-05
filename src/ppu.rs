@@ -138,11 +138,8 @@ impl Ppu {
             MemState::OamData   => { self.oam.store_data(latch); },
             MemState::PpuScroll => { self.scroll.set(latch); },
             MemState::PpuAddr   => { self.vram.set(latch); },
-            MemState::PpuData   => { 
-                memory.chr_store(self.vram.get(), latch); 
-            },
-            MemState::NoState   => (),
-            _                   => (), 
+            MemState::PpuData   => { memory.chr_store(self.vram.get(), latch);},
+            _                   => {}, 
         }
 
         let read_status = memory.get_mem_load_status();
@@ -157,7 +154,6 @@ impl Ppu {
                 let value = memory.chr_load(self.vram.get()); 
                 memory.set_latch(value);
             },
-            MemState::NoState   => {},
             _                   => {},
         }
     }

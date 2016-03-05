@@ -7,7 +7,7 @@ mod cpu;
 mod mem;
 mod ppu;
 mod nes;
-mod gamepad;
+mod controller;
 mod header;
 mod loadstore;
 mod utils;

@@ -11,49 +11,77 @@ use sdl2::keyboard::Keycode;
 // std stuff
 use std::num::Wrapping as W;
 
-const GAMEPAD1  : W<u16> = W(0x4016);
-const GAMEPAD2  : W<u16> = W(0x4017);
 
 pub struct GamePad {
     //a, b, select, start, up, down, left, right
     joykeys     : [u8; 8],
     key         : u8,
-    strobe      : bool,
-    reading     : bool,
+    mem_pos  : W<u16>
 }
 
-impl GamePad {
-    pub fn new () -> GamePad {
-        GamePad {
-            joykeys : [0; 8],
-            key     : 0,
-            strobe  : false,
-            reading : false,
+pub struct Controller {
+    gamepad1    : GamePad,
+    gamepad2    : GamePad,
+    strobe      : bool,
+    reading_gp1 : bool,
+    reading_gp2 : bool,
+}
+
+impl Controller {
+    pub fn new () -> Controller {
+        Controller {
+            gamepad1    : GamePad::new(W(0x4016)),
+            gamepad2    : GamePad::new(W(0x4017)),
+            strobe      : false,
+            reading_gp1 : false,
+            reading_gp2 : false,
         }
     }
 }
 
 impl GamePad {
-    // Reads the joystick (default to keyboard) and writes to memory accordingly.
+    pub fn new (mem_pos : W<u16>) -> GamePad {
+        GamePad {
+            joykeys : [0; 8],
+            key     : 0,
+            mem_pos : mem_pos,
+        }
+    }
+}
+
+impl Controller {
     pub fn read_keys(&mut self, mem: &mut Memory, pump: &mut sdl2::EventPump) {
-        if self.reading && mem.get_io_load_status() {
-            if self.key != 8 {
-                mem.store(GAMEPAD1, W(self.joykeys[self.key as usize]));
-                mem.set_io_store(IoState::NoState);
-                self.key += 1;
-            } else {
-                self.key = 0;
-                self.reading = false;
-            }
-        } 
+        self.reading_gp1 = self.gamepad1.read_keys(self.reading_gp1, mem, pump);
+        self.reading_gp2 = self.gamepad2.read_keys(self.reading_gp2, mem, pump);
 
         if ((mem.get_joy1() & 1) > 0) && self.strobe == false{
             self.strobe = true;
         } else if ((mem.get_joy1() & 1) == 0) && self.strobe == true {
-            self.get_state(pump);
-            self.reading = true;
+            self.gamepad1.get_state(pump);
+            self.gamepad2.get_state(pump);
+            self.reading_gp1 = true;
+            self.reading_gp2 = true;
             self.strobe = false;
         } 
+    }
+}
+
+impl GamePad {
+    // Reads the joystick (default to keyboard) and writes to memory accordingly.
+    pub fn read_keys(&mut self, mut reading : bool, mem: &mut Memory, pump: &mut sdl2::EventPump) -> bool {
+        // If reading it means a write of 1/0 to 0x4016 
+        // we write to 0x4016 or 0x4017 the status of the key in gamepad
+        if reading && mem.get_io_load_status(self.mem_pos) {
+            if self.key != 8 {
+                mem.store(self.mem_pos, W(self.joykeys[self.key as usize]));
+                mem.set_io_store(IoState::NoState);
+                self.key += 1;
+            } else {
+                self.key = 0;
+                reading = false;
+            }
+        }
+        return reading;
     }
 
     pub fn get_state (&mut self, pump: &mut sdl2::EventPump) {
@@ -72,10 +100,11 @@ impl GamePad {
                         Keycode::Right     => self.joykeys[7] = true as u8,
                         _                  => {}, 
                     }
-                }
+               }
                 _                                         => {},
             }
         }
+        self.key = 0;
     }
 }
                                                                           

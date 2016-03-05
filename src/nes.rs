@@ -6,7 +6,7 @@ extern crate time;
 use cpu::Cpu;
 use ppu::Ppu;
 use mem::Memory as Mem;
-use gamepad::GamePad;
+use controller::Controller;
 
 // Time
 use time::PreciseTime;
@@ -25,7 +25,7 @@ pub struct Nes {
     ppu         : Ppu,
     mem         : Mem,
     sdl_context : Sdl,
-    gamepad     : GamePad,
+    controller  : Controller,
 }
 
 impl Nes {
@@ -35,7 +35,7 @@ impl Nes {
             ppu         : Ppu::new(),
             mem         : Mem::new(),
             sdl_context : sdl2::init().unwrap(),
-            gamepad     : GamePad::new(),
+            controller  : Controller::new(),
         }
     }
 }
@@ -70,7 +70,7 @@ impl Nes {
                 }
             }
 
-            self.gamepad.read_keys(&mut self.mem, &mut event_pump);
+            self.controller.read_keys(&mut self.mem, &mut event_pump);
             self.cpu.cycle(&mut self.mem);
             self.ppu.cycle(&mut self.mem, &mut renderer);
             self.ppu.cycle(&mut self.mem, &mut renderer);

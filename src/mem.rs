@@ -6,6 +6,8 @@ use std::fmt;
 
 const RAM_SIZE  : usize = 0x800;
 const VRAM_SIZE : usize = 0x800;
+const GAMEPAD1  : W<u16> = W(0x4016);
+const GAMEPAD2  : W<u16> = W(0x4017);
 
 #[derive(Clone, Copy)]
 pub enum MemState {
@@ -62,8 +64,8 @@ impl fmt::Display for IoState {
 }
 
 pub struct Memory {
-    ram             : [u8; RAM_SIZE],
-    vram            : [u8; VRAM_SIZE],
+    ram                 : [u8; RAM_SIZE],
+    vram                : [u8; VRAM_SIZE],
 
     mem_load_status     : MemState,
     mem_store_status    : MemState,
@@ -81,8 +83,8 @@ pub struct Memory {
 impl Memory {
     pub fn new () -> Memory {
         Memory {
-            ram             : [0; RAM_SIZE],
-            vram            : [0; VRAM_SIZE], 
+            ram                 : [0; RAM_SIZE],
+            vram                : [0; VRAM_SIZE], 
 
             mem_load_status     : MemState::NoState,
             mem_store_status    : MemState::NoState,            
@@ -137,7 +139,7 @@ impl Memory {
         W(value)
     }
 
-    pub fn chr_store(&mut self, address: W<u16>, value: W<u8>){
+    pub fn chr_store(&mut self, address: W<u16>, value: W<u8>) {
         if address.0 < 0x3000 {
             self.vram[address.0 as usize] = value.0;
         } else if address.0 < 0x3F00 {
@@ -151,13 +153,29 @@ impl Memory {
         }
     }
 
-    pub fn get_io_load_status(&mut self) -> bool {
+    pub fn get_io_load_status(&mut self, gp : W<u16>) -> bool {
+        if gp == GAMEPAD1 {
+            return self.get_io_load_status_gp1();
+        } else {
+            return self.get_io_load_status_gp2();
+        }
+    }
+
+    pub fn get_io_load_status_gp1(&mut self) -> bool {
         if let IoState::GamePad1 = self.io_load_status {
             true
         } else{
             false
         }
     } 
+
+    pub fn get_io_load_status_gp2(&mut self) -> bool {
+        if let IoState::GamePad2 = self.io_load_status {
+            true
+        } else{
+            false
+        }
+    }
 
     pub fn set_io_store(&mut self, state: IoState) {
         self.io_store_status = state;
@@ -170,7 +188,6 @@ impl Memory {
     pub fn get_joy2(&self) -> u8 {
         self.joy2
     }
-
 }
 
 impl LoadStore for Memory {
