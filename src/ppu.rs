@@ -1,21 +1,20 @@
 extern crate sdl2;
 
+// our shit
 use utils::print_mem;
 use loadstore::LoadStore;
 use mem::{Memory as Mem, MemState};
 
+// std
 use std::fmt;
 use std::num::Wrapping as W;
 
 
-use sdl2::pixels::PixelFormatEnum;
-//use sdl2::rect::Rect;
-//use sdl2::event::Event;
-//use sdl2::keyboard::Keycode;
+// sdl2
 use sdl2::pixels::Color;
-//use sdl2::video::{Window, WindowBuilder};
-use sdl2::rect::{Point, Rect};
+use sdl2::rect::Point;
 
+/*
 
 // ppuctrl
 // Const values to access the controller register bits.
@@ -49,11 +48,12 @@ const STATUS_SPRITE_OVERFLOW    : u8 = 0x20;
 const STATUS_SPRITE_0_HIT       : u8 = 0x40;
 const STATUS_VERTICAL_BLANK     : u8 = 0x80; // set = in vertical blank
 
+*/
+
 const PALETTE_SIZE              : usize = 0x20;
 const PALETTE_ADDRESS           : usize = 0x3F00;
 
 const PPU_ADDRESS_SPACE         : usize = 0x4000;
-
 const VBLANK_END                : u32 = 27901; 
 
 pub struct Ppu {
@@ -98,7 +98,7 @@ impl Ppu {
         self.ls_latches(memory);
 
         if self.cycles == 0 {
-            self.draw(memory, renderer);
+            self.draw(renderer);
         } else {
             self.cycles += 1;
         }
@@ -109,7 +109,8 @@ impl Ppu {
         } 
     }
 
-    fn draw(&mut self, memory: &mut Mem, renderer: &mut sdl2::render::Renderer) {
+    /* for now we dont use mem, remove warning, memory: &mut Mem*/
+    fn draw(&mut self, renderer: &mut sdl2::render::Renderer) {
         renderer.set_draw_color(Color::RGB(self.px_height as u8, self.px_width as u8, 20));
         renderer.draw_point(Point::new(self.px_width as i32, self.px_height as i32)).unwrap();
         if self.px_width == 255 && self.px_height < 239 {
@@ -143,10 +144,7 @@ impl Ppu {
             MemState::OamData   => { self.oam.store_data(latch); },
             MemState::PpuScroll => { self.scroll.set(latch); },
             MemState::PpuAddr   => { self.addr.set(latch); },
-            MemState::PpuData   => { 
-                memory.chr_store(self.addr.get(), latch); 
-            },
-            MemState::NoState   => (),
+            MemState::PpuData   => { memory.chr_store(self.addr.get(), latch);}, 
             _                   => (), 
         }
 
@@ -162,7 +160,6 @@ impl Ppu {
                 let value = memory.chr_load(self.addr.get()); 
                 memory.set_latch(value);
             },
-            MemState::NoState   => {},
             _                   => {},
         }
     }

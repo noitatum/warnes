@@ -6,8 +6,10 @@ use std::fmt;
 
 use mapper::Mapper;
 
-const RAM_SIZE     : usize = 0x800;
-const VRAM_SIZE    : usize = 0x800;
+const RAM_SIZE  : usize = 0x800;
+const VRAM_SIZE : usize = 0x800;
+const GAMEPAD1  : W<u16> = W(0x4016);
+const GAMEPAD2  : W<u16> = W(0x4017);
 
 #[derive(Clone, Copy)]
 pub enum MemState {
@@ -134,7 +136,16 @@ impl Memory {
         self.mapper.chr_store(&mut self.vram[..], address, value.0);
     }
 
-    pub fn get_io_load_status(&mut self) -> bool {
+    pub fn get_io_load_status(&mut self, gp : W<u16>) -> bool {
+        if gp == GAMEPAD1 {
+            return self.get_io_load_status_gp1();
+        } else if gp == GAMEPAD2 {
+            return self.get_io_load_status_gp2();
+        }
+        return false;
+    }
+
+    pub fn get_io_load_status_gp1(&mut self) -> bool {
         if let IoState::GamePad1 = self.io_load_status {
             true
         } else{
@@ -142,16 +153,20 @@ impl Memory {
         }
     } 
 
+    pub fn get_io_load_status_gp2(&mut self) -> bool {
+        if let IoState::GamePad2 = self.io_load_status {
+            true
+        } else{
+            false
+        }
+    }
+
     pub fn set_io_store(&mut self, state: IoState) {
         self.io_store_status = state;
     }
 
-    pub fn get_joy1(&self) -> u8 {
+    pub fn get_strobe(&self) -> u8 {
         self.joy1 
-    }
-
-    pub fn get_joy2(&self) -> u8 {
-        self.joy2
     }
 
 }
@@ -199,9 +214,11 @@ impl LoadStore for Memory {
                 0x4014 => 0, // OAMDMA is Write only, TODO: Check what happens
                 0x4015 => 0,
                 0x4016 => { self.io_load_status = IoState::GamePad1;
+                            self.mem_load_status = MemState::Io;
                             self.joy1 
                           }
                 0x4017 => { self.io_load_status = IoState::GamePad2;
+                            self.mem_load_status = MemState::Io;
                             self.joy2 
                           }
                 0x4018 => 0,
@@ -273,17 +290,9 @@ impl LoadStore for Memory {
                 0x4016 => { self.joy1 = val;
                             self.io_store_status = IoState::GamePad1;
                           },
-                0x4017 => { /*
-                    if let IoState::GamePad2 = self.io_load_status {
-                        self.joy2 = val;
-                    }
-                    if self.keystrobe2 && ((self.joy2 & 1) == 0) {
-                        self.io_load_status = IoState::StartGamePad2;
-                        self.keystrobe2 = false;
-                    } else if self.joy2 & 1 > 0 {
-                        self.keystrobe2 = true;
-                    }
-                */},
+                0x4017 => { self.joy2 = val;
+                            self.mem_store_status = MemState::Io;
+                          },
                 0x4018 => (),
                 0x4019 => (),
                 0x401A => (),

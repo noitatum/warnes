@@ -20,8 +20,6 @@ const NES2_SIGNATURE        : u8 = 0x80;
 const FLAGS_BATTERY         : u8 = 0x02;
 const FLAGS_TRAINER         : u8 = 0x04;
 
-
-
 pub struct Header {
     rom_file     : File,
     mapper       : u16,

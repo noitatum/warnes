@@ -1,11 +1,11 @@
 use std::fmt;
-use mem::{MemState, Memory as Mem};
+use mem::Memory as Mem;
 use loadstore::LoadStore;
 use std::num::Wrapping as W;
 
-#[allow(no_camel_case)] 
+#[allow(non_camel_case_types)]
 type fn_instruction     = fn(&mut Regs, &mut Mem, W<u16>); 
-#[allow(no_camel_case)]
+#[allow(non_camel_case_types)]
 type fn_addressing      = fn(&mut Regs, &mut Mem) -> (W<u16>, u32);
 
 /* Branch flag types */
@@ -71,14 +71,14 @@ impl DMA {
             self.execute(memory);
             true
         } else if let Some(page) = memory.get_oamdma() {
-            self.start(memory, page, cycles as u32);
+            self.start(page, cycles as u32);
             true
         } else {
             false
         }
     }
 
-    fn start(&mut self, memory: &mut Mem, page: W<u8>, cycles: u32) {
+    fn start(&mut self, page: W<u8>, cycles: u32) {
         self.address = W16!(page) << 8; 
         // Additional cycle if on odd cycle
         self.cycles_left = DMA_CYCLES + cycles & 1;
