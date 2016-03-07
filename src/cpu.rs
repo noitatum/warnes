@@ -3,11 +3,6 @@ use mem::Memory as Mem;
 use loadstore::LoadStore;
 use std::num::Wrapping as W;
 
-#[allow(non_camel_case_types)]
-type fn_instruction     = fn(&mut Regs, &mut Mem, W<u16>); 
-#[allow(non_camel_case_types)]
-type fn_addressing      = fn(&mut Regs, &mut Mem) -> (W<u16>, u32);
-
 /* Branch flag types */
 const BRANCH_FLAG_CHECK : u8 = 0x20;
 const BRANCH_FLAG_TABLE : [u8; 4] = 
@@ -109,14 +104,14 @@ impl DMA {
 struct Execution {
     cycles_left     : u32,
     address         : W<u16>,
-    instruction     : fn_instruction,
+    operation       : FnOperation, 
 }
 
 impl Default for Execution {
     fn default() -> Execution {
         Execution {
             cycles_left     : 0,
-            instruction     : Regs::nop,
+            operation       : Regs::nop,
             address         : W(0),
         }
     }
@@ -134,21 +129,20 @@ impl Execution {
     pub fn cycle(&mut self, memory: &mut Mem, regs: &mut Regs) {
         if self.cycles_left == 0 {
             // Execute the next instruction
-            let inst = self.instruction;
-            inst(regs, memory, self.address);
-            // Load next opcode
-            let opcode = regs.load_opcode(memory);
-            let instruction = OPCODE_TABLE[opcode as usize]; 
+            (self.operation)(regs, memory, self.address);
+            // Get next instruction
+            let index = regs.next_opcode(memory) as usize;
+            let ref instruction = OPCODE_TABLE[index];
             // Get address and extra cycles from mode
-            let (address, extra) = instruction.0(regs, memory);
+            let (address, extra) = (instruction.addressing)(regs, memory);
             // Save the address for next instruction
             self.address = address;
-            self.cycles_left = instruction.2; 
+            self.cycles_left = instruction.cycles; 
             // Add the extra cycles if needed
-            if instruction.3 {
+            if instruction.has_extra {
                 self.cycles_left += extra;
             }
-            self.instruction = instruction.1;
+            self.operation = instruction.operation;
         }
         self.cycles_left -= 1;
     }
@@ -185,6 +179,10 @@ impl Regs {
         self.PC = memory.load_word(ADDRESS_RESET); 
     }
 
+    pub fn next_opcode(&self, memory: &mut Mem) -> u8 {
+        memory.load(self.PC).0
+    }
+
     fn pop(&mut self, memory: &mut Mem) -> W<u8> {
         self.SP = self.SP + W(1);
         memory.load(STACK_PAGE | W16!(self.SP))
@@ -203,10 +201,6 @@ impl Regs {
     fn pop_word(&mut self, memory: &mut Mem) -> W<u16> {
         let low = W16!(self.pop(memory)); 
         (W16!(self.pop(memory)) << 8) | low
-    }
-
-    fn load_opcode(&mut self, memory: &mut Mem) -> u8 {
-        memory.load(self.PC).0
     }
 
     fn add_with_carry(&mut self, value: W<u8>) {
@@ -322,7 +316,7 @@ impl Regs {
     }
 
     fn rel(&mut self, memory: &mut Mem) -> (W<u16>, u32) {
-        let opcode = self.load_opcode(memory);
+        let opcode = memory.load(self.PC).0;
         let index = (opcode >> 6) as usize;
         let check = is_flag_set!(opcode, BRANCH_FLAG_CHECK);
         let next_opcode = self.PC + W(2);
@@ -675,151 +669,170 @@ impl fmt::Debug for Regs {
     }
 }
 
+type FnOperation = fn(&mut Regs, &mut Mem, W<u16>);
+
+struct Instruction {
+    addressing  : fn(&mut Regs, &mut Mem) -> (W<u16>, u32),
+    operation   : FnOperation, 
+    cycles      : u32,
+    has_extra   : bool,
+}
+
+macro_rules! inst {
+    ($addr:ident, $oper:ident, $cycles:expr, $extra:expr) => (
+        Instruction {
+            addressing  : Regs::$addr,
+            operation   : Regs::$oper,
+            cycles      : $cycles,
+            has_extra   : $extra,
+        }
+    )
+}
+
 /* WARNING: Branch instructions are replaced with jumps */
-/* Addressing, Instruction, Cycles, Has Penalty */
-const OPCODE_TABLE : [(fn_addressing, fn_instruction, u32, bool); 256] = [    
+const OPCODE_TABLE : [Instruction; 256] = [    
     // 0x00
-    (Regs::imp, Regs::brk, 7, false), (Regs::idx, Regs::ora, 6, false), 
-    (Regs::imp, Regs::nop, 2, false), (Regs::idx, Regs::slo, 8, false), 
-    (Regs::zpg, Regs::nop, 3, false), (Regs::zpg, Regs::ora, 3, false),
-    (Regs::zpg, Regs::asl, 5, false), (Regs::zpg, Regs::slo, 5, false),
-    (Regs::imp, Regs::php, 3, false), (Regs::imm, Regs::ora, 2, false),
-    (Regs::imp, Regs::sal, 2, false), (Regs::imp, Regs::nop, 2, false), 
-    (Regs::abs, Regs::nop, 4, false), (Regs::abs, Regs::ora, 4, false),
-    (Regs::abs, Regs::asl, 6, false), (Regs::abs, Regs::slo, 6, false), 
+    inst!(imp, brk, 7, false), inst!(idx, ora, 6, false), 
+    inst!(imp, nop, 2, false), inst!(idx, slo, 8, false), 
+    inst!(zpg, nop, 3, false), inst!(zpg, ora, 3, false),
+    inst!(zpg, asl, 5, false), inst!(zpg, slo, 5, false),
+    inst!(imp, php, 3, false), inst!(imm, ora, 2, false),
+    inst!(imp, sal, 2, false), inst!(imp, nop, 2, false), 
+    inst!(abs, nop, 4, false), inst!(abs, ora, 4, false),
+    inst!(abs, asl, 6, false), inst!(abs, slo, 6, false), 
     // 0x10 
-    (Regs::rel, Regs::jmp, 2, true),  (Regs::idy, Regs::ora, 5, true), 
-    (Regs::imp, Regs::nop, 2, false), (Regs::idy, Regs::slo, 4, false),
-    (Regs::zpx, Regs::nop, 4, false), (Regs::zpx, Regs::ora, 4, false),
-    (Regs::zpx, Regs::asl, 6, false), (Regs::zpx, Regs::slo, 6, false),
-    (Regs::imp, Regs::clc, 2, false), (Regs::aby, Regs::ora, 4, true),
-    (Regs::imp, Regs::nop, 2, false), (Regs::aby, Regs::slo, 7, false),
-    (Regs::abx, Regs::nop, 4, true),  (Regs::abx, Regs::ora, 4, true), 
-    (Regs::abx, Regs::asl, 7, false), (Regs::abx, Regs::slo, 7, false),
+    inst!(rel, jmp, 2, true),  inst!(idy, ora, 5, true), 
+    inst!(imp, nop, 2, false), inst!(idy, slo, 4, false),
+    inst!(zpx, nop, 4, false), inst!(zpx, ora, 4, false),
+    inst!(zpx, asl, 6, false), inst!(zpx, slo, 6, false),
+    inst!(imp, clc, 2, false), inst!(aby, ora, 4, true),
+    inst!(imp, nop, 2, false), inst!(aby, slo, 7, false),
+    inst!(abx, nop, 4, true),  inst!(abx, ora, 4, true), 
+    inst!(abx, asl, 7, false), inst!(abx, slo, 7, false),
     // 0x20
-    (Regs::abs, Regs::jsr, 6, false), (Regs::idx, Regs::and, 6, false), 
-    (Regs::imp, Regs::nop, 2, false), (Regs::idx, Regs::rla, 8, false),
-    (Regs::zpg, Regs::bit, 3, false), (Regs::zpg, Regs::and, 3, false),
-    (Regs::zpg, Regs::rol, 5, false), (Regs::zpg, Regs::rla, 5, false),
-    (Regs::imp, Regs::plp, 4, false), (Regs::imm, Regs::and, 2, false),
-    (Regs::imp, Regs::ral, 2, false), (Regs::imp, Regs::nop, 2, false),
-    (Regs::abs, Regs::bit, 4, false), (Regs::abs, Regs::and, 4, false),
-    (Regs::abs, Regs::rol, 6, false), (Regs::abs, Regs::rla, 6, false),
+    inst!(abs, jsr, 6, false), inst!(idx, and, 6, false), 
+    inst!(imp, nop, 2, false), inst!(idx, rla, 8, false),
+    inst!(zpg, bit, 3, false), inst!(zpg, and, 3, false),
+    inst!(zpg, rol, 5, false), inst!(zpg, rla, 5, false),
+    inst!(imp, plp, 4, false), inst!(imm, and, 2, false),
+    inst!(imp, ral, 2, false), inst!(imp, nop, 2, false),
+    inst!(abs, bit, 4, false), inst!(abs, and, 4, false),
+    inst!(abs, rol, 6, false), inst!(abs, rla, 6, false),
     // 0x30
-    (Regs::rel, Regs::jmp, 2, true),  (Regs::idy, Regs::and, 5, true),
-    (Regs::imp, Regs::nop, 2, false), (Regs::idy, Regs::rla, 8, false),
-    (Regs::zpx, Regs::nop, 4, false), (Regs::zpx, Regs::and, 4, false),
-    (Regs::zpx, Regs::rol, 6, false), (Regs::zpx, Regs::rla, 6, false),
-    (Regs::imp, Regs::sec, 2, false), (Regs::aby, Regs::and, 4, true),
-    (Regs::imp, Regs::nop, 2, false), (Regs::aby, Regs::rla, 7, true),
-    (Regs::abx, Regs::nop, 4, true),  (Regs::abx, Regs::and, 4, true),
-    (Regs::abx, Regs::rol, 7, false), (Regs::abx, Regs::rla, 7, false),
+    inst!(rel, jmp, 2, true),  inst!(idy, and, 5, true),
+    inst!(imp, nop, 2, false), inst!(idy, rla, 8, false),
+    inst!(zpx, nop, 4, false), inst!(zpx, and, 4, false),
+    inst!(zpx, rol, 6, false), inst!(zpx, rla, 6, false),
+    inst!(imp, sec, 2, false), inst!(aby, and, 4, true),
+    inst!(imp, nop, 2, false), inst!(aby, rla, 7, true),
+    inst!(abx, nop, 4, true),  inst!(abx, and, 4, true),
+    inst!(abx, rol, 7, false), inst!(abx, rla, 7, false),
     // 0x40
-    (Regs::imp, Regs::rti, 6, false), (Regs::idx, Regs::eor, 6, false),
-    (Regs::imp, Regs::nop, 2, false), (Regs::idx, Regs::sre, 8, false),
-    (Regs::zpg, Regs::nop, 3, false), (Regs::zpg, Regs::eor, 3, false), 
-    (Regs::zpg, Regs::lsr, 5, false), (Regs::zpg, Regs::sre, 5, false),
-    (Regs::imp, Regs::pha, 3, false), (Regs::imm, Regs::eor, 2, false),
-    (Regs::imp, Regs::sar, 2, false), (Regs::imp, Regs::nop, 2, false),
-    (Regs::abs, Regs::jmp, 3, false), (Regs::abs, Regs::eor, 4, false),
-    (Regs::abs, Regs::lsr, 6, false), (Regs::abs, Regs::sre, 6, false),
+    inst!(imp, rti, 6, false), inst!(idx, eor, 6, false),
+    inst!(imp, nop, 2, false), inst!(idx, sre, 8, false),
+    inst!(zpg, nop, 3, false), inst!(zpg, eor, 3, false), 
+    inst!(zpg, lsr, 5, false), inst!(zpg, sre, 5, false),
+    inst!(imp, pha, 3, false), inst!(imm, eor, 2, false),
+    inst!(imp, sar, 2, false), inst!(imp, nop, 2, false),
+    inst!(abs, jmp, 3, false), inst!(abs, eor, 4, false),
+    inst!(abs, lsr, 6, false), inst!(abs, sre, 6, false),
     // 0x50
-    (Regs::rel, Regs::jmp, 2, true),  (Regs::idy, Regs::eor, 5, true), 
-    (Regs::imp, Regs::nop, 2, false), (Regs::idy, Regs::sre, 8, false),
-    (Regs::zpx, Regs::nop, 4, false), (Regs::zpx, Regs::eor, 4, false),
-    (Regs::zpx, Regs::lsr, 6, false), (Regs::zpx, Regs::sre, 6, false),
-    (Regs::imp, Regs::cli, 2, false), (Regs::aby, Regs::eor, 4, true), 
-    (Regs::imp, Regs::nop, 2, false), (Regs::aby, Regs::sre, 7, false), 
-    (Regs::abx, Regs::nop, 4, true),  (Regs::abx, Regs::eor, 4, true),
-    (Regs::abx, Regs::lsr, 7, false), (Regs::abx, Regs::sre, 7, false),
+    inst!(rel, jmp, 2, true),  inst!(idy, eor, 5, true), 
+    inst!(imp, nop, 2, false), inst!(idy, sre, 8, false),
+    inst!(zpx, nop, 4, false), inst!(zpx, eor, 4, false),
+    inst!(zpx, lsr, 6, false), inst!(zpx, sre, 6, false),
+    inst!(imp, cli, 2, false), inst!(aby, eor, 4, true), 
+    inst!(imp, nop, 2, false), inst!(aby, sre, 7, false), 
+    inst!(abx, nop, 4, true),  inst!(abx, eor, 4, true),
+    inst!(abx, lsr, 7, false), inst!(abx, sre, 7, false),
     // 0x60
-    (Regs::imp, Regs::rts, 6, false), (Regs::idx, Regs::adc, 6, false),
-    (Regs::imp, Regs::nop, 2, false), (Regs::idx, Regs::rra, 8, false),
-    (Regs::zpg, Regs::nop, 3, false), (Regs::zpg, Regs::adc, 3, false),
-    (Regs::zpg, Regs::ror, 5, false), (Regs::zpg, Regs::rra, 5, false),
-    (Regs::imp, Regs::pla, 4, false), (Regs::imm, Regs::adc, 2, false),
-    (Regs::imp, Regs::rar, 2, false), (Regs::imp, Regs::nop, 2, false),
-    (Regs::ind, Regs::jmp, 5, false), (Regs::abs, Regs::adc, 4, false),
-    (Regs::abs, Regs::ror, 6, false), (Regs::abs, Regs::rra, 6, false),
+    inst!(imp, rts, 6, false), inst!(idx, adc, 6, false),
+    inst!(imp, nop, 2, false), inst!(idx, rra, 8, false),
+    inst!(zpg, nop, 3, false), inst!(zpg, adc, 3, false),
+    inst!(zpg, ror, 5, false), inst!(zpg, rra, 5, false),
+    inst!(imp, pla, 4, false), inst!(imm, adc, 2, false),
+    inst!(imp, rar, 2, false), inst!(imp, nop, 2, false),
+    inst!(ind, jmp, 5, false), inst!(abs, adc, 4, false),
+    inst!(abs, ror, 6, false), inst!(abs, rra, 6, false),
     // 0x70
-    (Regs::rel, Regs::jmp, 2, true),  (Regs::idy, Regs::adc, 5, true),
-    (Regs::imp, Regs::nop, 2, false), (Regs::idy, Regs::rra, 8, false),
-    (Regs::zpx, Regs::nop, 4, false), (Regs::zpx, Regs::adc, 4, false),
-    (Regs::zpx, Regs::ror, 6, false), (Regs::zpx, Regs::rra, 6, false),
-    (Regs::imp, Regs::sei, 2, false), (Regs::aby, Regs::adc, 4, true),
-    (Regs::imp, Regs::nop, 2, false), (Regs::aby, Regs::rra, 7, false), 
-    (Regs::abx, Regs::nop, 4, true),  (Regs::abx, Regs::adc, 4, true),
-    (Regs::abx, Regs::ror, 7, false), (Regs::abx, Regs::rra, 7, false),
+    inst!(rel, jmp, 2, true),  inst!(idy, adc, 5, true),
+    inst!(imp, nop, 2, false), inst!(idy, rra, 8, false),
+    inst!(zpx, nop, 4, false), inst!(zpx, adc, 4, false),
+    inst!(zpx, ror, 6, false), inst!(zpx, rra, 6, false),
+    inst!(imp, sei, 2, false), inst!(aby, adc, 4, true),
+    inst!(imp, nop, 2, false), inst!(aby, rra, 7, false), 
+    inst!(abx, nop, 4, true),  inst!(abx, adc, 4, true),
+    inst!(abx, ror, 7, false), inst!(abx, rra, 7, false),
     // 0x80
-    (Regs::imm, Regs::nop, 2, false), (Regs::idx, Regs::sta, 6, false),
-    (Regs::imm, Regs::nop, 2, false), (Regs::idx, Regs::sax, 6, false),
-    (Regs::zpg, Regs::sty, 3, false), (Regs::zpg, Regs::sta, 3, false),
-    (Regs::zpg, Regs::stx, 3, false), (Regs::zpg, Regs::sax, 3, false),
-    (Regs::imp, Regs::dey, 2, false), (Regs::imm, Regs::nop, 2, false),
-    (Regs::imp, Regs::txa, 2, false), (Regs::imp, Regs::nop, 2, false),
-    (Regs::abs, Regs::sty, 4, false), (Regs::abs, Regs::sta, 4, false),
-    (Regs::abs, Regs::stx, 4, false), (Regs::abs, Regs::sax, 4, false),
+    inst!(imm, nop, 2, false), inst!(idx, sta, 6, false),
+    inst!(imm, nop, 2, false), inst!(idx, sax, 6, false),
+    inst!(zpg, sty, 3, false), inst!(zpg, sta, 3, false),
+    inst!(zpg, stx, 3, false), inst!(zpg, sax, 3, false),
+    inst!(imp, dey, 2, false), inst!(imm, nop, 2, false),
+    inst!(imp, txa, 2, false), inst!(imp, nop, 2, false),
+    inst!(abs, sty, 4, false), inst!(abs, sta, 4, false),
+    inst!(abs, stx, 4, false), inst!(abs, sax, 4, false),
     // 0x90
-    (Regs::rel, Regs::jmp, 2, true),  (Regs::idy, Regs::sta, 6, false),
-    (Regs::imp, Regs::nop, 2, false), (Regs::imp, Regs::nop, 2, false), 
-    (Regs::zpx, Regs::sty, 4, false), (Regs::zpx, Regs::sta, 4, false),
-    (Regs::zpy, Regs::stx, 4, false), (Regs::zpy, Regs::sax, 4, false),
-    (Regs::imp, Regs::tya, 2, false), (Regs::aby, Regs::sta, 5, false), 
-    (Regs::imp, Regs::txs, 2, false), (Regs::imp, Regs::nop, 2, false), 
-    (Regs::imp, Regs::nop, 2, false), (Regs::abx, Regs::sta, 5, false),
-    (Regs::imp, Regs::nop, 2, false), (Regs::imp, Regs::nop, 2, false),
+    inst!(rel, jmp, 2, true),  inst!(idy, sta, 6, false),
+    inst!(imp, nop, 2, false), inst!(imp, nop, 2, false), 
+    inst!(zpx, sty, 4, false), inst!(zpx, sta, 4, false),
+    inst!(zpy, stx, 4, false), inst!(zpy, sax, 4, false),
+    inst!(imp, tya, 2, false), inst!(aby, sta, 5, false), 
+    inst!(imp, txs, 2, false), inst!(imp, nop, 2, false), 
+    inst!(imp, nop, 2, false), inst!(abx, sta, 5, false),
+    inst!(imp, nop, 2, false), inst!(imp, nop, 2, false),
     // 0xA0
-    (Regs::imm, Regs::ldy, 2, false), (Regs::idx, Regs::lda, 6, false), 
-    (Regs::imm, Regs::ldx, 2, false), (Regs::idx, Regs::lax, 6, false),
-    (Regs::zpg, Regs::ldy, 3, false), (Regs::zpg, Regs::lda, 3, false),
-    (Regs::zpg, Regs::ldx, 3, false), (Regs::zpg, Regs::lax, 3, false),
-    (Regs::imp, Regs::tay, 2, false), (Regs::imm, Regs::lda, 2, false),
-    (Regs::imp, Regs::tax, 2, false), (Regs::imm, Regs::lax, 2, false),
-    (Regs::abs, Regs::ldy, 4, false), (Regs::abs, Regs::lda, 4, false),
-    (Regs::abs, Regs::ldx, 4, false), (Regs::abs, Regs::lax, 4, false),
+    inst!(imm, ldy, 2, false), inst!(idx, lda, 6, false), 
+    inst!(imm, ldx, 2, false), inst!(idx, lax, 6, false),
+    inst!(zpg, ldy, 3, false), inst!(zpg, lda, 3, false),
+    inst!(zpg, ldx, 3, false), inst!(zpg, lax, 3, false),
+    inst!(imp, tay, 2, false), inst!(imm, lda, 2, false),
+    inst!(imp, tax, 2, false), inst!(imm, lax, 2, false),
+    inst!(abs, ldy, 4, false), inst!(abs, lda, 4, false),
+    inst!(abs, ldx, 4, false), inst!(abs, lax, 4, false),
     // 0xB0
-    (Regs::rel, Regs::jmp, 2, true),  (Regs::idy, Regs::lda, 5, true), 
-    (Regs::imp, Regs::nop, 2, false), (Regs::idy, Regs::lax, 5, true),
-    (Regs::zpx, Regs::ldy, 4, false), (Regs::zpx, Regs::lda, 4, false),
-    (Regs::zpy, Regs::ldx, 4, false), (Regs::zpy, Regs::lax, 4, false),
-    (Regs::imp, Regs::clv, 2, false), (Regs::aby, Regs::lda, 4, true), 
-    (Regs::imp, Regs::tsx, 2, false), (Regs::imp, Regs::nop, 2, false),
-    (Regs::abx, Regs::ldy, 4, true),  (Regs::abx, Regs::lda, 4, true),
-    (Regs::aby, Regs::ldx, 4, true),  (Regs::aby, Regs::lax, 4, true),
+    inst!(rel, jmp, 2, true),  inst!(idy, lda, 5, true), 
+    inst!(imp, nop, 2, false), inst!(idy, lax, 5, true),
+    inst!(zpx, ldy, 4, false), inst!(zpx, lda, 4, false),
+    inst!(zpy, ldx, 4, false), inst!(zpy, lax, 4, false),
+    inst!(imp, clv, 2, false), inst!(aby, lda, 4, true), 
+    inst!(imp, tsx, 2, false), inst!(imp, nop, 2, false),
+    inst!(abx, ldy, 4, true),  inst!(abx, lda, 4, true),
+    inst!(aby, ldx, 4, true),  inst!(aby, lax, 4, true),
     // 0xC0
-    (Regs::imm, Regs::cpy, 2, false), (Regs::idx, Regs::cmp, 6, false), 
-    (Regs::imm, Regs::nop, 2, false), (Regs::idx, Regs::dcp, 8, false), 
-    (Regs::zpg, Regs::cpy, 3, false), (Regs::zpg, Regs::cmp, 3, false),
-    (Regs::zpg, Regs::dec, 5, false), (Regs::zpg, Regs::dcp, 5, false),
-    (Regs::imp, Regs::iny, 2, false), (Regs::imm, Regs::cmp, 2, false),
-    (Regs::imp, Regs::dex, 2, false), (Regs::imp, Regs::nop, 2, false),
-    (Regs::abs, Regs::cpy, 4, false), (Regs::abs, Regs::cmp, 4, false),
-    (Regs::abs, Regs::dec, 6, false), (Regs::abs, Regs::dcp, 6, false),
+    inst!(imm, cpy, 2, false), inst!(idx, cmp, 6, false), 
+    inst!(imm, nop, 2, false), inst!(idx, dcp, 8, false), 
+    inst!(zpg, cpy, 3, false), inst!(zpg, cmp, 3, false),
+    inst!(zpg, dec, 5, false), inst!(zpg, dcp, 5, false),
+    inst!(imp, iny, 2, false), inst!(imm, cmp, 2, false),
+    inst!(imp, dex, 2, false), inst!(imp, nop, 2, false),
+    inst!(abs, cpy, 4, false), inst!(abs, cmp, 4, false),
+    inst!(abs, dec, 6, false), inst!(abs, dcp, 6, false),
     // 0xD0
-    (Regs::rel, Regs::jmp, 2, true),  (Regs::idy, Regs::cmp, 5, true),
-    (Regs::imp, Regs::nop, 2, false), (Regs::idy, Regs::dcp, 8, false),
-    (Regs::zpx, Regs::nop, 4, false), (Regs::zpx, Regs::cmp, 4, false),
-    (Regs::zpx, Regs::dec, 6, false), (Regs::zpx, Regs::dcp, 6, false),
-    (Regs::imp, Regs::cld, 2, false), (Regs::aby, Regs::cmp, 4, true),
-    (Regs::imp, Regs::nop, 2, false), (Regs::aby, Regs::dcp, 7, false),
-    (Regs::abx, Regs::nop, 4, true),  (Regs::abx, Regs::cmp, 4, true),
-    (Regs::abx, Regs::dec, 7, false), (Regs::abx, Regs::dcp, 7, false),
+    inst!(rel, jmp, 2, true),  inst!(idy, cmp, 5, true),
+    inst!(imp, nop, 2, false), inst!(idy, dcp, 8, false),
+    inst!(zpx, nop, 4, false), inst!(zpx, cmp, 4, false),
+    inst!(zpx, dec, 6, false), inst!(zpx, dcp, 6, false),
+    inst!(imp, cld, 2, false), inst!(aby, cmp, 4, true),
+    inst!(imp, nop, 2, false), inst!(aby, dcp, 7, false),
+    inst!(abx, nop, 4, true),  inst!(abx, cmp, 4, true),
+    inst!(abx, dec, 7, false), inst!(abx, dcp, 7, false),
     // 0xE0
-    (Regs::imm, Regs::cpx, 2, false), (Regs::idx, Regs::sbc, 6, false), 
-    (Regs::imm, Regs::nop, 2, false), (Regs::idx, Regs::isc, 8, false),
-    (Regs::zpg, Regs::cpx, 3, false), (Regs::zpg, Regs::sbc, 3, false),
-    (Regs::zpg, Regs::inc, 6, false), (Regs::zpg, Regs::isc, 5, false),
-    (Regs::imp, Regs::inx, 2, false), (Regs::imm, Regs::sbc, 2, false),
-    (Regs::imp, Regs::nop, 2, false), (Regs::imm, Regs::sbc, 2, false),
-    (Regs::abs, Regs::cpx, 4, false), (Regs::abs, Regs::sbc, 4, false),
-    (Regs::abs, Regs::inc, 6, false), (Regs::abs, Regs::isc, 6, false),
+    inst!(imm, cpx, 2, false), inst!(idx, sbc, 6, false), 
+    inst!(imm, nop, 2, false), inst!(idx, isc, 8, false),
+    inst!(zpg, cpx, 3, false), inst!(zpg, sbc, 3, false),
+    inst!(zpg, inc, 6, false), inst!(zpg, isc, 5, false),
+    inst!(imp, inx, 2, false), inst!(imm, sbc, 2, false),
+    inst!(imp, nop, 2, false), inst!(imm, sbc, 2, false),
+    inst!(abs, cpx, 4, false), inst!(abs, sbc, 4, false),
+    inst!(abs, inc, 6, false), inst!(abs, isc, 6, false),
     // 0xF0
-    (Regs::rel, Regs::jmp, 2, true),  (Regs::idy, Regs::sbc, 5, true), 
-    (Regs::imp, Regs::nop, 2, false), (Regs::idy, Regs::isc, 8, false),
-    (Regs::zpx, Regs::nop, 4, false), (Regs::zpx, Regs::sbc, 4, false),
-    (Regs::zpx, Regs::inc, 6, false), (Regs::zpx, Regs::isc, 6, false),
-    (Regs::imp, Regs::sed, 2, false), (Regs::aby, Regs::sbc, 4, true), 
-    (Regs::imp, Regs::nop, 2, false), (Regs::aby, Regs::isc, 7, false), 
-    (Regs::abx, Regs::nop, 4, true),  (Regs::abx, Regs::sbc, 4, true),
-    (Regs::abx, Regs::inc, 7, false), (Regs::abx, Regs::isc, 7, false),
+    inst!(rel, jmp, 2, true),  inst!(idy, sbc, 5, true), 
+    inst!(imp, nop, 2, false), inst!(idy, isc, 8, false),
+    inst!(zpx, nop, 4, false), inst!(zpx, sbc, 4, false),
+    inst!(zpx, inc, 6, false), inst!(zpx, isc, 6, false),
+    inst!(imp, sed, 2, false), inst!(aby, sbc, 4, true), 
+    inst!(imp, nop, 2, false), inst!(aby, isc, 7, false), 
+    inst!(abx, nop, 4, true),  inst!(abx, sbc, 4, true),
+    inst!(abx, inc, 7, false), inst!(abx, isc, 7, false),
     ];
