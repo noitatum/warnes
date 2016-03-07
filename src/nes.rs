@@ -61,12 +61,14 @@ impl Nes {
         let mut renderer = window.renderer().build().unwrap();
         let mut event_pump = self.sdl_context.event_pump().unwrap();
 
-        let mut echo = PreciseTime::now();
+        let mut time = PreciseTime::now();
+
+        self.cpu.reset(&mut self.mem);
 
         'nes: loop {
-            if echo.to(PreciseTime::now()) > time::Duration::seconds(1) {
+            if time.to(PreciseTime::now()) > time::Duration::seconds(1) {
+                time = PreciseTime::now();
                 self.ppu.print_fps();
-                echo = PreciseTime::now();
                 for event in event_pump.poll_iter() {
                     match event {
                         Event::Quit {..} | Event::KeyDown
