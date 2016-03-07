@@ -33,7 +33,7 @@ pub struct Header {
 }
 
 impl Header {
-    pub fn new_from_file<P: AsRef<Path>>(path: P) -> Result<Header, Error> {
+    pub fn load_rom<P: AsRef<Path>>(path: P) -> Result<Header, Error> {
         let mut rom = try!(File::open(path));
         let mut file_header : [u8; INES_HEADER_SIZE] = [0; INES_HEADER_SIZE];
         try!(rom.read_exact(&mut file_header));
