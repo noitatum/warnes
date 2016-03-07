@@ -323,10 +323,10 @@ impl Regs {
 
     fn rel(&mut self, memory: &mut Mem) -> (W<u16>, u32) {
         let opcode = self.load_opcode(memory);
-        let index = opcode >> 6;
+        let index = (opcode >> 6) as usize;
         let check = is_flag_set!(opcode, BRANCH_FLAG_CHECK);
         let next_opcode = self.PC + W(2);
-        if is_flag_set!(self.Flags, BRANCH_FLAG_TABLE[index as usize]) != check {
+        if is_flag_set!(self.Flags, BRANCH_FLAG_TABLE[index]) != check {
             (next_opcode, 0)
         } else {
             // Branch taken
@@ -675,10 +675,10 @@ impl fmt::Debug for Regs {
     }
 }
 
-
 /* WARNING: Branch instructions are replaced with jumps */
 /* Addressing, Instruction, Cycles, Has Penalty */
-const OPCODE_TABLE : [(fn_addressing, fn_instruction, u32, bool); 256] = [    // 0x00
+const OPCODE_TABLE : [(fn_addressing, fn_instruction, u32, bool); 256] = [    
+    // 0x00
     (Regs::imp, Regs::brk, 7, false), (Regs::idx, Regs::ora, 6, false), 
     (Regs::imp, Regs::nop, 2, false), (Regs::idx, Regs::slo, 8, false), 
     (Regs::zpg, Regs::nop, 3, false), (Regs::zpg, Regs::ora, 3, false),
@@ -823,6 +823,3 @@ const OPCODE_TABLE : [(fn_addressing, fn_instruction, u32, bool); 256] = [    //
     (Regs::abx, Regs::nop, 4, true),  (Regs::abx, Regs::sbc, 4, true),
     (Regs::abx, Regs::inc, 7, false), (Regs::abx, Regs::isc, 7, false),
     ];
-
-
-
