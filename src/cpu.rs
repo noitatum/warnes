@@ -9,6 +9,7 @@ type fn_instruction     = fn(&mut Regs, &mut Mem, W<u16>);
 type fn_addressing      = fn(&mut Regs, &mut Mem) -> (W<u16>, u32);
 
 /* Branch flag types */
+const BRANCH_FLAG_CHECK : u8 = 0x20;
 const BRANCH_FLAG_TABLE : [u8; 4] = 
     [FLAG_SIGN, FLAG_OVERFLOW, FLAG_CARRY, FLAG_ZERO];
 
@@ -16,6 +17,7 @@ const BRANCH_FLAG_TABLE : [u8; 4] =
 const STACK_PAGE        : W<u16> = W(0x0100 as u16); 
 const PAGE_MASK         : W<u16> = W(0xFF00 as u16);
 const ADDRESS_INTERRUPT : W<u16> = W(0xFFFE as u16);
+const ADDRESS_RESET     : W<u16> = W(0xFFFC as u16);
 
 /* Flag bits */
 const FLAG_CARRY        : u8 = 0x01;
@@ -41,6 +43,11 @@ pub struct Cpu {
 } 
 
 impl Cpu {
+    pub fn reset(&mut self, memory: &mut Mem) {
+        *self = Cpu::default();
+        self.regs.reset(memory);
+    }
+
     pub fn cycle(&mut self, memory: &mut Mem) {
         // Dma takes priority
         if !self.dma.cycle(memory, self.cycles) {
@@ -164,7 +171,7 @@ impl Default for Regs {
             X               : W(0),
             Y               : W(0),
             Flags           : 0x34, 
-            SP              : W(0xfd),
+            SP              : W(0xFD),
             PC              : W(0),
         }
     }
@@ -173,6 +180,10 @@ impl Default for Regs {
 // Util functions
 
 impl Regs {
+
+    pub fn reset(&mut self, memory: &mut Mem) {
+        self.PC = memory.load_word(ADDRESS_RESET); 
+    }
 
     fn pop(&mut self, memory: &mut Mem) -> W<u8> {
         self.SP = self.SP + W(1);
@@ -196,6 +207,48 @@ impl Regs {
 
     fn load_opcode(&mut self, memory: &mut Mem) -> u8 {
         memory.load(self.PC).0
+    }
+
+    fn add_with_carry(&mut self, value: W<u8>) {
+        let m = W16!(value);
+        let a = W16!(self.A);
+        let sum = a + m + W((self.Flags & FLAG_CARRY) as u16);
+        set_flag_cond!(self.Flags, FLAG_OVERFLOW, 
+                       (a ^ sum) & (m ^ sum) & W(0x80) > W(0));
+        set_flag_cond!(self.Flags, FLAG_CARRY, sum > W(0xFF));
+        self.A = W8!(sum);
+        set_sign_zero!(self.Flags, self.A);
+    } 
+
+    fn compare(&mut self, reg: W<u8>, value: W<u8>) {
+        let comp = W16!(reg) - W16!(value);
+        set_sign_zero_carry_cond!(self.Flags, W8!(comp), comp <= W(0xFF));
+    }
+
+    fn rotate_right(&mut self, value: W<u8>) -> W<u8> {
+        let carry = value & W(1) > W(0);
+        let rot = (value >> 1) | (W(self.Flags & FLAG_CARRY) << 7);
+        set_sign_zero_carry_cond!(self.Flags, rot, carry);
+        rot
+    }
+
+    fn rotate_left(&mut self, value: W<u8>) -> W<u8> {
+        let carry = value & W(0x80) > W(0);
+        let rot = (value << 1) | W(self.Flags & FLAG_CARRY);
+        set_sign_zero_carry_cond!(self.Flags, rot, carry);
+        rot
+    }
+
+    fn shift_right(&mut self, value: W<u8>) -> W<u8> {
+        let shift = value >> 1;
+        set_sign_zero_carry_cond!(self.Flags, shift, value & W(1) > W(0));
+        shift
+    }
+
+    fn shift_left(&mut self, value: W<u8>) -> W<u8> {
+        let shift = value << 1;
+        set_sign_zero_carry_cond!(self.Flags, shift, value & W(0x80) > W(0));
+        shift
     }
 }
 
@@ -271,7 +324,7 @@ impl Regs {
     fn rel(&mut self, memory: &mut Mem) -> (W<u16>, u32) {
         let opcode = self.load_opcode(memory);
         let index = opcode >> 6;
-        let check = ((opcode >> 5) & 1) != 0;
+        let check = is_flag_set!(opcode, BRANCH_FLAG_CHECK);
         let next_opcode = self.PC + W(2);
         if is_flag_set!(self.Flags, BRANCH_FLAG_TABLE[index as usize]) != check {
             (next_opcode, 0)
@@ -303,7 +356,7 @@ impl Regs {
         self.PC = address;
     }
 
-    // Implied
+    // Implied special
 
     fn brk(&mut self, memory: &mut Mem, _: W<u16>) {
        // Two bits are set on memory when pushing flags 
@@ -325,277 +378,299 @@ impl Regs {
         self.PC = self.pop_word(memory) + W(1);
     }
 
-    fn php (&mut self, memory: &mut Mem, _: W<u16>) {
+    // Implied
+
+    fn php(&mut self, memory: &mut Mem, _: W<u16>) {
         // Two bits are set on memory when pushing flags 
         let flags = W(self.Flags | FLAG_PUSHED | FLAG_BRK);
         self.push(memory, flags);
     }
 
-    fn sal (&mut self, _: &mut Mem, _: W<u16>) {
-        set_sign_zero_carry_cond!(self.Flags, self.A << 1, self.A & W(0x80) != W(0));
-        self.A = self.A << 1;
+    fn sal(&mut self, _: &mut Mem, _: W<u16>) {
+        let a = self.A;
+        self.A = self.shift_left(a);
     }
 
-    fn clc (&mut self, _: &mut Mem, _: W<u16>) {
+    fn clc(&mut self, _: &mut Mem, _: W<u16>) {
         unset_flag!(self.Flags, FLAG_CARRY);
     }
 
-    fn plp (&mut self, memory: &mut Mem, _: W<u16>) {
+    fn plp(&mut self, memory: &mut Mem, _: W<u16>) {
         // Ignore the two bits not present
         self.Flags = self.pop(memory).0 & !(FLAG_PUSHED | FLAG_BRK);
     }
 
-    fn ral (&mut self, _: &mut Mem, _: W<u16>) {
-        /* Bit to be rotated into the carry */
-        let carry = self.A & W(0x80) != W(0);
-        /* We rotate the carry bit into A */
-        rol!(self.A, self.Flags);
-        /* And we set the Carry accordingly */
-        set_sign_zero_carry_cond!(self.Flags, self.A, carry);
+    fn ral(&mut self, _: &mut Mem, _: W<u16>) {
+        let a = self.A;
+        self.A = self.rotate_left(a);
     }
 
-    fn sec (&mut self, _: &mut Mem, _: W<u16>) {
+    fn sec(&mut self, _: &mut Mem, _: W<u16>) {
         set_flag!(self.Flags, FLAG_CARRY);
     }
 
-    fn pha (&mut self, memory: &mut Mem, _: W<u16>) {
+    fn pha(&mut self, memory: &mut Mem, _: W<u16>) {
         let a = self.A;
         self.push(memory, a);
     }
 
-    fn sar (&mut self, _: &mut Mem, _: W<u16>) {
-        set_sign_zero_carry_cond!(self.Flags, self.A >> 1, self.A & W(1) != W(0));
-        self.A = self.A >> 1;
+    fn sar(&mut self, _: &mut Mem, _: W<u16>) {
+        let a = self.A;
+        self.A = self.shift_right(a);
     }
 
-    fn cli (&mut self, _: &mut Mem, _: W<u16>) {
+    fn cli(&mut self, _: &mut Mem, _: W<u16>) {
         unset_flag!(self.Flags, FLAG_INTERRUPT);
     }
 
-    fn pla (&mut self, memory: &mut Mem, _: W<u16>) {
+    fn pla(&mut self, memory: &mut Mem, _: W<u16>) {
         self.A = self.pop(memory);
+        set_sign_zero!(self.Flags, self.A);
     }
 
-    fn rar (&mut self, _: &mut Mem, _: W<u16>) {
-        /* Bit to be rotated into the carry */
-        let carry = self.A & W(1) != W(0);
-        /* We rotate the carry bit into a */
-        ror!(self.A, self.Flags);
-        /* And we set the carry accordingly */
-        set_sign_zero_carry_cond!(self.Flags, self.A, carry);
+    fn rar(&mut self, _: &mut Mem, _: W<u16>) {
+        let a = self.A;
+        self.A = self.rotate_right(a);
     }
 
-    fn sei (&mut self, _: &mut Mem, _: W<u16>) {
+    fn sei(&mut self, _: &mut Mem, _: W<u16>) {
         set_flag!(self.Flags, FLAG_INTERRUPT);
     }
 
-    fn dey (&mut self, _: &mut Mem, _: W<u16>) {
-        self.Y = self.Y + W(1);
+    fn dey(&mut self, _: &mut Mem, _: W<u16>) {
+        self.Y = self.Y - W(1);
         set_sign_zero!(self.Flags, self.Y);
     }
 
-    fn txa (&mut self, _: &mut Mem, _: W<u16>) {
+    fn txa(&mut self, _: &mut Mem, _: W<u16>) {
         self.A = self.X;
         set_sign_zero!(self.Flags, self.A);
     }
 
-    fn tya (&mut self, _: &mut Mem, _: W<u16>) {
+    fn tya(&mut self, _: &mut Mem, _: W<u16>) {
         self.A = self.Y;
         set_sign_zero!(self.Flags, self.A);
     }
 
-    fn txs (&mut self, _: &mut Mem, _: W<u16>) {
+    fn txs(&mut self, _: &mut Mem, _: W<u16>) {
         self.SP = self.X;
     }
 
-    fn tay (&mut self, _: &mut Mem, _: W<u16>) {
+    fn tay(&mut self, _: &mut Mem, _: W<u16>) {
         self.Y = self.A;
         set_sign_zero!(self.Flags, self.Y);
     }
 
-    fn tax (&mut self, _: &mut Mem, _: W<u16>) {
+    fn tax(&mut self, _: &mut Mem, _: W<u16>) {
         self.X = self.A;
         set_sign_zero!(self.Flags, self.X);
     }
 
-    fn clv (&mut self, _: &mut Mem, _: W<u16>) {
+    fn clv(&mut self, _: &mut Mem, _: W<u16>) {
         unset_flag!(self.Flags, FLAG_OVERFLOW);
     }
 
-    fn tsx (&mut self, _: &mut Mem, _: W<u16>) {
+    fn tsx(&mut self, _: &mut Mem, _: W<u16>) {
         self.X = self.SP;
         set_sign_zero!(self.Flags, self.X);
     }
 
-    fn iny (&mut self, _: &mut Mem, _: W<u16>) {
+    fn iny(&mut self, _: &mut Mem, _: W<u16>) {
         self.Y = self.Y + W(1);
         set_sign_zero!(self.Flags, self.Y);
     }
 
-    fn dex (&mut self, _: &mut Mem, _: W<u16>) {
+    fn dex(&mut self, _: &mut Mem, _: W<u16>) {
         self.X = self.X - W(1);
         set_sign_zero!(self.Flags, self.X);
     }
 
-    fn cld (&mut self, _: &mut Mem, _: W<u16>) {
+    fn cld(&mut self, _: &mut Mem, _: W<u16>) {
         unset_flag!(self.Flags, FLAG_DECIMAL);
     }
 
-    fn inx (&mut self, _: &mut Mem, _: W<u16>) {
+    fn inx(&mut self, _: &mut Mem, _: W<u16>) {
         self.X = self.X + W(1);
         set_sign_zero!(self.Flags, self.X);
     }
 
-    fn nop (&mut self, _: &mut Mem, _: W<u16>) {
+    fn nop(&mut self, _: &mut Mem, _: W<u16>) {
         
     }
 
-    fn sed (&mut self, _: &mut Mem, _: W<u16>) {
+    fn sed(&mut self, _: &mut Mem, _: W<u16>) {
         set_flag!(self.Flags, FLAG_DECIMAL);
     }
 
     // Common
 
-    fn ora (&mut self, memory: &mut Mem, address: W<u16>) {
+    fn ora(&mut self, memory: &mut Mem, address: W<u16>) {
         let m = memory.load(address);
         self.A = self.A | m;
         set_sign_zero!(self.Flags, self.A);
     }
 
-    fn asl (&mut self, memory: &mut Mem, address: W<u16>) {
-        let m = memory.load(address);
-        set_sign_zero_carry_cond!(self.Flags, m << 1, m & W(0x80) != W(0));
-        memory.store(address, m << 1);
+    fn asl(&mut self, memory: &mut Mem, address: W<u16>) {
+        let m = self.shift_left(memory.load(address));
+        memory.store(address, m);
     }
 
-    fn bit (&mut self, memory: &mut Mem, address: W<u16>) {
+    fn bit(&mut self, memory: &mut Mem, address: W<u16>) {
         let m = memory.load(address);
-        /* We need to set overflow as it is in memory */
-        set_flag_cond!(self.Flags, FLAG_OVERFLOW, m & W(0x40) != W(0));
+        copy_flag!(self.Flags, m, FLAG_OVERFLOW);
         set_sign!(self.Flags, m); 
         set_zero!(self.Flags, self.A & m);
     }
 
-    fn and (&mut self, memory: &mut Mem, address: W<u16>) {
+    fn and(&mut self, memory: &mut Mem, address: W<u16>) {
         let m = memory.load(address);
         self.A = self.A & m;
         set_sign_zero!(self.Flags, self.A);
     }
 
-    fn rol (&mut self, memory: &mut Mem, address: W<u16>) {
-        let mut m = memory.load(address);
-        /* Bit to be rotated into the carry */
-        let carry = m & W(0x80) != W(0);
-        /* We rotate the carry bit into m*/
-        rol!(m, self.Flags);
-        /* and we set the carry accordingly */
-        set_sign_zero_carry_cond!(self.Flags, m, carry);
+    fn rol(&mut self, memory: &mut Mem, address: W<u16>) {
+        let m = self.rotate_left(memory.load(address));
         memory.store(address, m);
     }
 
-    fn eor (&mut self, memory: &mut Mem, address: W<u16>) {
+    fn eor(&mut self, memory: &mut Mem, address: W<u16>) {
         let m = memory.load(address);
         self.A = m ^ self.A;
         set_sign_zero!(self.Flags, self.A);
     }
 
-    fn lsr (&mut self, memory: &mut Mem, address: W<u16>) {
-        let m = memory.load(address);
-        set_sign_zero_carry_cond!(self.Flags, m >> 1, m & W(1) != W(0));
-        memory.store(address, m >> 1);
-    }
-
-    fn adc (&mut self, memory: &mut Mem, address: W<u16>) {
-        let m = memory.load(address);
-        let v = W16!(self.A) + W16!(m) + W((self.Flags & FLAG_CARRY) as u16);
-        self.A = W8!(v);
-        set_sign_zero!(self.Flags, self.A);
-        set_flag_cond!(self.Flags, FLAG_OVERFLOW | FLAG_CARRY, v > W(0xFF));
-    }
-
-    fn ror (&mut self, memory: &mut Mem, address: W<u16>) {
-        let mut m = memory.load(address);
-        let carry = m & W(1) != W(0);
-        ror!(m, self.Flags);
-        /* we rotate the carry bit into a */
-        /* and we set the carry accordingly */
-        set_sign_zero_carry_cond!(self.Flags, m, carry);
+    fn lsr(&mut self, memory: &mut Mem, address: W<u16>) {
+        let m = self.shift_right(memory.load(address));
         memory.store(address, m);
-
     }
 
-    fn sty (&mut self, memory: &mut Mem, address: W<u16>) {
+    fn adc(&mut self, memory: &mut Mem, address: W<u16>) {
+        self.add_with_carry(memory.load(address));
+    }
+
+    fn ror(&mut self, memory: &mut Mem, address: W<u16>) {
+        let m = self.rotate_right(memory.load(address));
+        memory.store(address, m);
+    }
+
+    fn sty(&mut self, memory: &mut Mem, address: W<u16>) {
         memory.store(address, self.Y);
     }
 
-    fn stx (&mut self, memory: &mut Mem, address: W<u16>) {
+    fn stx(&mut self, memory: &mut Mem, address: W<u16>) {
         memory.store(address, self.X);
     }
 
-    fn sta (&mut self, memory: &mut Mem, address: W<u16>) {
+    fn sta(&mut self, memory: &mut Mem, address: W<u16>) {
         memory.store(address, self.A);
     }
 
-    fn ldy (&mut self, memory: &mut Mem, address: W<u16>) {
+    fn ldy(&mut self, memory: &mut Mem, address: W<u16>) {
         self.Y = memory.load(address);
         set_sign_zero!(self.Flags, self.Y);
     }
 
-    fn ldx (&mut self, memory: &mut Mem, address: W<u16>) {
+    fn ldx(&mut self, memory: &mut Mem, address: W<u16>) {
         self.X = memory.load(address);
         set_sign_zero!(self.Flags, self.X);
     }
 
-    fn lda (&mut self, memory: &mut Mem, address: W<u16>) {
+    fn lda(&mut self, memory: &mut Mem, address: W<u16>) {
         self.A = memory.load(address);
         set_sign_zero!(self.Flags, self.A);
     }
 
-    fn cpy (&mut self, memory: &mut Mem, address: W<u16>) {
-        let m = memory.load(address);
-        let comp = W16!(self.Y) - W16!(m);
-        set_sign_zero_carry_cond!(self.Flags, W8!(comp), comp <= W(0xFF));
+    fn cpy(&mut self, memory: &mut Mem, address: W<u16>) {
+        let y = self.Y;
+        self.compare(y, memory.load(address));
     }
 
-    fn cpx (&mut self, memory: &mut Mem, address: W<u16>) {
-        let m = memory.load(address);
-        let comp = W16!(self.X) - W16!(m);
-        set_sign_zero_carry_cond!(self.Flags, W8!(comp), comp <= W(0xFF));
+    fn cpx(&mut self, memory: &mut Mem, address: W<u16>) {
+        let x = self.X;
+        self.compare(x, memory.load(address));
     }
 
-    fn cmp (&mut self, memory: &mut Mem, address: W<u16>) {
-        let m = memory.load(address);
-        let comp = W16!(self.A) - W16!(m);
-        set_sign_zero_carry_cond!(self.Flags, W8!(comp), comp <= W(0xFF));
+    fn cmp(&mut self, memory: &mut Mem, address: W<u16>) {
+        let a = self.A;
+        self.compare(a, memory.load(address));
     }
 
-    fn dec (&mut self, memory: &mut Mem, address: W<u16>) {
-        let mut m = memory.load(address);
-        m = m - W(1);
+    fn dec(&mut self, memory: &mut Mem, address: W<u16>) {
+        let m = memory.load(address) - W(1);
         set_sign_zero!(self.Flags, m);
         memory.store(address, m);
     }
 
-
-    fn sbc (&mut self, memory: &mut Mem, address: W<u16>) {
-        let m = memory.load(address);
-        let v = W16!(self.A) - W16!(m) - W((self.Flags & FLAG_CARRY) as u16);
-        self.A = W8!(v);
-        set_sign_zero!(self.Flags, self.A);
-        set_flag_cond!(self.Flags, FLAG_OVERFLOW | FLAG_CARRY, v <= W(0xFF));
+    fn sbc(&mut self, memory: &mut Mem, address: W<u16>) {
+        self.add_with_carry(!memory.load(address));
     }
    
-    fn inc (&mut self, memory: &mut Mem, address: W<u16>) {
-        let mut m = memory.load(address);
-        m = m + W(1);
+    fn inc(&mut self, memory: &mut Mem, address: W<u16>) {
+        let m = memory.load(address) + W(1);
         set_sign_zero!(self.Flags, m);
         memory.store(address, m);
     }
 }
 
+// Unofficial Instructions
+
+impl Regs {
+    fn lax(&mut self, memory: &mut Mem, address: W<u16>) {
+        let m = memory.load(address);
+        self.A = m;
+        self.X = m;
+        set_sign_zero!(self.Flags, m);
+    }
+
+    fn sax(&mut self, memory: &mut Mem, address: W<u16>) {
+        memory.store(address, self.A & self.X);
+    }
+
+    fn dcp(&mut self, memory: &mut Mem, address: W<u16>) {
+        let m = memory.load(address) - W(1);
+        let a = self.A;
+        memory.store(address, m);
+        self.compare(a, m);
+    }
+
+    fn isc(&mut self, memory: &mut Mem, address: W<u16>) {
+        let m = memory.load(address) + W(1);
+        memory.store(address, m);
+        self.add_with_carry(!m);
+    }
+
+    fn slo(&mut self, memory: &mut Mem, address: W<u16>) {
+        let shift = self.shift_left(memory.load(address));
+        memory.store(address, shift);
+        self.A = self.A | shift;
+        set_sign_zero!(self.Flags, self.A);
+    }
+
+    fn rla(&mut self, memory: &mut Mem, address: W<u16>) {
+        let rot = self.rotate_left(memory.load(address)); 
+        memory.store(address, rot);
+        self.A = self.A & rot;
+        set_sign_zero!(self.Flags, self.A);
+    }
+
+    fn sre(&mut self, memory: &mut Mem, address: W<u16>) {
+        let shift = self.shift_right(memory.load(address));
+        memory.store(address, shift);
+        self.A = self.A ^ shift;
+        set_sign_zero!(self.Flags, self.A);
+    }
+
+    fn rra(&mut self, memory: &mut Mem, address: W<u16>) {
+        let rot = self.rotate_right(memory.load(address)); 
+        memory.store(address, rot);
+        self.add_with_carry(rot);
+    }
+
+}
+
 impl fmt::Debug for Regs {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{{Regs: A: {:#x}, X: {:#x}, Y: {:#x}, P: {:#x}, SP: {:#x}, PC: {:#x} }}",
+        write!(f, "{{Regs: A: {:02X}, X: {:02X}, Y: {:02X}, P: {:02X}, SP: {:02X}, PC: {:04X} }}",
                self.A.0 , self.X.0 , self.Y.0 , self.Flags , self.SP.0 , self.PC.0)
     }
 }
@@ -603,150 +678,150 @@ impl fmt::Debug for Regs {
 
 /* WARNING: Branch instructions are replaced with jumps */
 /* Addressing, Instruction, Cycles, Has Penalty */
-const OPCODE_TABLE : [(fn_addressing, fn_instruction, u32, bool); 256] = [
+const OPCODE_TABLE : [(fn_addressing, fn_instruction, u32, bool); 256] = [    // 0x00
     (Regs::imp, Regs::brk, 7, false), (Regs::idx, Regs::ora, 6, false), 
-    (Regs::imp, Regs::nop, 2, false), (Regs::imp, Regs::nop, 2, false), 
-    (Regs::imp, Regs::nop, 2, false), (Regs::zpg, Regs::ora, 3, false),
-    (Regs::zpg, Regs::asl, 5, false), (Regs::imp, Regs::nop, 2, false),
+    (Regs::imp, Regs::nop, 2, false), (Regs::idx, Regs::slo, 8, false), 
+    (Regs::zpg, Regs::nop, 3, false), (Regs::zpg, Regs::ora, 3, false),
+    (Regs::zpg, Regs::asl, 5, false), (Regs::zpg, Regs::slo, 5, false),
     (Regs::imp, Regs::php, 3, false), (Regs::imm, Regs::ora, 2, false),
     (Regs::imp, Regs::sal, 2, false), (Regs::imp, Regs::nop, 2, false), 
-    (Regs::imp, Regs::nop, 2, false), (Regs::abs, Regs::ora, 4, false),
-    (Regs::abs, Regs::asl, 6, false), (Regs::imp, Regs::nop, 2, false), 
-    
+    (Regs::abs, Regs::nop, 4, false), (Regs::abs, Regs::ora, 4, false),
+    (Regs::abs, Regs::asl, 6, false), (Regs::abs, Regs::slo, 6, false), 
+    // 0x10 
     (Regs::rel, Regs::jmp, 2, true),  (Regs::idy, Regs::ora, 5, true), 
-    (Regs::imp, Regs::nop, 2, false), (Regs::imp, Regs::nop, 2, false),
-    (Regs::imp, Regs::nop, 2, false), (Regs::zpx, Regs::ora, 4, false),
-    (Regs::zpx, Regs::asl, 6, false), (Regs::imp, Regs::nop, 2, false),
+    (Regs::imp, Regs::nop, 2, false), (Regs::idy, Regs::slo, 4, false),
+    (Regs::zpx, Regs::nop, 4, false), (Regs::zpx, Regs::ora, 4, false),
+    (Regs::zpx, Regs::asl, 6, false), (Regs::zpx, Regs::slo, 6, false),
     (Regs::imp, Regs::clc, 2, false), (Regs::aby, Regs::ora, 4, true),
-    (Regs::imp, Regs::nop, 2, false), (Regs::imp, Regs::nop, 2, false),
-    (Regs::imp, Regs::nop, 2, false), (Regs::abx, Regs::ora, 4, true), 
-    (Regs::abx, Regs::asl, 7, false), (Regs::imp, Regs::nop, 2, false),
-
+    (Regs::imp, Regs::nop, 2, false), (Regs::aby, Regs::slo, 7, false),
+    (Regs::abx, Regs::nop, 4, true),  (Regs::abx, Regs::ora, 4, true), 
+    (Regs::abx, Regs::asl, 7, false), (Regs::abx, Regs::slo, 7, false),
+    // 0x20
     (Regs::abs, Regs::jsr, 6, false), (Regs::idx, Regs::and, 6, false), 
-    (Regs::imp, Regs::nop, 2, false), (Regs::imp, Regs::nop, 6, false),
+    (Regs::imp, Regs::nop, 2, false), (Regs::idx, Regs::rla, 8, false),
     (Regs::zpg, Regs::bit, 3, false), (Regs::zpg, Regs::and, 3, false),
-    (Regs::zpg, Regs::rol, 5, false), (Regs::imp, Regs::nop, 2, false),
+    (Regs::zpg, Regs::rol, 5, false), (Regs::zpg, Regs::rla, 5, false),
     (Regs::imp, Regs::plp, 4, false), (Regs::imm, Regs::and, 2, false),
     (Regs::imp, Regs::ral, 2, false), (Regs::imp, Regs::nop, 2, false),
     (Regs::abs, Regs::bit, 4, false), (Regs::abs, Regs::and, 4, false),
-    (Regs::abs, Regs::rol, 6, false), (Regs::imp, Regs::nop, 2, false),
-
+    (Regs::abs, Regs::rol, 6, false), (Regs::abs, Regs::rla, 6, false),
+    // 0x30
     (Regs::rel, Regs::jmp, 2, true),  (Regs::idy, Regs::and, 5, true),
-    (Regs::imp, Regs::nop, 2, false), (Regs::imp, Regs::nop, 2, false),
-    (Regs::imp, Regs::nop, 2, false), (Regs::zpx, Regs::and, 4, false),
-    (Regs::zpx, Regs::rol, 6, false), (Regs::imp, Regs::nop, 2, false),
+    (Regs::imp, Regs::nop, 2, false), (Regs::idy, Regs::rla, 8, false),
+    (Regs::zpx, Regs::nop, 4, false), (Regs::zpx, Regs::and, 4, false),
+    (Regs::zpx, Regs::rol, 6, false), (Regs::zpx, Regs::rla, 6, false),
     (Regs::imp, Regs::sec, 2, false), (Regs::aby, Regs::and, 4, true),
-    (Regs::imp, Regs::nop, 2, false), (Regs::imp, Regs::nop, 2, true),
-    (Regs::imp, Regs::nop, 2, false), (Regs::abx, Regs::and, 4, true),
-    (Regs::abx, Regs::rol, 7, false), (Regs::imp, Regs::nop, 2, false),
-
+    (Regs::imp, Regs::nop, 2, false), (Regs::aby, Regs::rla, 7, true),
+    (Regs::abx, Regs::nop, 4, true),  (Regs::abx, Regs::and, 4, true),
+    (Regs::abx, Regs::rol, 7, false), (Regs::abx, Regs::rla, 7, false),
+    // 0x40
     (Regs::imp, Regs::rti, 6, false), (Regs::idx, Regs::eor, 6, false),
-    (Regs::imp, Regs::nop, 2, false), (Regs::imp, Regs::nop, 2, false),
-    (Regs::imp, Regs::nop, 2, false), (Regs::zpg, Regs::eor, 3, false), 
-    (Regs::zpg, Regs::lsr, 5, false), (Regs::imp, Regs::nop, 2, false),
+    (Regs::imp, Regs::nop, 2, false), (Regs::idx, Regs::sre, 8, false),
+    (Regs::zpg, Regs::nop, 3, false), (Regs::zpg, Regs::eor, 3, false), 
+    (Regs::zpg, Regs::lsr, 5, false), (Regs::zpg, Regs::sre, 5, false),
     (Regs::imp, Regs::pha, 3, false), (Regs::imm, Regs::eor, 2, false),
     (Regs::imp, Regs::sar, 2, false), (Regs::imp, Regs::nop, 2, false),
     (Regs::abs, Regs::jmp, 3, false), (Regs::abs, Regs::eor, 4, false),
-    (Regs::abs, Regs::lsr, 6, false), (Regs::imp, Regs::nop, 2, false),
-
+    (Regs::abs, Regs::lsr, 6, false), (Regs::abs, Regs::sre, 6, false),
+    // 0x50
     (Regs::rel, Regs::jmp, 2, true),  (Regs::idy, Regs::eor, 5, true), 
-    (Regs::imp, Regs::nop, 2, false), (Regs::imp, Regs::nop, 2, false),
-    (Regs::imp, Regs::nop, 2, false), (Regs::zpx, Regs::eor, 4, false),
-    (Regs::zpx, Regs::lsr, 6, false), (Regs::imp, Regs::nop, 2, false),
+    (Regs::imp, Regs::nop, 2, false), (Regs::idy, Regs::sre, 8, false),
+    (Regs::zpx, Regs::nop, 4, false), (Regs::zpx, Regs::eor, 4, false),
+    (Regs::zpx, Regs::lsr, 6, false), (Regs::zpx, Regs::sre, 6, false),
     (Regs::imp, Regs::cli, 2, false), (Regs::aby, Regs::eor, 4, true), 
-    (Regs::imp, Regs::nop, 2, false), (Regs::imp, Regs::nop, 2, false), 
-    (Regs::imp, Regs::nop, 2, false), (Regs::abx, Regs::eor, 4, true),
-    (Regs::abx, Regs::lsr, 7, false), (Regs::imp, Regs::nop, 2, false),
-
+    (Regs::imp, Regs::nop, 2, false), (Regs::aby, Regs::sre, 7, false), 
+    (Regs::abx, Regs::nop, 4, true),  (Regs::abx, Regs::eor, 4, true),
+    (Regs::abx, Regs::lsr, 7, false), (Regs::abx, Regs::sre, 7, false),
+    // 0x60
     (Regs::imp, Regs::rts, 6, false), (Regs::idx, Regs::adc, 6, false),
-    (Regs::imp, Regs::nop, 2, false), (Regs::imp, Regs::nop, 2, false),
-    (Regs::imp, Regs::nop, 2, false), (Regs::zpg, Regs::adc, 3, false),
-    (Regs::zpg, Regs::ror, 5, false), (Regs::imp, Regs::nop, 2, false),
+    (Regs::imp, Regs::nop, 2, false), (Regs::idx, Regs::rra, 8, false),
+    (Regs::zpg, Regs::nop, 3, false), (Regs::zpg, Regs::adc, 3, false),
+    (Regs::zpg, Regs::ror, 5, false), (Regs::zpg, Regs::rra, 5, false),
     (Regs::imp, Regs::pla, 4, false), (Regs::imm, Regs::adc, 2, false),
     (Regs::imp, Regs::rar, 2, false), (Regs::imp, Regs::nop, 2, false),
     (Regs::ind, Regs::jmp, 5, false), (Regs::abs, Regs::adc, 4, false),
-    (Regs::abs, Regs::ror, 6, false), (Regs::imp, Regs::nop, 2, false),
-
+    (Regs::abs, Regs::ror, 6, false), (Regs::abs, Regs::rra, 6, false),
+    // 0x70
     (Regs::rel, Regs::jmp, 2, true),  (Regs::idy, Regs::adc, 5, true),
-    (Regs::imp, Regs::nop, 2, false), (Regs::imp, Regs::nop, 2, false),
-    (Regs::imp, Regs::nop, 2, false), (Regs::zpx, Regs::adc, 4, false),
-    (Regs::zpx, Regs::ror, 6, false), (Regs::imp, Regs::nop, 2, false),
+    (Regs::imp, Regs::nop, 2, false), (Regs::idy, Regs::rra, 8, false),
+    (Regs::zpx, Regs::nop, 4, false), (Regs::zpx, Regs::adc, 4, false),
+    (Regs::zpx, Regs::ror, 6, false), (Regs::zpx, Regs::rra, 6, false),
     (Regs::imp, Regs::sei, 2, false), (Regs::aby, Regs::adc, 4, true),
-    (Regs::imp, Regs::nop, 2, false), (Regs::imp, Regs::nop, 2, false), 
-    (Regs::imp, Regs::nop, 2, false), (Regs::abx, Regs::adc, 4, true),
-    (Regs::abx, Regs::ror, 7, false), (Regs::imp, Regs::nop, 2, false),
-
-    (Regs::imp, Regs::nop, 2, false), (Regs::idx, Regs::sta, 6, false),
-    (Regs::imp, Regs::nop, 2, false), (Regs::imp, Regs::nop, 2, false),
+    (Regs::imp, Regs::nop, 2, false), (Regs::aby, Regs::rra, 7, false), 
+    (Regs::abx, Regs::nop, 4, true),  (Regs::abx, Regs::adc, 4, true),
+    (Regs::abx, Regs::ror, 7, false), (Regs::abx, Regs::rra, 7, false),
+    // 0x80
+    (Regs::imm, Regs::nop, 2, false), (Regs::idx, Regs::sta, 6, false),
+    (Regs::imm, Regs::nop, 2, false), (Regs::idx, Regs::sax, 6, false),
     (Regs::zpg, Regs::sty, 3, false), (Regs::zpg, Regs::sta, 3, false),
-    (Regs::zpg, Regs::stx, 3, false), (Regs::imp, Regs::nop, 2, false),
-    (Regs::imp, Regs::dey, 2, false), (Regs::imp, Regs::nop, 2, false),
+    (Regs::zpg, Regs::stx, 3, false), (Regs::zpg, Regs::sax, 3, false),
+    (Regs::imp, Regs::dey, 2, false), (Regs::imm, Regs::nop, 2, false),
     (Regs::imp, Regs::txa, 2, false), (Regs::imp, Regs::nop, 2, false),
     (Regs::abs, Regs::sty, 4, false), (Regs::abs, Regs::sta, 4, false),
-    (Regs::abs, Regs::stx, 4, false), (Regs::imp, Regs::nop, 2, false),
-
+    (Regs::abs, Regs::stx, 4, false), (Regs::abs, Regs::sax, 4, false),
+    // 0x90
     (Regs::rel, Regs::jmp, 2, true),  (Regs::idy, Regs::sta, 6, false),
     (Regs::imp, Regs::nop, 2, false), (Regs::imp, Regs::nop, 2, false), 
     (Regs::zpx, Regs::sty, 4, false), (Regs::zpx, Regs::sta, 4, false),
-    (Regs::zpy, Regs::stx, 4, false), (Regs::imp, Regs::nop, 2, false),
+    (Regs::zpy, Regs::stx, 4, false), (Regs::zpy, Regs::sax, 4, false),
     (Regs::imp, Regs::tya, 2, false), (Regs::aby, Regs::sta, 5, false), 
     (Regs::imp, Regs::txs, 2, false), (Regs::imp, Regs::nop, 2, false), 
     (Regs::imp, Regs::nop, 2, false), (Regs::abx, Regs::sta, 5, false),
     (Regs::imp, Regs::nop, 2, false), (Regs::imp, Regs::nop, 2, false),
-
+    // 0xA0
     (Regs::imm, Regs::ldy, 2, false), (Regs::idx, Regs::lda, 6, false), 
-    (Regs::imm, Regs::ldx, 2, false), (Regs::imp, Regs::nop, 2, false),
+    (Regs::imm, Regs::ldx, 2, false), (Regs::idx, Regs::lax, 6, false),
     (Regs::zpg, Regs::ldy, 3, false), (Regs::zpg, Regs::lda, 3, false),
-    (Regs::zpg, Regs::ldx, 3, false), (Regs::imp, Regs::nop, 2, false),
+    (Regs::zpg, Regs::ldx, 3, false), (Regs::zpg, Regs::lax, 3, false),
     (Regs::imp, Regs::tay, 2, false), (Regs::imm, Regs::lda, 2, false),
-    (Regs::imp, Regs::tax, 2, false), (Regs::imp, Regs::nop, 2, false),
+    (Regs::imp, Regs::tax, 2, false), (Regs::imm, Regs::lax, 2, false),
     (Regs::abs, Regs::ldy, 4, false), (Regs::abs, Regs::lda, 4, false),
-    (Regs::abs, Regs::ldx, 4, false), (Regs::imp, Regs::nop, 4, false),
-
+    (Regs::abs, Regs::ldx, 4, false), (Regs::abs, Regs::lax, 4, false),
+    // 0xB0
     (Regs::rel, Regs::jmp, 2, true),  (Regs::idy, Regs::lda, 5, true), 
-    (Regs::imp, Regs::nop, 2, false), (Regs::imp, Regs::nop, 2, false),
+    (Regs::imp, Regs::nop, 2, false), (Regs::idy, Regs::lax, 5, true),
     (Regs::zpx, Regs::ldy, 4, false), (Regs::zpx, Regs::lda, 4, false),
-    (Regs::zpy, Regs::ldx, 4, false), (Regs::imp, Regs::nop, 2, false),
+    (Regs::zpy, Regs::ldx, 4, false), (Regs::zpy, Regs::lax, 4, false),
     (Regs::imp, Regs::clv, 2, false), (Regs::aby, Regs::lda, 4, true), 
     (Regs::imp, Regs::tsx, 2, false), (Regs::imp, Regs::nop, 2, false),
     (Regs::abx, Regs::ldy, 4, true),  (Regs::abx, Regs::lda, 4, true),
-    (Regs::aby, Regs::ldx, 4, true),  (Regs::imp, Regs::nop, 2, false),
-
+    (Regs::aby, Regs::ldx, 4, true),  (Regs::aby, Regs::lax, 4, true),
+    // 0xC0
     (Regs::imm, Regs::cpy, 2, false), (Regs::idx, Regs::cmp, 6, false), 
-    (Regs::imp, Regs::nop, 2, false), (Regs::imp, Regs::nop, 2, false), 
+    (Regs::imm, Regs::nop, 2, false), (Regs::idx, Regs::dcp, 8, false), 
     (Regs::zpg, Regs::cpy, 3, false), (Regs::zpg, Regs::cmp, 3, false),
-    (Regs::zpg, Regs::dec, 5, false), (Regs::imp, Regs::nop, 2, false),
+    (Regs::zpg, Regs::dec, 5, false), (Regs::zpg, Regs::dcp, 5, false),
     (Regs::imp, Regs::iny, 2, false), (Regs::imm, Regs::cmp, 2, false),
     (Regs::imp, Regs::dex, 2, false), (Regs::imp, Regs::nop, 2, false),
     (Regs::abs, Regs::cpy, 4, false), (Regs::abs, Regs::cmp, 4, false),
-    (Regs::abs, Regs::dec, 6, false), (Regs::imp, Regs::nop, 2, false),
-
+    (Regs::abs, Regs::dec, 6, false), (Regs::abs, Regs::dcp, 6, false),
+    // 0xD0
     (Regs::rel, Regs::jmp, 2, true),  (Regs::idy, Regs::cmp, 5, true),
-    (Regs::imp, Regs::nop, 2, false), (Regs::imp, Regs::nop, 2, false),
-    (Regs::imp, Regs::nop, 2, false), (Regs::zpx, Regs::cmp, 4, false),
-    (Regs::zpx, Regs::dec, 6, false), (Regs::imp, Regs::nop, 2, false),
+    (Regs::imp, Regs::nop, 2, false), (Regs::idy, Regs::dcp, 8, false),
+    (Regs::zpx, Regs::nop, 4, false), (Regs::zpx, Regs::cmp, 4, false),
+    (Regs::zpx, Regs::dec, 6, false), (Regs::zpx, Regs::dcp, 6, false),
     (Regs::imp, Regs::cld, 2, false), (Regs::aby, Regs::cmp, 4, true),
-    (Regs::imp, Regs::nop, 2, false), (Regs::imp, Regs::nop, 2, false),
-    (Regs::imp, Regs::nop, 2, false), (Regs::abx, Regs::cmp, 4, true),
-    (Regs::abx, Regs::dec, 7, false), (Regs::imp, Regs::nop, 2, false),
-
+    (Regs::imp, Regs::nop, 2, false), (Regs::aby, Regs::dcp, 7, false),
+    (Regs::abx, Regs::nop, 4, true),  (Regs::abx, Regs::cmp, 4, true),
+    (Regs::abx, Regs::dec, 7, false), (Regs::abx, Regs::dcp, 7, false),
+    // 0xE0
     (Regs::imm, Regs::cpx, 2, false), (Regs::idx, Regs::sbc, 6, false), 
-    (Regs::imp, Regs::nop, 2, false), (Regs::imp, Regs::nop, 2, false),
+    (Regs::imm, Regs::nop, 2, false), (Regs::idx, Regs::isc, 8, false),
     (Regs::zpg, Regs::cpx, 3, false), (Regs::zpg, Regs::sbc, 3, false),
-    (Regs::zpg, Regs::inc, 6, false), (Regs::imp, Regs::nop, 2, false),
+    (Regs::zpg, Regs::inc, 6, false), (Regs::zpg, Regs::isc, 5, false),
     (Regs::imp, Regs::inx, 2, false), (Regs::imm, Regs::sbc, 2, false),
-    (Regs::imp, Regs::nop, 2, false), (Regs::imp, Regs::nop, 2, false),
+    (Regs::imp, Regs::nop, 2, false), (Regs::imm, Regs::sbc, 2, false),
     (Regs::abs, Regs::cpx, 4, false), (Regs::abs, Regs::sbc, 4, false),
-    (Regs::abs, Regs::inc, 6, false), (Regs::imp, Regs::nop, 2, false),
-
+    (Regs::abs, Regs::inc, 6, false), (Regs::abs, Regs::isc, 6, false),
+    // 0xF0
     (Regs::rel, Regs::jmp, 2, true),  (Regs::idy, Regs::sbc, 5, true), 
-    (Regs::imp, Regs::nop, 2, false), (Regs::imp, Regs::nop, 2, false),
-    (Regs::imp, Regs::nop, 2, false), (Regs::zpx, Regs::sbc, 4, false),
-    (Regs::zpx, Regs::inc, 6, false), (Regs::imp, Regs::nop, 2, false),
+    (Regs::imp, Regs::nop, 2, false), (Regs::idy, Regs::isc, 8, false),
+    (Regs::zpx, Regs::nop, 4, false), (Regs::zpx, Regs::sbc, 4, false),
+    (Regs::zpx, Regs::inc, 6, false), (Regs::zpx, Regs::isc, 6, false),
     (Regs::imp, Regs::sed, 2, false), (Regs::aby, Regs::sbc, 4, true), 
-    (Regs::imp, Regs::nop, 2, false), (Regs::imp, Regs::nop, 2, false), 
-    (Regs::imp, Regs::nop, 2, false), (Regs::abx, Regs::sbc, 4, true),
-    (Regs::abx, Regs::inc, 7, false), (Regs::imp, Regs::nop, 2, false),
+    (Regs::imp, Regs::nop, 2, false), (Regs::aby, Regs::isc, 7, false), 
+    (Regs::abx, Regs::nop, 4, true),  (Regs::abx, Regs::sbc, 4, true),
+    (Regs::abx, Regs::inc, 7, false), (Regs::abx, Regs::isc, 7, false),
     ];
 
 
