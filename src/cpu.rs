@@ -722,7 +722,7 @@ const OPCODE_TABLE : [Instruction; 256] = [
     // 0x30
     ix!(rel, jmp, 2), ix!(idy, and, 5), iz!(imp, nop, 2), iz!(idy, rla, 8),
     iz!(zpx, nop, 4), iz!(zpx, and, 4), iz!(zpx, rol, 6), iz!(zpx, rla, 6),
-    iz!(imp, sec, 2), ix!(aby, and, 4), iz!(imp, nop, 2), ix!(aby, rla, 7),
+    iz!(imp, sec, 2), ix!(aby, and, 4), iz!(imp, nop, 2), iz!(aby, rla, 7),
     ix!(abx, nop, 4), ix!(abx, and, 4), iz!(abx, rol, 7), iz!(abx, rla, 7),
     // 0x40
     iz!(imp, rti, 6), iz!(idx, eor, 6), iz!(imp, nop, 2), iz!(idx, sre, 8),
