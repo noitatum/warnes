@@ -702,7 +702,7 @@ macro_rules! ix {
 }
     
 
-/* WARNING: Branch izructions are replaced with jumps */
+/* WARNING: Branch instructions are replaced with jumps */
 const OPCODE_TABLE : [Instruction; 256] = [    
     // 0x00
     iz!(imp, brk, 7), iz!(idx, ora, 6), iz!(imp, nop, 2), iz!(idx, slo, 8), 
