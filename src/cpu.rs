@@ -26,9 +26,6 @@ const FLAG_PUSHED       : u8 = 0x20;
 const FLAG_OVERFLOW     : u8 = 0x40;
 const FLAG_SIGN         : u8 = 0x80;
 
-#[allow(non_camel_case_types)]
-type fn_operation = fn(&mut Regs, &mut Mem, W<u16>);
-
 #[derive(Default, Debug)]
 pub struct Cpu {
     // Cycle count since power up
@@ -38,39 +35,8 @@ pub struct Cpu {
     dma         : DMA,
 } 
 
-struct Execution {
-    cycles_left     : u32,
-    address         : W<u16>,
-    operation       : fn_operation, 
-}
-
-struct Instruction {
-    addressing  : fn(&mut Regs, &mut Mem) -> (W<u16>, u32),
-    operation   : fn_operation, 
-    cycles      : u32,
-    has_extra   : bool,
-    name        : &'static str
-}
-
-#[allow(dead_code)] 
-impl Instruction {
-    #[inline(always)]
-    pub fn name(&mut self) -> String {
-        return self.name.to_string();
-    }
-}
-
-#[allow(non_snake_case)]
-struct Regs {
-    A           : W<u8>,    // Accumulator
-    X           : W<u8>,    // Indexes
-    Y           : W<u8>,    //
-    Flags       : u8,       // Status
-    SP          : W<u8>,    // Stack pointer
-    PC          : W<u16>,   // Program counter
-}
-
 impl Cpu {
+
     pub fn reset(&mut self, memory: &mut Mem) {
         *self = Cpu::default();
         self.regs.reset(memory);
@@ -89,6 +55,12 @@ impl Cpu {
         let index = self.regs.next_opcode(memory) as usize;
         return OPCODE_TABLE[index].name();
     }
+}
+
+struct Execution {
+    cycles_left     : u32,
+    address         : W<u16>,
+    operation       : fn(&mut Regs, &mut Mem, W<u16>), 
 }
 
 impl Default for Execution {
@@ -123,6 +95,32 @@ impl Execution {
         }
         self.cycles_left -= 1;
     }
+}
+
+struct Instruction {
+    addressing  : fn(&mut Regs, &mut Mem) -> (W<u16>, u32),
+    operation   : fn(&mut Regs, &mut Mem, W<u16>),
+    cycles      : u32,
+    has_extra   : bool,
+    name        : &'static str
+}
+
+#[allow(dead_code)] 
+impl Instruction {
+    #[inline(always)]
+    pub fn name(&mut self) -> String {
+        return self.name.to_string();
+    }
+}
+
+#[allow(non_snake_case)]
+struct Regs {
+    A           : W<u8>,    // Accumulator
+    X           : W<u8>,    // Indexes
+    Y           : W<u8>,    //
+    Flags       : u8,       // Status
+    SP          : W<u8>,    // Stack pointer
+    PC          : W<u16>,   // Program counter
 }
 
 impl Default for Regs {
@@ -642,7 +640,6 @@ impl fmt::Debug for Regs {
                self.A.0 , self.X.0 , self.Y.0 , self.Flags , self.SP.0 , self.PC.0)
     }
 }
-  
 
 /* WARNING: Branch instructions are replaced with jumps */
 const OPCODE_TABLE : [Instruction; 256] = [    
