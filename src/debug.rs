@@ -1,4 +1,4 @@
-/*// nes
+// nes
 use nes::Nes;
 
 // std
@@ -7,9 +7,7 @@ use std::io::Error;
 use std::path::Path;
 
 // SDL2
-use sdl2::event::Event;
-use sdl2::keyboard::{Keycode};
-use sdl2::{EventPump, Sdl};
+use sdl2::EventPump;
 use sdl2::render::Renderer;
 
 macro_rules! rdbg {
@@ -34,7 +32,7 @@ pub struct Debug  {
 
 impl Debug {
     pub fn load_rom<P: AsRef<Path>>(rom_path: P) -> Result<Debug, Error>   {
-        let mut rnes = try!(Nes::load_rom(rom_path));
+        let rnes = try!(Nes::load_rom(rom_path));
         Ok (
             Debug {
                 nes : rnes,
@@ -44,14 +42,13 @@ impl Debug {
 }
 
 impl Debug {
-    pub fn debug(&mut self) {
+    pub fn run(&mut self, renderer: &mut Renderer, event_pump: &mut EventPump) {
         let mut input : String = "".to_string();
-        let mut stdin = io::stdin();
+        let stdin = io::stdin();
         'debug: loop {
             stdin.read_line(&mut input).unwrap();
             let words : Vec<&str>= input.split(" ").collect();
             if words.len() > 0 {
-                println!("words[0] {}", &rnl!(words[0]));
                 match &rnl!(words[0]) {
                     "l" => { println!("{} list", rdbg!()); }
                     // alone just one step
@@ -61,10 +58,12 @@ impl Debug {
                     // all these commands are the same
                     "n"|"nexti"|"ni"|"stepi"|"si"
                         => { println!("{} next", rdbg!());
-                             self.nes.cycle()
+                             self.nes.cycle(renderer, event_pump)
                              // Print executed instruction
                             },
-                    "c" => { println!("{} continue", rdbg!()); },
+                    "c" => { println!("{} continue", rdbg!());
+                             self.nes.run(renderer, event_pump) 
+                            },
                     "p" => { println!("{} print", rdbg!()); },
                     "b" => { println!("{} breakpoint", rdbg!());},
                     "q" => { break 'debug; },
@@ -76,4 +75,4 @@ impl Debug {
 }
 
 
-*/
+

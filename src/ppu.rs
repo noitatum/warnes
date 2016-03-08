@@ -4,7 +4,7 @@ extern crate sdl2;
 use utils::print_mem;
 use loadstore::LoadStore;
 use mem::{Memory as Mem};
-use enums::{MemState, IoState};
+use enums::{MemState};
 
 // std
 use std::fmt;

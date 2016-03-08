@@ -3,7 +3,7 @@ use mem::Memory as Mem;
 use loadstore::LoadStore;
 use std::num::Wrapping as W;
 use dma::DMA;
-use enums::{MemState, IoState};
+//use enums::{MemState, IoState};
 
 /* Branch flag types */
 const BRANCH_FLAG_CHECK : u8 = 0x20;
@@ -52,6 +52,8 @@ struct Instruction {
     name        : &'static str
 }
 
+#[allow(dead_code)] 
+#[inline(always)]
 impl Instruction {
     pub fn name(&mut self) -> String {
         return self.name.to_string();
@@ -82,6 +84,7 @@ impl Cpu {
         self.cycles += 1;
     }
 
+    #[allow(dead_code)]
     pub fn next_instr(&mut self, memory: &mut Mem) -> String {
         let index = self.regs.next_opcode(memory) as usize;
         return OPCODE_TABLE[index].name();
