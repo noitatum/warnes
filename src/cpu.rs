@@ -53,8 +53,8 @@ struct Instruction {
 }
 
 #[allow(dead_code)] 
-#[inline(always)]
 impl Instruction {
+    #[inline(always)]
     pub fn name(&mut self) -> String {
         return self.name.to_string();
     }
