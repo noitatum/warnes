@@ -1,14 +1,14 @@
 extern crate sdl2;
 
-// our shit
+// nes
 use utils::print_mem;
 use loadstore::LoadStore;
-use mem::{Memory as Mem, MemState};
+use mem::{Memory as Mem};
+use enums::{MemState};
 
 // std
 use std::fmt;
 use std::num::Wrapping as W;
-
 
 // sdl2
 use sdl2::pixels::Color;

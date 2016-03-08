@@ -1,91 +1,34 @@
+// nes
+use mapper::Mapper;
 use loadstore::LoadStore;
 use utils::print_mem;
-
+use enums::{MemState, IoState};
+// std
 use std::num::Wrapping as W;
 use std::fmt;
-
-use mapper::Mapper;
 
 const RAM_SIZE  : usize = 0x800;
 const VRAM_SIZE : usize = 0x800;
 const GAMEPAD1  : W<u16> = W(0x4016);
 const GAMEPAD2  : W<u16> = W(0x4017);
 
-#[derive(Clone, Copy)]
-pub enum MemState {
-    PpuCtrl,
-    PpuMask,
-    PpuStatus,
-    OamAddr,
-    OamData,
-    PpuScroll,
-    PpuAddr,
-    PpuData,
-    Io,
-    Memory,
-    NoState,
-}
-
-#[derive(Clone, Copy)]
-pub enum IoState {
-    GamePad1,
-    GamePad2,
-    NoState,
-}
-
-impl fmt::Display for MemState{
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}",
-            match *self {
-                MemState::PpuCtrl       => "PpuCtrl",
-                MemState::PpuMask       => "PpuMask",
-                MemState::PpuStatus     => "PpuStatus",
-                MemState::OamAddr       => "OamAddr",
-                MemState::OamData       => "OamData",
-                MemState::PpuScroll     => "PpuScroll",
-                MemState::PpuAddr       => "PpuAddr",
-                MemState::PpuData       => "PpuData",
-                MemState::Memory        => "Memory",
-                MemState::Io            => "Io",
-                MemState::NoState       => "NoState",
-            }
-        )
-    }
-}
-
-impl fmt::Display for IoState {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}",
-            match *self {
-                IoState::GamePad1      => "GamePad1",
-                IoState::GamePad2      => "GamePad2",
-                IoState::NoState       => "NoState",
-            }
-        )
-    }
-}
 
 pub struct Memory {
     ram                 : [u8; RAM_SIZE],
     vram                : [u8; VRAM_SIZE],
-
     mapper              : Box<Mapper>,
-
     mem_load_status     : MemState,
     mem_store_status    : MemState,
-
     io_load_status      : IoState,
     io_store_status     : IoState,
-
     latch               : W<u8>,
     oamdma              : Option<W<u8>>,
-
     joy1                : u8,
     joy2                : u8,
 }
 
 impl Memory {
-    pub fn new (mapper: Box<Mapper>) -> Memory {
+    pub fn new(mapper: Box<Mapper>) -> Memory {
         Memory {
             ram                 : [0; RAM_SIZE],
             vram                : [0; VRAM_SIZE], 
