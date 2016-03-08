@@ -66,12 +66,12 @@ macro_rules! inst {
 
 // Has zero cycle penalty
 macro_rules! iz {
-    ($addr:ident, $oper:ident, $cycles:expr, $name:expr) =>  
-        (inst!($addr, $oper, $cycles, false, $name))
+    ($addr:ident, $oper:ident, $cycles:expr) =>  
+        (inst!($addr, $oper, $cycles, false, stringify!($oper)))
 }
 
 // Has extra cycle penalty
 macro_rules! ix {
-    ($addr:ident, $oper:ident, $cycles:expr, $name:expr) => 
-        (inst!($addr, $oper, $cycles, true, $name))
+    ($addr:ident, $oper:ident, $cycles:expr) => 
+        (inst!($addr, $oper, $cycles, true, stringify!($oper)))
 }
