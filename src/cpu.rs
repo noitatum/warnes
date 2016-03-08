@@ -132,7 +132,7 @@ impl Execution {
             (self.operation)(regs, memory, self.address);
             // Get next instruction
             let index = regs.next_opcode(memory) as usize;
-            let ref instruction = OPCODE_TABLE[index];
+            let instruction = &OPCODE_TABLE[index];
             // Get address and extra cycles from mode
             let (address, extra) = (instruction.addressing)(regs, memory);
             // Save the address for next instruction
@@ -609,6 +609,7 @@ impl Regs {
 // Unofficial Instructions
 
 impl Regs {
+
     fn lax(&mut self, memory: &mut Mem, address: W<u16>) {
         let m = memory.load(address);
         self.A = m;
@@ -659,7 +660,6 @@ impl Regs {
         memory.store(address, rot);
         self.add_with_carry(rot);
     }
-
 }
 
 impl fmt::Debug for Regs {
@@ -784,4 +784,4 @@ const OPCODE_TABLE : [Instruction; 256] = [
     iz!(zpx, nop, 4), iz!(zpx, sbc, 4), iz!(zpx, inc, 6), iz!(zpx, isc, 6),
     iz!(imp, sed, 2), ix!(aby, sbc, 4), iz!(imp, nop, 2), iz!(aby, isc, 7), 
     ix!(abx, nop, 4), ix!(abx, sbc, 4), iz!(abx, inc, 7), iz!(abx, isc, 7),
-    ];
+];
