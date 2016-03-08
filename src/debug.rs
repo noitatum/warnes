@@ -1,10 +1,16 @@
-// nes
+/*// nes
 use nes::Nes;
 
 // std
 use std::io;
 use std::io::Error;
 use std::path::Path;
+
+// SDL2
+use sdl2::event::Event;
+use sdl2::keyboard::{Keycode};
+use sdl2::{EventPump, Sdl};
+use sdl2::render::Renderer;
 
 macro_rules! rdbg {
     () => { "(rdbg)" }
@@ -22,16 +28,16 @@ macro_rules! rnl {
     ($input:expr) => ($input[0..$input.len()-1]);
 }
 
-pub struct Debug {
+pub struct Debug  {
     nes: Nes,
 }
 
 impl Debug {
-    pub fn load_rom<P: AsRef<Path>>(rom_path: P) -> Result<Debug, Error> {
+    pub fn load_rom<P: AsRef<Path>>(rom_path: P) -> Result<Debug, Error>   {
         let mut rnes = try!(Nes::load_rom(rom_path));
         Ok (
             Debug {
-                nes : rnes
+                nes : rnes,
             }
         )
     }
@@ -70,4 +76,4 @@ impl Debug {
 }
 
 
-
+*/

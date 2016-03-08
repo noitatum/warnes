@@ -3,6 +3,7 @@ use mem::Memory as Mem;
 use loadstore::LoadStore;
 use std::num::Wrapping as W;
 use dma::DMA;
+use enums::{MemState, IoState};
 
 /* Branch flag types */
 const BRANCH_FLAG_CHECK : u8 = 0x20;
@@ -25,6 +26,9 @@ const FLAG_PUSHED       : u8 = 0x20;
 const FLAG_OVERFLOW     : u8 = 0x40;
 const FLAG_SIGN         : u8 = 0x80;
 
+#[allow(non_camel_case_types)]
+type fn_operation = fn(&mut Regs, &mut Mem, W<u16>);
+
 #[derive(Default, Debug)]
 pub struct Cpu {
     // Cycle count since power up
@@ -33,6 +37,36 @@ pub struct Cpu {
     exec        : Execution,
     dma         : DMA,
 } 
+
+struct Execution {
+    cycles_left     : u32,
+    address         : W<u16>,
+    operation       : fn_operation, 
+}
+
+struct Instruction {
+    addressing  : fn(&mut Regs, &mut Mem) -> (W<u16>, u32),
+    operation   : fn_operation, 
+    cycles      : u32,
+    has_extra   : bool,
+    name        : &'static str
+}
+
+impl Instruction {
+    pub fn name(&mut self) -> String {
+        return self.name.to_string();
+    }
+}
+
+#[allow(non_snake_case)]
+struct Regs {
+    A           : W<u8>,    // Accumulator
+    X           : W<u8>,    // Indexes
+    Y           : W<u8>,    //
+    Flags       : u8,       // Status
+    SP          : W<u8>,    // Stack pointer
+    PC          : W<u16>,   // Program counter
+}
 
 impl Cpu {
     pub fn reset(&mut self, memory: &mut Mem) {
@@ -47,12 +81,11 @@ impl Cpu {
         }
         self.cycles += 1;
     }
-}
 
-struct Execution {
-    cycles_left     : u32,
-    address         : W<u16>,
-    operation       : FnOperation, 
+    pub fn next_instr(&mut self, memory: &mut Mem) -> String {
+        let index = self.regs.next_opcode(memory) as usize;
+        return OPCODE_TABLE[index].name();
+    }
 }
 
 impl Default for Execution {
@@ -62,13 +95,6 @@ impl Default for Execution {
             operation       : Regs::nop,
             address         : W(0),
         }
-    }
-}
-
-impl fmt::Debug for Execution {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{{Execution: cycles_left: {}, address: {:#x}}}",
-               self.cycles_left, self.address.0)
     }
 }
 
@@ -94,16 +120,6 @@ impl Execution {
         }
         self.cycles_left -= 1;
     }
-}
-
-#[allow(non_snake_case)]
-struct Regs {
-    A           : W<u8>,    // Accumulator
-    X           : W<u8>,    // Indexes
-    Y           : W<u8>,    //
-    Flags       : u8,       // Status
-    SP          : W<u8>,    // Stack pointer
-    PC          : W<u16>,   // Program counter
 }
 
 impl Default for Regs {
@@ -610,126 +626,101 @@ impl Regs {
 
 }
 
+impl fmt::Debug for Execution {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{{Execution: cycles_left: {}, address: {:#x}}}",
+               self.cycles_left, self.address.0)
+    }
+}
+
 impl fmt::Debug for Regs {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{{Regs: A: {:02X}, X: {:02X}, Y: {:02X}, P: {:02X}, SP: {:02X}, PC: {:04X} }}",
                self.A.0 , self.X.0 , self.Y.0 , self.Flags , self.SP.0 , self.PC.0)
     }
 }
-
-type FnOperation = fn(&mut Regs, &mut Mem, W<u16>);
-
-struct Instruction {
-    addressing  : fn(&mut Regs, &mut Mem) -> (W<u16>, u32),
-    operation   : FnOperation, 
-    cycles      : u32,
-    has_extra   : bool,
-}
-
-macro_rules! inst {
-    ($addr:ident, $oper:ident, $cycles:expr, $extra:expr) => (
-        Instruction {
-            addressing  : Regs::$addr,
-            operation   : Regs::$oper,
-            cycles      : $cycles,
-            has_extra   : $extra,
-        }
-    )
-}
-
-// Has zero cycle penalty
-macro_rules! iz {
-    ($addr:ident, $oper:ident, $cycles:expr) =>  
-        (inst!($addr, $oper, $cycles, false))
-}
-
-// Has extra cycle penalty
-macro_rules! ix {
-    ($addr:ident, $oper:ident, $cycles:expr) => 
-        (inst!($addr, $oper, $cycles, true))
-}
-    
+  
 
 /* WARNING: Branch instructions are replaced with jumps */
 const OPCODE_TABLE : [Instruction; 256] = [    
     // 0x00
-    iz!(imp, brk, 7), iz!(idx, ora, 6), iz!(imp, nop, 2), iz!(idx, slo, 8), 
-    iz!(zpg, nop, 3), iz!(zpg, ora, 3), iz!(zpg, asl, 5), iz!(zpg, slo, 5), 
-    iz!(imp, php, 3), iz!(imm, ora, 2), iz!(imp, sal, 2), iz!(imp, nop, 2), 
-    iz!(abs, nop, 4), iz!(abs, ora, 4), iz!(abs, asl, 6), iz!(abs, slo, 6),
+    iz!(imp, brk, 7, "brk"), iz!(idx, ora, 6, "ora"), iz!(imp, nop, 2, "nop"), iz!(idx, slo, 8, "slo"), 
+    iz!(zpg, nop, 3, "nop"), iz!(zpg, ora, 3, "ora"), iz!(zpg, asl, 5, "asl"), iz!(zpg, slo, 5, "slo"), 
+    iz!(imp, php, 3, "php"), iz!(imm, ora, 2, "ora"), iz!(imp, sal, 2, "sal"), iz!(imp, nop, 2, "nop"), 
+    iz!(abs, nop, 4, "nop"), iz!(abs, ora, 4, "ora"), iz!(abs, asl, 6, "asl"), iz!(abs, slo, 6, "slo"),
     // 0x10 
-    ix!(rel, jmp, 2), ix!(idy, ora, 5), iz!(imp, nop, 2), iz!(idy, slo, 4),
-    iz!(zpx, nop, 4), iz!(zpx, ora, 4), iz!(zpx, asl, 6), iz!(zpx, slo, 6),
-    iz!(imp, clc, 2), ix!(aby, ora, 4), iz!(imp, nop, 2), iz!(aby, slo, 7),
-    ix!(abx, nop, 4), ix!(abx, ora, 4), iz!(abx, asl, 7), iz!(abx, slo, 7),
+    ix!(rel, jmp, 2, "jmp"), ix!(idy, ora, 5, "ora"), iz!(imp, nop, 2, "nop"), iz!(idy, slo, 4, "slo"),
+    iz!(zpx, nop, 4, "nop"), iz!(zpx, ora, 4, "ora"), iz!(zpx, asl, 6, "asl"), iz!(zpx, slo, 6, "slo"),
+    iz!(imp, clc, 2, "clc"), ix!(aby, ora, 4, "ora"), iz!(imp, nop, 2, "nop"), iz!(aby, slo, 7, "slo"),
+    ix!(abx, nop, 4, "nop"), ix!(abx, ora, 4, "ora"), iz!(abx, asl, 7, "asl"), iz!(abx, slo, 7, "slo"),
     // 0x20
-    iz!(abs, jsr, 6), iz!(idx, and, 6), iz!(imp, nop, 2), iz!(idx, rla, 8),
-    iz!(zpg, bit, 3), iz!(zpg, and, 3), iz!(zpg, rol, 5), iz!(zpg, rla, 5),
-    iz!(imp, plp, 4), iz!(imm, and, 2), iz!(imp, ral, 2), iz!(imp, nop, 2),
-    iz!(abs, bit, 4), iz!(abs, and, 4), iz!(abs, rol, 6), iz!(abs, rla, 6),
+    iz!(abs, jsr, 6, "jsr"), iz!(idx, and, 6, "and"), iz!(imp, nop, 2, "nop"), iz!(idx, rla, 8, "rla"),
+    iz!(zpg, bit, 3, "bit"), iz!(zpg, and, 3, "and"), iz!(zpg, rol, 5, "rol"), iz!(zpg, rla, 5, "rla"),
+    iz!(imp, plp, 4, "plp"), iz!(imm, and, 2, "and"), iz!(imp, ral, 2, "ral"), iz!(imp, nop, 2, "nop"),
+    iz!(abs, bit, 4, "bit"), iz!(abs, and, 4, "and"), iz!(abs, rol, 6, "rol"), iz!(abs, rla, 6, "rla"),
     // 0x30
-    ix!(rel, jmp, 2), ix!(idy, and, 5), iz!(imp, nop, 2), iz!(idy, rla, 8),
-    iz!(zpx, nop, 4), iz!(zpx, and, 4), iz!(zpx, rol, 6), iz!(zpx, rla, 6),
-    iz!(imp, sec, 2), ix!(aby, and, 4), iz!(imp, nop, 2), iz!(aby, rla, 7),
-    ix!(abx, nop, 4), ix!(abx, and, 4), iz!(abx, rol, 7), iz!(abx, rla, 7),
+    ix!(rel, jmp, 2, "jmp"), ix!(idy, and, 5, "and"), iz!(imp, nop, 2, "nop"), iz!(idy, rla, 8, "rla"),
+    iz!(zpx, nop, 4, "nop"), iz!(zpx, and, 4, "and"), iz!(zpx, rol, 6, "rol"), iz!(zpx, rla, 6, "rla"),
+    iz!(imp, sec, 2, "sec"), ix!(aby, and, 4, "and"), iz!(imp, nop, 2, "nop"), iz!(aby, rla, 7, "rla"),
+    ix!(abx, nop, 4, "nop"), ix!(abx, and, 4, "and"), iz!(abx, rol, 7, "rol"), iz!(abx, rla, 7, "rla"),
     // 0x40
-    iz!(imp, rti, 6), iz!(idx, eor, 6), iz!(imp, nop, 2), iz!(idx, sre, 8),
-    iz!(zpg, nop, 3), iz!(zpg, eor, 3), iz!(zpg, lsr, 5), iz!(zpg, sre, 5),
-    iz!(imp, pha, 3), iz!(imm, eor, 2), iz!(imp, sar, 2), iz!(imp, nop, 2),
-    iz!(abs, jmp, 3), iz!(abs, eor, 4), iz!(abs, lsr, 6), iz!(abs, sre, 6),
+    iz!(imp, rti, 6, "rti"), iz!(idx, eor, 6, "eor"), iz!(imp, nop, 2, "nop"), iz!(idx, sre, 8, "sre"),
+    iz!(zpg, nop, 3, "nop"), iz!(zpg, eor, 3, "eor"), iz!(zpg, lsr, 5, "lsr"), iz!(zpg, sre, 5, "sre"),
+    iz!(imp, pha, 3, "pha"), iz!(imm, eor, 2, "eor"), iz!(imp, sar, 2, "sar"), iz!(imp, nop, 2, "nop"),
+    iz!(abs, jmp, 3, "jmp"), iz!(abs, eor, 4, "eor"), iz!(abs, lsr, 6, "lsr"), iz!(abs, sre, 6, "sre"),
     // 0x50
-    ix!(rel, jmp, 2), ix!(idy, eor, 5), iz!(imp, nop, 2), iz!(idy, sre, 8),
-    iz!(zpx, nop, 4), iz!(zpx, eor, 4), iz!(zpx, lsr, 6), iz!(zpx, sre, 6),
-    iz!(imp, cli, 2), ix!(aby, eor, 4), iz!(imp, nop, 2), iz!(aby, sre, 7), 
-    ix!(abx, nop, 4), ix!(abx, eor, 4), iz!(abx, lsr, 7), iz!(abx, sre, 7),
+    ix!(rel, jmp, 2, "jmp"), ix!(idy, eor, 5, "eor"), iz!(imp, nop, 2, "nop"), iz!(idy, sre, 8, "sre"),
+    iz!(zpx, nop, 4, "nop"), iz!(zpx, eor, 4, "eor"), iz!(zpx, lsr, 6, "lsr"), iz!(zpx, sre, 6, "sre"),
+    iz!(imp, cli, 2, "cli"), ix!(aby, eor, 4, "eor"), iz!(imp, nop, 2, "nop"), iz!(aby, sre, 7, "sre"), 
+    ix!(abx, nop, 4, "nop"), ix!(abx, eor, 4, "eor"), iz!(abx, lsr, 7, "lsr"), iz!(abx, sre, 7, "sre"),
     // 0x60
-    iz!(imp, rts, 6), iz!(idx, adc, 6), iz!(imp, nop, 2), iz!(idx, rra, 8),
-    iz!(zpg, nop, 3), iz!(zpg, adc, 3), iz!(zpg, ror, 5), iz!(zpg, rra, 5),
-    iz!(imp, pla, 4), iz!(imm, adc, 2), iz!(imp, rar, 2), iz!(imp, nop, 2),
-    iz!(ind, jmp, 5), iz!(abs, adc, 4), iz!(abs, ror, 6), iz!(abs, rra, 6),
+    iz!(imp, rts, 6, "rts"), iz!(idx, adc, 6, "adc"), iz!(imp, nop, 2, "nop"), iz!(idx, rra, 8, "rra"),
+    iz!(zpg, nop, 3, "nop"), iz!(zpg, adc, 3, "adc"), iz!(zpg, ror, 5, "ror"), iz!(zpg, rra, 5, "rra"),
+    iz!(imp, pla, 4, "pla"), iz!(imm, adc, 2, "adc"), iz!(imp, rar, 2, "rar"), iz!(imp, nop, 2, "nop"),
+    iz!(ind, jmp, 5, "jmp"), iz!(abs, adc, 4, "adc"), iz!(abs, ror, 6, "ror"), iz!(abs, rra, 6, "rra"),
     // 0x70
-    ix!(rel, jmp, 2), ix!(idy, adc, 5), iz!(imp, nop, 2), iz!(idy, rra, 8),
-    iz!(zpx, nop, 4), iz!(zpx, adc, 4), iz!(zpx, ror, 6), iz!(zpx, rra, 6),
-    iz!(imp, sei, 2), ix!(aby, adc, 4), iz!(imp, nop, 2), iz!(aby, rra, 7), 
-    ix!(abx, nop, 4), ix!(abx, adc, 4), iz!(abx, ror, 7), iz!(abx, rra, 7),
+    ix!(rel, jmp, 2, "jmp"), ix!(idy, adc, 5, "adc"), iz!(imp, nop, 2, "nop"), iz!(idy, rra, 8, "rra"),
+    iz!(zpx, nop, 4, "nop"), iz!(zpx, adc, 4, "adc"), iz!(zpx, ror, 6, "ror"), iz!(zpx, rra, 6, "rra"),
+    iz!(imp, sei, 2, "sei"), ix!(aby, adc, 4, "adc"), iz!(imp, nop, 2, "nop"), iz!(aby, rra, 7, "rra"), 
+    ix!(abx, nop, 4, "nop"), ix!(abx, adc, 4, "adc"), iz!(abx, ror, 7, "ror"), iz!(abx, rra, 7, "rra"),
     // 0x80
-    iz!(imm, nop, 2), iz!(idx, sta, 6), iz!(imm, nop, 2), iz!(idx, sax, 6),
-    iz!(zpg, sty, 3), iz!(zpg, sta, 3), iz!(zpg, stx, 3), iz!(zpg, sax, 3),
-    iz!(imp, dey, 2), iz!(imm, nop, 2), iz!(imp, txa, 2), iz!(imp, nop, 2),
-    iz!(abs, sty, 4), iz!(abs, sta, 4), iz!(abs, stx, 4), iz!(abs, sax, 4),
+    iz!(imm, nop, 2, "nop"), iz!(idx, sta, 6, "sta"), iz!(imm, nop, 2, "nop"), iz!(idx, sax, 6, "sax"),
+    iz!(zpg, sty, 3, "sty"), iz!(zpg, sta, 3, "sta"), iz!(zpg, stx, 3, "stx"), iz!(zpg, sax, 3, "sax"),
+    iz!(imp, dey, 2, "dey"), iz!(imm, nop, 2, "nop"), iz!(imp, txa, 2, "txa"), iz!(imp, nop, 2, "nop"),
+    iz!(abs, sty, 4, "sty"), iz!(abs, sta, 4, "sta"), iz!(abs, stx, 4, "stx"), iz!(abs, sax, 4, "sax"),
     // 0x90
-    ix!(rel, jmp, 2), iz!(idy, sta, 6), iz!(imp, nop, 2), iz!(imp, nop, 2), 
-    iz!(zpx, sty, 4), iz!(zpx, sta, 4), iz!(zpy, stx, 4), iz!(zpy, sax, 4),
-    iz!(imp, tya, 2), iz!(aby, sta, 5), iz!(imp, txs, 2), iz!(imp, nop, 2), 
-    iz!(imp, nop, 2), iz!(abx, sta, 5), iz!(imp, nop, 2), iz!(imp, nop, 2),
+    ix!(rel, jmp, 2, "jmp"), iz!(idy, sta, 6, "sta"), iz!(imp, nop, 2, "nop"), iz!(imp, nop, 2, "nop"), 
+    iz!(zpx, sty, 4, "sty"), iz!(zpx, sta, 4, "sta"), iz!(zpy, stx, 4, "stx"), iz!(zpy, sax, 4, "sax"),
+    iz!(imp, tya, 2, "tya"), iz!(aby, sta, 5, "sta"), iz!(imp, txs, 2, "txs"), iz!(imp, nop, 2, "nop"), 
+    iz!(imp, nop, 2, "nop"), iz!(abx, sta, 5, "sta"), iz!(imp, nop, 2, "nop"), iz!(imp, nop, 2, "nop"),
     // 0xA0
-    iz!(imm, ldy, 2), iz!(idx, lda, 6), iz!(imm, ldx, 2), iz!(idx, lax, 6),
-    iz!(zpg, ldy, 3), iz!(zpg, lda, 3), iz!(zpg, ldx, 3), iz!(zpg, lax, 3),
-    iz!(imp, tay, 2), iz!(imm, lda, 2), iz!(imp, tax, 2), iz!(imm, lax, 2),
-    iz!(abs, ldy, 4), iz!(abs, lda, 4), iz!(abs, ldx, 4), iz!(abs, lax, 4),
+    iz!(imm, ldy, 2, "ldy"), iz!(idx, lda, 6, "lda"), iz!(imm, ldx, 2, "ldx"), iz!(idx, lax, 6, "lax"),
+    iz!(zpg, ldy, 3, "ldy"), iz!(zpg, lda, 3, "lda"), iz!(zpg, ldx, 3, "ldx"), iz!(zpg, lax, 3, "lax"),
+    iz!(imp, tay, 2, "tay"), iz!(imm, lda, 2, "lda"), iz!(imp, tax, 2, "tax"), iz!(imm, lax, 2, "lax"),
+    iz!(abs, ldy, 4, "ldy"), iz!(abs, lda, 4, "lda"), iz!(abs, ldx, 4, "ldx"), iz!(abs, lax, 4, "lax"),
     // 0xB0
-    ix!(rel, jmp, 2), ix!(idy, lda, 5), iz!(imp, nop, 2), ix!(idy, lax, 5),
-    iz!(zpx, ldy, 4), iz!(zpx, lda, 4), iz!(zpy, ldx, 4), iz!(zpy, lax, 4),
-    iz!(imp, clv, 2), ix!(aby, lda, 4), iz!(imp, tsx, 2), iz!(imp, nop, 2),
-    ix!(abx, ldy, 4), ix!(abx, lda, 4), ix!(aby, ldx, 4), ix!(aby, lax, 4),
+    ix!(rel, jmp, 2, "jmp"), ix!(idy, lda, 5, "lda"), iz!(imp, nop, 2, "nop"), ix!(idy, lax, 5, "lax"),
+    iz!(zpx, ldy, 4, "ldy"), iz!(zpx, lda, 4, "lda"), iz!(zpy, ldx, 4, "ldx"), iz!(zpy, lax, 4, "lax"),
+    iz!(imp, clv, 2, "clv"), ix!(aby, lda, 4, "lda"), iz!(imp, tsx, 2, "tsx"), iz!(imp, nop, 2, "nop"),
+    ix!(abx, ldy, 4, "ldy"), ix!(abx, lda, 4, "lda"), ix!(aby, ldx, 4, "ldx"), ix!(aby, lax, 4, "lax"),
     // 0xC0
-    iz!(imm, cpy, 2), iz!(idx, cmp, 6), iz!(imm, nop, 2), iz!(idx, dcp, 8), 
-    iz!(zpg, cpy, 3), iz!(zpg, cmp, 3), iz!(zpg, dec, 5), iz!(zpg, dcp, 5),
-    iz!(imp, iny, 2), iz!(imm, cmp, 2), iz!(imp, dex, 2), iz!(imp, nop, 2),
-    iz!(abs, cpy, 4), iz!(abs, cmp, 4), iz!(abs, dec, 6), iz!(abs, dcp, 6),
+    iz!(imm, cpy, 2, "cpy"), iz!(idx, cmp, 6, "cmp"), iz!(imm, nop, 2, "nop"), iz!(idx, dcp, 8, "dcp"), 
+    iz!(zpg, cpy, 3, "cpy"), iz!(zpg, cmp, 3, "cmp"), iz!(zpg, dec, 5, "dec"), iz!(zpg, dcp, 5, "dcp"),
+    iz!(imp, iny, 2, "iny"), iz!(imm, cmp, 2, "cmp"), iz!(imp, dex, 2, "dex"), iz!(imp, nop, 2, "nop"),
+    iz!(abs, cpy, 4, "cpy"), iz!(abs, cmp, 4, "cmp"), iz!(abs, dec, 6, "dec"), iz!(abs, dcp, 6, "dcp"),
     // 0xD0
-    ix!(rel, jmp, 2), ix!(idy, cmp, 5), iz!(imp, nop, 2), iz!(idy, dcp, 8),
-    iz!(zpx, nop, 4), iz!(zpx, cmp, 4), iz!(zpx, dec, 6), iz!(zpx, dcp, 6),
-    iz!(imp, cld, 2), ix!(aby, cmp, 4), iz!(imp, nop, 2), iz!(aby, dcp, 7),
-    ix!(abx, nop, 4), ix!(abx, cmp, 4), iz!(abx, dec, 7), iz!(abx, dcp, 7),
+    ix!(rel, jmp, 2, "jmp"), ix!(idy, cmp, 5, "cmp"), iz!(imp, nop, 2, "nop"), iz!(idy, dcp, 8, "dcp"),
+    iz!(zpx, nop, 4, "nop"), iz!(zpx, cmp, 4, "cmp"), iz!(zpx, dec, 6, "dec"), iz!(zpx, dcp, 6, "dcp"),
+    iz!(imp, cld, 2, "cld"), ix!(aby, cmp, 4, "cmp"), iz!(imp, nop, 2, "nop"), iz!(aby, dcp, 7, "dcp"),
+    ix!(abx, nop, 4, "nop"), ix!(abx, cmp, 4, "cmp"), iz!(abx, dec, 7, "dec"), iz!(abx, dcp, 7, "dcp"),
     // 0xE0
-    iz!(imm, cpx, 2), iz!(idx, sbc, 6), iz!(imm, nop, 2), iz!(idx, isc, 8),
-    iz!(zpg, cpx, 3), iz!(zpg, sbc, 3), iz!(zpg, inc, 6), iz!(zpg, isc, 5),
-    iz!(imp, inx, 2), iz!(imm, sbc, 2), iz!(imp, nop, 2), iz!(imm, sbc, 2),
-    iz!(abs, cpx, 4), iz!(abs, sbc, 4), iz!(abs, inc, 6), iz!(abs, isc, 6),
+    iz!(imm, cpx, 2, "cpx"), iz!(idx, sbc, 6, "sbc"), iz!(imm, nop, 2, "nop"), iz!(idx, isc, 8, "isc"),
+    iz!(zpg, cpx, 3, "cpx"), iz!(zpg, sbc, 3, "sbc"), iz!(zpg, inc, 6, "inc"), iz!(zpg, isc, 5, "isc"),
+    iz!(imp, inx, 2, "inx"), iz!(imm, sbc, 2, "sbc"), iz!(imp, nop, 2, "nop"), iz!(imm, sbc, 2, "sbc"),
+    iz!(abs, cpx, 4, "cpx"), iz!(abs, sbc, 4, "sbc"), iz!(abs, inc, 6, "inc"), iz!(abs, isc, 6, "isc"),
     // 0xF0
-    ix!(rel, jmp, 2), ix!(idy, sbc, 5), iz!(imp, nop, 2), iz!(idy, isc, 8),
-    iz!(zpx, nop, 4), iz!(zpx, sbc, 4), iz!(zpx, inc, 6), iz!(zpx, isc, 6),
-    iz!(imp, sed, 2), ix!(aby, sbc, 4), iz!(imp, nop, 2), iz!(aby, isc, 7), 
-    ix!(abx, nop, 4), ix!(abx, sbc, 4), iz!(abx, inc, 7), iz!(abx, isc, 7),
+    ix!(rel, jmp, 2, "jmp"), ix!(idy, sbc, 5, "sbc"), iz!(imp, nop, 2, "nop"), iz!(idy, isc, 8, "isc"),
+    iz!(zpx, nop, 4, "nop"), iz!(zpx, sbc, 4, "sbc"), iz!(zpx, inc, 6, "inc"), iz!(zpx, isc, 6, "isc"),
+    iz!(imp, sed, 2, "sed"), ix!(aby, sbc, 4, "sbc"), iz!(imp, nop, 2, "nop"), iz!(aby, isc, 7, "isc"), 
+    ix!(abx, nop, 4, "nop"), ix!(abx, sbc, 4, "sbc"), iz!(abx, inc, 7, "inc"), iz!(abx, isc, 7, "isc"),
     ];

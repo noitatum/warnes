@@ -1,7 +1,8 @@
 extern crate sdl2;
 
 // nes 
-use mem::{Memory, IoState};
+use mem::Memory;
+use enums::IoState;
 use loadstore::LoadStore;
 
 // sdl
