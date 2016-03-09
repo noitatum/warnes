@@ -80,7 +80,8 @@ impl Debug {
                             },
                     "p" => { println!("{} print", rdbg!()); },
                     "b" => { println!("{} breakpoint", rdbg!());},
-                    "q" => { break 'debug; },
+                    "q" => { print!("{} ", rdbg!());
+                             break 'debug; },
                     _   => { undefinedc!(words[0]); },
                 }
             }

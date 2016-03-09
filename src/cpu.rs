@@ -63,16 +63,6 @@ struct Execution {
     address         : W<u16>,
 }
 
-impl Default for Execution {
-    fn default() -> Execution {
-        Execution {
-            cycles_left     : 0,
-            operation       : Regs::nop,
-            address         : W(0),
-        }
-    }
-}
-
 impl Execution {
     pub fn cycle(&mut self, memory: &mut Mem, regs: &mut Regs) {
         if self.cycles_left == 0 {
@@ -131,32 +121,6 @@ impl Instruction {
     #[inline(always)]
     pub fn cycles(&mut self) -> u32 {
         return self.cycles;
-    }
-}
-
-#[allow(non_snake_case)]
-struct Regs {
-    A           : W<u8>,    // Accumulator
-    X           : W<u8>,    // Indexes
-    Y           : W<u8>,    //
-    Flags       : u8,       // Status
-    SP          : W<u8>,    // Stack pointer
-    PC          : W<u16>,   // Program counter
-}
-
-struct Instruction {
-    addressing  : fn(&mut Regs, &mut Mem) -> (W<u16>, u32),
-    operation   : fn(&mut Regs, &mut Mem, W<u16>),
-    cycles      : u32,
-    has_extra   : bool,
-    name        : &'static str
-}
-
-#[allow(dead_code)] 
-impl Instruction {
-    #[inline(always)]
-    pub fn name(&mut self) -> String {
-        return self.name.to_string();
     }
 }
 
