@@ -649,7 +649,7 @@ const OPCODE_TABLE : [Instruction; 256] = [
     iz!(imp, php, 3), iz!(imm, ora, 2), iz!(imp, sal, 2), iz!(imp, nop, 2), 
     iz!(abs, nop, 4), iz!(abs, ora, 4), iz!(abs, asl, 6), iz!(abs, slo, 6),
     // 0x10 
-    ix!(rel, jmp, 2), ix!(idy, ora, 5), iz!(imp, nop, 2), iz!(idy, slo, 4),
+    ix!(rel, jmp, 2), ix!(idy, ora, 5), iz!(imp, nop, 2), iz!(idy, slo, 8),
     iz!(zpx, nop, 4), iz!(zpx, ora, 4), iz!(zpx, asl, 6), iz!(zpx, slo, 6),
     iz!(imp, clc, 2), ix!(aby, ora, 4), iz!(imp, nop, 2), iz!(aby, slo, 7),
     ix!(abx, nop, 4), ix!(abx, ora, 4), iz!(abx, asl, 7), iz!(abx, slo, 7),
@@ -715,7 +715,7 @@ const OPCODE_TABLE : [Instruction; 256] = [
     ix!(abx, nop, 4), ix!(abx, cmp, 4), iz!(abx, dec, 7), iz!(abx, dcp, 7),
     // 0xE0
     iz!(imm, cpx, 2), iz!(idx, sbc, 6), iz!(imm, nop, 2), iz!(idx, isc, 8),
-    iz!(zpg, cpx, 3), iz!(zpg, sbc, 3), iz!(zpg, inc, 6), iz!(zpg, isc, 5),
+    iz!(zpg, cpx, 3), iz!(zpg, sbc, 3), iz!(zpg, inc, 5), iz!(zpg, isc, 5),
     iz!(imp, inx, 2), iz!(imm, sbc, 2), iz!(imp, nop, 2), iz!(imm, sbc, 2),
     iz!(abs, cpx, 4), iz!(abs, sbc, 4), iz!(abs, inc, 6), iz!(abs, isc, 6),
     // 0xF0
