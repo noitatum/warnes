@@ -26,9 +26,6 @@ const FLAG_PUSHED       : u8 = 0x20;
 const FLAG_OVERFLOW     : u8 = 0x40;
 const FLAG_SIGN         : u8 = 0x80;
 
-#[allow(non_camel_case_types)]
-type fn_operation = fn(&mut Regs, &mut Mem, W<u16>);
-
 #[derive(Default, Debug)]
 pub struct Cpu {
     // Cycle count since power up
@@ -39,6 +36,7 @@ pub struct Cpu {
 } 
 
 impl Cpu {
+
     pub fn reset(&mut self, memory: &mut Mem) {
         *self = Cpu::default();
         self.regs.reset(memory);
@@ -61,8 +59,18 @@ impl Cpu {
 
 struct Execution {
     cycles_left     : u32,
-    operation       : fn_operation, 
+    operation       : fn(&mut Regs, &mut Mem, W<u16>),  
     address         : W<u16>,
+}
+
+impl Default for Execution {
+    fn default() -> Execution {
+        Execution {
+            cycles_left     : 0,
+            operation       : Regs::nop,
+            address         : W(0),
+        }
+    }
 }
 
 impl Execution {
@@ -107,7 +115,7 @@ impl Default for Execution {
 
 struct Instruction {
     addressing  : fn(&mut Regs, &mut Mem) -> (W<u16>, u32),
-    operation   : fn_operation, 
+    operation   : fn(&mut Regs, &mut Mem, W<u16>), 
     cycles      : u32,
     has_extra   : bool,
     name        : &'static str
@@ -123,6 +131,32 @@ impl Instruction {
     #[inline(always)]
     pub fn cycles(&mut self) -> u32 {
         return self.cycles;
+    }
+}
+
+#[allow(non_snake_case)]
+struct Regs {
+    A           : W<u8>,    // Accumulator
+    X           : W<u8>,    // Indexes
+    Y           : W<u8>,    //
+    Flags       : u8,       // Status
+    SP          : W<u8>,    // Stack pointer
+    PC          : W<u16>,   // Program counter
+}
+
+struct Instruction {
+    addressing  : fn(&mut Regs, &mut Mem) -> (W<u16>, u32),
+    operation   : fn(&mut Regs, &mut Mem, W<u16>),
+    cycles      : u32,
+    has_extra   : bool,
+    name        : &'static str
+}
+
+#[allow(dead_code)] 
+impl Instruction {
+    #[inline(always)]
+    pub fn name(&mut self) -> String {
+        return self.name.to_string();
     }
 }
 
@@ -653,7 +687,6 @@ impl fmt::Debug for Regs {
                self.A.0 , self.X.0 , self.Y.0 , self.Flags , self.SP.0 , self.PC.0)
     }
 }
-  
 
 /* WARNING: Branch instructions are replaced with jumps */
 const OPCODE_TABLE : [Instruction; 256] = [    
@@ -662,8 +695,8 @@ const OPCODE_TABLE : [Instruction; 256] = [
     iz!(zpg, nop, 3), iz!(zpg, ora, 3), iz!(zpg, asl, 5), iz!(zpg, slo, 5), 
     iz!(imp, php, 3), iz!(imm, ora, 2), iz!(imp, sal, 2), iz!(imp, nop, 2), 
     iz!(abs, nop, 4), iz!(abs, ora, 4), iz!(abs, asl, 6), iz!(abs, slo, 6),
-    
-    ix!(rel, jmp, 2), ix!(idy, ora, 5), iz!(imp, nop, 2), iz!(idy, slo, 4),
+    // 0x10 
+    ix!(rel, jmp, 2), ix!(idy, ora, 5), iz!(imp, nop, 2), iz!(idy, slo, 8),
     iz!(zpx, nop, 4), iz!(zpx, ora, 4), iz!(zpx, asl, 6), iz!(zpx, slo, 6),
     iz!(imp, clc, 2), ix!(aby, ora, 4), iz!(imp, nop, 2), iz!(aby, slo, 7),
     ix!(abx, nop, 4), ix!(abx, ora, 4), iz!(abx, asl, 7), iz!(abx, slo, 7),
@@ -729,7 +762,7 @@ const OPCODE_TABLE : [Instruction; 256] = [
     ix!(abx, nop, 4), ix!(abx, cmp, 4), iz!(abx, dec, 7), iz!(abx, dcp, 7),
     // 0xE0
     iz!(imm, cpx, 2), iz!(idx, sbc, 6), iz!(imm, nop, 2), iz!(idx, isc, 8),
-    iz!(zpg, cpx, 3), iz!(zpg, sbc, 3), iz!(zpg, inc, 6), iz!(zpg, isc, 5),
+    iz!(zpg, cpx, 3), iz!(zpg, sbc, 3), iz!(zpg, inc, 5), iz!(zpg, isc, 5),
     iz!(imp, inx, 2), iz!(imm, sbc, 2), iz!(imp, nop, 2), iz!(imm, sbc, 2),
     iz!(abs, cpx, 4), iz!(abs, sbc, 4), iz!(abs, inc, 6), iz!(abs, isc, 6),
     // 0xF0
