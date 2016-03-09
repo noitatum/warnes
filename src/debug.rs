@@ -5,6 +5,7 @@ use nes::Nes;
 use std::io;
 use std::io::Error;
 use std::path::Path;
+use std::io::prelude::*;
 
 // SDL2
 use sdl2::EventPump;
@@ -28,14 +29,17 @@ macro_rules! rnl {
 
 pub struct Debug  {
     nes: Nes,
+    // cycle per cycle
+    cpc: bool,
 }
 
 impl Debug {
-    pub fn load_rom<P: AsRef<Path>>(rom_path: P) -> Result<Debug, Error>   {
+    pub fn load_rom<P: AsRef<Path>>(rom_path: P, cpc: bool) -> Result<Debug, Error>   {
         let rnes = try!(Nes::load_rom(rom_path));
         Ok (
             Debug {
                 nes : rnes,
+                cpc : cpc,
             }
         )
     }
@@ -43,11 +47,17 @@ impl Debug {
 
 impl Debug {
     pub fn run(&mut self, renderer: &mut Renderer, event_pump: &mut EventPump) {
-        let mut input : String = "".to_string();
+        // Reset nes.
+        self.nes.reset();
+
+        let mut input : String;
         let stdin = io::stdin();
         'debug: loop {
+            print!("{} ", rdbg!());
+            io::stdout().flush().ok().expect("io flush");
+            input = "".to_string();
             stdin.read_line(&mut input).unwrap();
-            let words : Vec<&str>= input.split(" ").collect();
+            let words : Vec<&str> = input.split(" ").collect();
             if words.len() > 0 {
                 match &rnl!(words[0]) {
                     "l" => { println!("{} list", rdbg!()); }
@@ -58,11 +68,15 @@ impl Debug {
                     // all these commands are the same
                     "n"|"nexti"|"ni"|"stepi"|"si"
                         => { println!("{} next", rdbg!());
-                             self.nes.cycle(renderer, event_pump)
+                             println!("next instr: {}, cycles: {}",
+                                self.nes.next_instr().0,
+                                self.nes.next_instr().1);
+                             self.nes.step(self.cpc, renderer, event_pump);
                              // Print executed instruction
                             },
                     "c" => { println!("{} continue", rdbg!());
-                             self.nes.run(renderer, event_pump) 
+                             self.nes.run(renderer, event_pump);
+                             break 'debug;
                             },
                     "p" => { println!("{} print", rdbg!()); },
                     "b" => { println!("{} breakpoint", rdbg!());},

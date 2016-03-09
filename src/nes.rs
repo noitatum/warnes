@@ -84,17 +84,18 @@ impl Nes  {
 
     // Runs a full instruction (all cycles needed)
     // Or executes a full CPU cycle (3ppu cycles),
-    /*pub fn step(&mut self, complete_inst: bool) {
-        if complete_inst {
-            let cycle self.cpu.next_instr_cycles();
+    // cpc = cycle per cycle debug.
+    pub fn step(&mut self, cpc: bool, renderer: &mut Renderer, event_pump: &mut EventPump) {
+        if !cpc {
+            let (name, cycles) = self.cpu.next_instr(&mut self.mem);
             // We do enough cycles to finish the instruction
-            for _ in 0..cycle {
-                self.cycle();  
+            for _ in 0..cycles {
+                self.cycle(renderer, event_pump);  
             }
         } else{
-            self.cycle();
+            self.cycle(renderer, event_pump);
         }
-    }*/
+    }
 
     // This function does a complete CPU cycle
     // Including joy I/O and 3 PPU cycles.
@@ -105,5 +106,16 @@ impl Nes  {
         self.ppu.cycle(&mut self.mem, renderer);
         self.ppu.cycle(&mut self.mem, renderer);
         self.ppu.cycle(&mut self.mem, renderer);
+    }
+
+    pub fn reset(&mut self) {
+        self.cpu.reset(&mut self.mem);
+    }
+}
+
+// Debug stuff
+impl Nes {
+    pub fn next_instr(&mut self) -> (String, u32) {
+        return self.cpu.next_instr(&mut self.mem);
     }
 }

@@ -52,8 +52,13 @@ fn main() {
 
         if args.len() == 3 {
             if args[2] == "dbgi" || args[2] == "dbg" || args[2] == "debug" {
-                let mut debug = Debug::load_rom(rom_file).expect("RNES main() [dbg]");
+                let mut debug = Debug::load_rom(rom_file, false).expect("RNES main() [dbg]");
                 debug.run(&mut renderer, &mut event_pump);
+            } else if args[2] == "dbgc" { // debug cycle per cycle
+                let mut debug = Debug::load_rom(rom_file, true).expect("RNES main() [dbg cpc]");
+                debug.run(&mut renderer, &mut event_pump);
+            } else {
+                panic!("dude");
             }
         } else {
             let mut nes = Nes::load_rom(rom_file).expect("RNES main() [nodbg]");

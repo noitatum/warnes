@@ -38,38 +38,6 @@ pub struct Cpu {
     dma         : DMA,
 } 
 
-struct Execution {
-    cycles_left     : u32,
-    address         : W<u16>,
-    operation       : fn_operation, 
-}
-
-struct Instruction {
-    addressing  : fn(&mut Regs, &mut Mem) -> (W<u16>, u32),
-    operation   : fn_operation, 
-    cycles      : u32,
-    has_extra   : bool,
-    name        : &'static str
-}
-
-#[allow(dead_code)] 
-impl Instruction {
-    #[inline(always)]
-    pub fn name(&mut self) -> String {
-        return self.name.to_string();
-    }
-}
-
-#[allow(non_snake_case)]
-struct Regs {
-    A           : W<u8>,    // Accumulator
-    X           : W<u8>,    // Indexes
-    Y           : W<u8>,    //
-    Flags       : u8,       // Status
-    SP          : W<u8>,    // Stack pointer
-    PC          : W<u16>,   // Program counter
-}
-
 impl Cpu {
     pub fn reset(&mut self, memory: &mut Mem) {
         *self = Cpu::default();
@@ -85,27 +53,23 @@ impl Cpu {
     }
 
     #[allow(dead_code)]
-    pub fn next_instr(&mut self, memory: &mut Mem) -> String {
+    pub fn next_instr(&mut self, memory: &mut Mem) -> (String, u32) {
         let index = self.regs.next_opcode(memory) as usize;
-        return OPCODE_TABLE[index].name();
+        return (OPCODE_TABLE[index].name(), OPCODE_TABLE[index].cycles());
     }
 }
 
-impl Default for Execution {
-    fn default() -> Execution {
-        Execution {
-            cycles_left     : 0,
-            operation       : Regs::nop,
-            address         : W(0),
-        }
-    }
+struct Execution {
+    cycles_left     : u32,
+    operation       : fn_operation, 
+    address         : W<u16>,
 }
 
 impl Execution {
-
     pub fn cycle(&mut self, memory: &mut Mem, regs: &mut Regs) {
         if self.cycles_left == 0 {
             // Execute the next instruction
+            // regs = &mut self.
             (self.operation)(regs, memory, self.address);
             // Get next instruction
             let index = regs.next_opcode(memory) as usize;
@@ -123,6 +87,53 @@ impl Execution {
         }
         self.cycles_left -= 1;
     }
+
+    #[allow(dead_code)]
+    pub fn address(&mut self) -> W<u16> {
+        return self.address;
+    }
+}
+
+
+impl Default for Execution {
+    fn default() -> Execution {
+        Execution {
+            cycles_left     : 0,
+            operation       : Regs::nop,
+            address         : W(0),
+        }
+    }
+}
+
+struct Instruction {
+    addressing  : fn(&mut Regs, &mut Mem) -> (W<u16>, u32),
+    operation   : fn_operation, 
+    cycles      : u32,
+    has_extra   : bool,
+    name        : &'static str
+}
+
+#[allow(dead_code)] 
+impl Instruction {
+    #[inline(always)]
+    pub fn name(&mut self) -> String {
+        return self.name.to_string();
+    }
+
+    #[inline(always)]
+    pub fn cycles(&mut self) -> u32 {
+        return self.cycles;
+    }
+}
+
+#[allow(non_snake_case)]
+struct Regs {
+    A           : W<u8>,    // Accumulator
+    X           : W<u8>,    // Indexes
+    Y           : W<u8>,    //
+    Flags       : u8,       // Status
+    SP          : W<u8>,    // Stack pointer
+    PC          : W<u16>,   // Program counter
 }
 
 impl Default for Regs {
@@ -132,18 +143,18 @@ impl Default for Regs {
             X               : W(0),
             Y               : W(0),
             Flags           : 0x34, 
-            SP              : W(0xFD),
+            SP              : W(0xfd),
             PC              : W(0),
         }
     }
 }
 
 // Util functions
-
 impl Regs {
 
     pub fn reset(&mut self, memory: &mut Mem) {
         self.PC = memory.load_word(ADDRESS_RESET); 
+        self.PC = W(0xC000);
     }
 
     pub fn next_opcode(&self, memory: &mut Mem) -> u8 {
@@ -651,7 +662,7 @@ const OPCODE_TABLE : [Instruction; 256] = [
     iz!(zpg, nop, 3), iz!(zpg, ora, 3), iz!(zpg, asl, 5), iz!(zpg, slo, 5), 
     iz!(imp, php, 3), iz!(imm, ora, 2), iz!(imp, sal, 2), iz!(imp, nop, 2), 
     iz!(abs, nop, 4), iz!(abs, ora, 4), iz!(abs, asl, 6), iz!(abs, slo, 6),
-    // 0x10 
+    
     ix!(rel, jmp, 2), ix!(idy, ora, 5), iz!(imp, nop, 2), iz!(idy, slo, 4),
     iz!(zpx, nop, 4), iz!(zpx, ora, 4), iz!(zpx, asl, 6), iz!(zpx, slo, 6),
     iz!(imp, clc, 2), ix!(aby, ora, 4), iz!(imp, nop, 2), iz!(aby, slo, 7),
