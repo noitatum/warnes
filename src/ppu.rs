@@ -74,10 +74,10 @@ struct SpriteInfo {
 
 impl SpriteInfo {
     #[allow(dead_code)]
-    pub fn new (ppu: &Ppu, oam : &mut Oam) -> SpriteInfo {
+    pub fn new (ppu: &mut Ppu) -> SpriteInfo {
         let mut bytes : [u8; 4] = [0; 4];
         for i in 0..4 {
-                bytes[i] = oam.load(ppu.oam_index).0;
+                bytes[i] = ppu.load_from_oam();
         }
         bytes[2] = bytes[2] & SPRITE_INFO_UNIMPLEMENTED_BITS;
 
@@ -214,11 +214,13 @@ impl Ppu {
         let val = self.load(memory);
         self.store(memory, val);
 
-        if self.cycles == 0 {
-            self.draw(renderer);
-        } else {
-            self.cycles += 1;
-        }
+        //if self.show_sprites || self.show_background {}
+            if self.cycles == 0 {
+                self.draw(renderer);
+            } else {
+                self.cycles += 1;
+            }
+        //}
 
         if self.cycles == VBLANK_END {
             self.cycles = 0;
@@ -357,6 +359,10 @@ impl Ppu {
                 panic!("PPUADDR >= 0x4000");
             }
         }
+    }
+
+    pub fn load_from_oam(&mut self) -> u8 {
+        return self.oam.load(W(self.oamaddr as u16)).0;
     }
 }
 
