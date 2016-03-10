@@ -51,7 +51,7 @@ const STATUS_VERTICAL_BLANK     : u8 = 0x80; // set = in vertical blank
 */
 
 #[allow(dead_code)]
-const SPRITE_INFO_UNIMPLEMENTED_BITS        : u8 = 0xE3;
+const SPRITE_INFO_CLEAN_UNIMPLEMENTED_BITS        : u8 = 0xE3;
 #[allow(dead_code)]
 const SPRITE_INFO_PRIORITY                  : u8 = 0x20;
 #[allow(dead_code)]
@@ -79,7 +79,7 @@ impl SpriteInfo {
         for i in 0..4 {
                 bytes[i] = ppu.load_from_oam();
         }
-        bytes[2] = bytes[2] & SPRITE_INFO_UNIMPLEMENTED_BITS;
+        bytes[2] = bytes[2] & SPRITE_INFO_CLEAN_UNIMPLEMENTED_BITS;
 
         SpriteInfo {
             bytes : bytes,
