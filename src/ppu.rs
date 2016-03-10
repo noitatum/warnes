@@ -49,12 +49,88 @@ const STATUS_SPRITE_0_HIT       : u8 = 0x40;
 const STATUS_VERTICAL_BLANK     : u8 = 0x80; // set = in vertical blank
 
 */
+#[allow(dead_code)]
+const SPRITE_INFO_UNIMPLEMENTED_BITS        : u8 = 0xE3;
+#[allow(dead_code)]
+const SPRITE_INFO_PRIORITY                  : u8 = 0x20;
+#[allow(dead_code)]
+const SPRITE_INFO_PALETTE                   : u8 = 0x3;
+#[allow(dead_code)]
+const SPRITE_INFO_HORIZONTALLY              : u8 = 0x40;
+#[allow(dead_code)]
+const SPRITE_INFO_VERTICALLY                : u8 = 0x80;
 
 const PALETTE_SIZE              : usize = 0x20;
-const PALETTE_ADDRESS           : usize = 0x3F00;
+const PALETTE_ADDRESS           : usize = 0x3f00;
 
 const PPU_ADDRESS_SPACE         : usize = 0x4000;
 const VBLANK_END                : u32 = 27901; 
+
+
+struct SpriteInfo {
+    bytes           : [u8; 4],
+}
+
+impl SpriteInfo {
+    #[allow(dead_code)]
+    pub fn new (ppu: &Ppu, oam : &mut Oam) -> SpriteInfo {
+        let mut bytes : [u8; 4] = [0; 4];
+        for i in 0..4 {
+                bytes[i] = oam.load(ppu.oam_index).0;
+        }
+        bytes[2] = bytes[2] & SPRITE_INFO_UNIMPLEMENTED_BITS;
+
+        SpriteInfo {
+            bytes : bytes,
+        }
+    }
+}
+
+impl SpriteInfo {
+    #[allow(dead_code)]
+    #[inline]
+    pub fn y_position(&mut self) -> u8 {
+        return self.bytes[0];
+    }
+
+    #[allow(dead_code)]
+    #[inline]
+    pub fn tile_index(&mut self) -> u8 {
+        return self.bytes[1];
+    }
+
+    #[allow(dead_code)]
+    #[inline]
+    pub fn x_position(&mut self) -> u8 {
+        return self.bytes[3];
+    }
+
+    // true = in front of background 
+    // false = behind background
+    #[allow(dead_code)]
+    #[inline]
+    pub fn sprite_priority(&mut self) -> bool {
+        return (self.bytes[2] & SPRITE_INFO_PRIORITY) != 0;
+    }
+
+    #[allow(dead_code)]
+    #[inline]
+    pub fn palette(&mut self) -> u8 {
+        return self.bytes[2] & SPRITE_INFO_PALETTE;
+    }
+
+    #[allow(dead_code)]
+    #[inline]
+    pub fn flip_horizontally(&mut self) -> bool {
+        return (self.bytes[2] & SPRITE_INFO_HORIZONTALLY) > 1;
+    }
+
+    #[allow(dead_code)]
+    #[inline]
+    pub fn flip_vertically(&mut self) -> bool {
+        return (self.bytes[2] & SPRITE_INFO_VERTICALLY) > 1;
+    }
+}
 
 pub struct Ppu {
     palette         : [u8; PALETTE_SIZE],
@@ -66,18 +142,36 @@ pub struct Ppu {
     status          : u8,
     scroll          : AddressLatch,
     addr            : AddressLatch, 
+    oamaddr         : u8,
 
     px_height       : usize,
     px_width        : usize,
     
     cycles          : u32,
     fps             : u32,
+
+    // oam index for rendering
+
+    oam_index       : W<u16>,
+
+/*    //background
+    temp_vadd       : W<u16>,
+    shift_reg1      : u16,
+    shift_reg2      : u16,
+    palette1        : u8,
+    palette2        : u8,
+    
+    //sprites
+    sprite_regs     : [u8; 8],
+    sprite_latches  : [u8; 8],
+    sprite_pos      : [u8; 8],
+*/
 }
 
 impl Ppu {
     pub fn new () -> Ppu {
         Ppu {
-            palette         : [0u8; PALETTE_SIZE], 
+            palette         : [0; PALETTE_SIZE], 
             oam             : Oam::default(), 
 
             ctrl            : 0,
@@ -85,12 +179,30 @@ impl Ppu {
             status          : 0,
             scroll          : AddressLatch::default(),
             addr            : AddressLatch::default(),
+            oamaddr         : 0,
 
             px_height       : 0,
             px_width        : 0,
 
             cycles          : 0,
             fps             : 0,
+
+            // index
+
+            oam_index       : W(0),
+/*
+            temp_vadd       : W(0),
+            shift_reg1      : 0,
+            shift_reg2      : 0,
+            palette1        : 0,
+            palette2        : 0,
+            
+            //sprites
+            sprite_regs     : [0; 8],
+            sprite_latches  : [0; 8],
+            sprite_pos      : [0; 8],
+*/
+
         }
     }
     
@@ -144,8 +256,8 @@ impl Ppu {
         match status {
             MemState::PpuCtrl   => { self.ctrl = latch.0; }, 
             MemState::PpuMask   => { self.mask = latch.0; },
-            MemState::OamAddr   => { self.oam.set_addr(latch); },
-            MemState::OamData   => { self.oam.store_data(latch); },
+            MemState::OamAddr   => { self.oamaddr = latch.0; },
+            MemState::OamData   => { self.oam.store_data(&mut self.oamaddr, latch); },
             MemState::PpuScroll => { self.scroll.set_address(latch); },
             MemState::PpuAddr   => { self.addr.set_address(latch); },
             MemState::PpuData   => { self.store(memory, latch);}, 
@@ -256,14 +368,12 @@ impl fmt::Debug for AddressLatch {
 
 struct Oam {
     mem     : [u8; 0x100],
-    addr    : W<u8>,
 }
 
 impl Default for Oam {
     fn default() -> Oam {
         Oam {
             mem  : [0; 0x100],
-            addr : W(0),
         }
     }
 }
@@ -272,22 +382,22 @@ impl fmt::Debug for Oam {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let mut output = "OAM: mem: \n".to_string();
         print_mem(&mut output, &self.mem[..]);
-        write!(f, "{}, addr: {:#x}", output, self.addr.0)
+        write!(f, "{}", output)
     }
 }
 
 impl Oam {
 
     #[inline]
-    fn store_data(&mut self, value: W<u8>) {
-        self.mem[self.addr.0 as usize] = value.0;
-        self.addr = self.addr + W(1);
+    fn store_data(&mut self, address: &mut u8 , value: W<u8>) {
+        self.mem[*address as usize] = value.0;
+        *address += 1;
     }
     
-    #[inline]
+    /*#[inline]
     fn set_addr(&mut self, value: W<u8>) {
         self.addr = value;
-    }
+    }*/
 }
 
 impl LoadStore for Oam {
