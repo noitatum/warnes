@@ -32,23 +32,24 @@ const CTRL_GEN_NMI              : u8 = 0x80;
 // ppu scroll coordinates
 const COORDINATE_X              : u8 = 0x01;
 const COORDINATE_Y              : u8 = 0x02;
-
-// ppu mask
+*/
+//ppu mask
 const MASK_GRAYSCALE            : u8 = 0x01;
 const MASK_SHOW_BACKGROUND_LEFT : u8 = 0x02; // set = show bacgrkound in leftmost 8 pixels of screen
-const MASK_SHOW_SPRITES_LEF     : u8 = 0x04; // set = show sprites in leftmost 8 pixels of screens
+const MASK_SHOW_SPRITES_LEFT    : u8 = 0x04; // set = show sprites in leftmost 8 pixels of screens
 const MASK_SHOW_BACKGROUND      : u8 = 0x08;
 const MASK_SHOW_SPRITES         : u8 = 0x10;
 const MASK_EMPHASIZE_RED        : u8 = 0x20;
 const MASK_EMPHASIZE_GREEN      : u8 = 0x40;
 const MASK_EMPHASIZE_BLUE       : u8 = 0x80;
 
+/*
 // ppu status
 const STATUS_SPRITE_OVERFLOW    : u8 = 0x20;
 const STATUS_SPRITE_0_HIT       : u8 = 0x40;
 const STATUS_VERTICAL_BLANK     : u8 = 0x80; // set = in vertical blank
-
 */
+
 #[allow(dead_code)]
 const SPRITE_INFO_UNIMPLEMENTED_BITS        : u8 = 0xE3;
 #[allow(dead_code)]
@@ -242,6 +243,46 @@ impl Ppu {
         } else {
             self.px_width += 1;
         }
+    }
+
+    #[inline(always)]
+    pub fn grayscale(&mut self) -> bool {
+        return (self.mask & MASK_GRAYSCALE) > 0; 
+    }
+
+    #[inline(always)]
+    pub fn show_sprites(&mut self) -> bool {
+        return (self.mask & MASK_SHOW_SPRITES) > 0; 
+    }
+
+    #[inline(always)]
+    pub fn show_background(&mut self) -> bool {
+        return (self.mask & MASK_SHOW_BACKGROUND) > 0;         
+    }
+
+    #[inline(always)]
+    pub fn show_sprites_left(&mut self) -> bool {
+        return (self.mask & MASK_SHOW_SPRITES_LEFT) > 0;         
+    }
+
+    #[inline(always)]
+    pub fn show_background_left(&mut self) -> bool {
+        return (self.mask & MASK_SHOW_BACKGROUND_LEFT) > 0;         
+    }
+
+    #[inline(always)]
+    pub fn emphasize_red(&mut self) -> bool {
+        return (self.mask & MASK_EMPHASIZE_RED) > 0; 
+    }
+
+    #[inline(always)]
+    pub fn emphasize_blue(&mut self) -> bool {
+        return (self.mask & MASK_EMPHASIZE_BLUE) > 0; 
+    }
+
+    #[inline(always)]
+    pub fn emphasize_green(&mut self) -> bool {
+        return (self.mask & MASK_EMPHASIZE_GREEN) > 0; 
     }
 
     #[inline(always)]
