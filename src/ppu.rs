@@ -88,7 +88,7 @@ impl Tile {
         if self.high {
             self.tile = (self.tile & 0) | ((byte as u16) << 8);
         } else {
-            self.tile |= (byte as u16 & 0xFF);
+            self.tile |= byte as u16 & 0xFF;
         }
     }
 
@@ -97,21 +97,28 @@ impl Tile {
     }
 }
 
+#[derive(Copy, Clone)]
 struct SpriteInfo {
     bytes           : [u8; 4],
 }
 
 impl SpriteInfo {
     #[allow(dead_code)]
-    pub fn new (ppu: &mut Ppu) -> SpriteInfo {
-        let mut bytes : [u8; 4] = [0; 4];
+    pub fn new (/*ppu: &mut Ppu*/) -> SpriteInfo {
+        /*let mut bytes : [u8; 4] = [0; 4];
         for i in 0..4 {
                 bytes[i] = ppu.load_from_oam();
         }
         bytes[2] = bytes[2] & SPRITE_INFO_CLEAN_UNIMPLEMENTED_BITS;
-
+        */
         SpriteInfo {
-            bytes : bytes,
+            bytes : [0; 4], //bytes,
+        }
+    }
+
+    pub fn reset(&mut self) {
+        for i in 0..4 {
+            self.bytes[i] = 0xFF;
         }
     }
 }
@@ -255,6 +262,12 @@ impl Ppu {
             self.fps += 1;
             self.frame_parity = !self.frame_parity;
         } 
+    }
+
+    fn update_internals(&mut self) {
+        if self.cycles == 0 {
+        
+        }
     }
 
     /* for now we dont use mem, remove warning, memory: &mut Mem*/
@@ -441,13 +454,17 @@ impl fmt::Debug for AddressLatch {
 }
 
 struct Oam {
-    mem     : [u8; 0x100],
+    mem           : [u8; 0x100],
+    secondary_mem : [SpriteInfo; 8],
+    secondary_idx : usize
 }
 
 impl Default for Oam {
     fn default() -> Oam {
         Oam {
-            mem  : [0; 0x100],
+            mem           : [0; 0x100],
+            secondary_mem : [SpriteInfo::new(); 0x08], 
+            secondary_idx : 0,
         }
     }
 }
@@ -472,6 +489,18 @@ impl Oam {
     fn set_addr(&mut self, value: W<u8>) {
         self.addr = value;
     }*/
+
+    // cleans the secondary oam array
+    // setting it to all FFs
+    fn reset_sec_oam(&mut self) {
+        for i in 0..8 {
+            self.secondary_mem[i as usize].reset();
+        }
+    }
+
+    pub fn store_secondary_oam(&mut self) {
+    
+    }
 }
 
 impl LoadStore for Oam {
