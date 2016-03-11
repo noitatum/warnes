@@ -51,7 +51,7 @@ const STATUS_VERTICAL_BLANK     : u8 = 0x80; // set = in vertical blank
 */
 
 #[allow(dead_code)]
-const SPRITE_INFO_CLEAN_UNIMPLEMENTED_BITS        : u8 = 0xE3;
+const SPRITE_INFO_CLEAN_UNIMPLEMENTED_BITS  : u8 = 0xE3;
 #[allow(dead_code)]
 const SPRITE_INFO_PRIORITY                  : u8 = 0x20;
 #[allow(dead_code)]
@@ -61,12 +61,41 @@ const SPRITE_INFO_HORIZONTALLY              : u8 = 0x40;
 #[allow(dead_code)]
 const SPRITE_INFO_VERTICALLY                : u8 = 0x80;
 
-const PALETTE_SIZE              : usize = 0x20;
-const PALETTE_ADDRESS           : usize = 0x3f00;
+const PALETTE_SIZE      : usize = 0x20;
+const PALETTE_ADDRESS   : usize = 0x3f00;
 
-const PPU_ADDRESS_SPACE         : usize = 0x4000;
-const VBLANK_END                : u32 = 27901; 
+const PPU_ADDRESS_SPACE : usize = 0x4000;
+const VBLANK_END        : u32 = 27902; 
 
+// The tiles are fetched from
+// chr ram
+struct Tile {
+    tile : u16,
+    high : bool,
+}
+
+impl Tile {
+    pub fn new () -> Tile {
+        Tile {
+            tile : 0,
+            high : true,
+        }
+    }
+}
+
+impl Tile {
+    pub fn set_tile_byte(&mut self, byte : u8) {
+        if self.high {
+            self.tile = (self.tile & 0) | ((byte as u16) << 8);
+        } else {
+            self.tile |= (byte as u16 & 0xFF);
+        }
+    }
+
+    pub fn get_tile(&mut self) -> u16 {
+        return self.tile;
+    }
+}
 
 struct SpriteInfo {
     bytes           : [u8; 4],
@@ -145,8 +174,13 @@ pub struct Ppu {
     addr            : AddressLatch, 
     oamaddr         : u8,
 
-    px_height       : usize,
-    px_width        : usize,
+    
+    // Scanline should count up until the total numbers of scanlines
+    // which is 262
+    scanline        : usize,
+    // while scanline width goes up to 340 and visible pixels
+    // ie drawn pixels start at 0 and go up to 256 width (240 scanlines)
+    scanline_width  : usize,
     
     cycles          : u32,
     fps             : u32,
@@ -155,19 +189,15 @@ pub struct Ppu {
 
     oam_index       : W<u16>,
 
-/*    //background
-    temp_vadd       : W<u16>,
-    shift_reg1      : u16,
-    shift_reg2      : u16,
-    palette1        : u8,
-    palette2        : u8,
-    
-    //sprites
-    sprite_regs     : [u8; 8],
-    sprite_latches  : [u8; 8],
-    sprite_pos      : [u8; 8],
-*/
+    // even/odd frame?
+    frame_parity    : bool,
+
+    name_table_byte : u8,
+    attr_byte       : u8,
+    tile            : Tile,
 }
+
+
 
 impl Ppu {
     pub fn new () -> Ppu {
@@ -182,8 +212,8 @@ impl Ppu {
             addr            : AddressLatch::default(),
             oamaddr         : 0,
 
-            px_height       : 0,
-            px_width        : 0,
+            scanline        : 0,
+            scanline_width  : 0,
 
             cycles          : 0,
             fps             : 0,
@@ -191,18 +221,12 @@ impl Ppu {
             // index
 
             oam_index       : W(0),
-/*
-            temp_vadd       : W(0),
-            shift_reg1      : 0,
-            shift_reg2      : 0,
-            palette1        : 0,
-            palette2        : 0,
-            
-            //sprites
-            sprite_regs     : [0; 8],
-            sprite_latches  : [0; 8],
-            sprite_pos      : [0; 8],
-*/
+
+            frame_parity    : true,
+
+            name_table_byte : 0,
+            attr_byte       : 0,
+            tile            : Tile::new(),
 
         }
     }
@@ -213,78 +237,81 @@ impl Ppu {
         // TODO: PPU CODE
         let val = self.load(memory);
         self.store(memory, val);
+        
 
-        //if self.show_sprites || self.show_background {}
-            if self.cycles == 0 {
-                self.draw(renderer);
-            } else {
-                self.cycles += 1;
-            }
-        //}
+        // if on a visible scanline 
+        // and width % 8 = 1 then we fetch nametable
+        // if width % 8 = 3 we fetch attr
+        // width % 5 fetch tile high (chr ram)
+        // width % 7 fetch tile low (chr ram)
+        if (self.show_sprites() || self.show_background()) && self.cycles == 0{
+            self.draw(renderer); // if rendering is off we only execute VBLANK_END cycles
+        } else {
+            self.cycles +=1; 
+        }
 
         if self.cycles == VBLANK_END {
             self.cycles = 0;
             self.fps += 1;
+            self.frame_parity = !self.frame_parity;
         } 
     }
 
     /* for now we dont use mem, remove warning, memory: &mut Mem*/
     fn draw(&mut self, renderer: &mut sdl2::render::Renderer) {
-        renderer.set_draw_color(Color::RGB(self.px_height as u8, self.px_width as u8, 20));
-        renderer.draw_point(Point::new(self.px_width as i32, self.px_height as i32)).unwrap();
-        if self.px_width == 255 && self.px_height < 239 {
-            self.px_width = 0;
-            self.px_height += 1;
-        } else if self.px_width == 255 && self.px_height == 239 {
-            // Once entire image is draw we present the result and start counting until the next
-            // vblank
-            renderer.present();
-            self.px_width = 0;
-            self.px_height = 0;
+        renderer.set_draw_color(Color::RGB(self.scanline as u8, self.scanline as u8, 20));
+        renderer.draw_point(Point::new(self.scanline as i32, self.scanline as i32)).unwrap();
+        if self.scanline == 255 && self.scanline < 239 {
+            self.scanline = 0;
+            self.scanline += 1;
+        } else if self.scanline == 255 && self.scanline == 239 {
+            renderer.present(); // Once entire image is draw we present the result 
+            self.scanline = 0;  // and start counting until the next vblank
+            self.scanline = 0;
             self.cycles += 1;
         } else {
-            self.px_width += 1;
+            self.scanline += 1;
         }
     }
 
     #[inline(always)]
     pub fn grayscale(&mut self) -> bool {
-        return (self.mask & MASK_GRAYSCALE) > 0; 
+        return (self.mask & MASK_GRAYSCALE) > 0;
     }
 
     #[inline(always)]
     pub fn show_sprites(&mut self) -> bool {
-        return (self.mask & MASK_SHOW_SPRITES) > 0; 
+        return (self.mask & MASK_SHOW_SPRITES) > 0;
     }
 
     #[inline(always)]
     pub fn show_background(&mut self) -> bool {
-        return (self.mask & MASK_SHOW_BACKGROUND) > 0;         
+        return (self.mask & MASK_SHOW_BACKGROUND) > 0;
     }
 
     #[inline(always)]
     pub fn show_sprites_left(&mut self) -> bool {
-        return (self.mask & MASK_SHOW_SPRITES_LEFT) > 0;         
+        return (self.mask & MASK_SHOW_SPRITES_LEFT) > 0;
     }
 
     #[inline(always)]
     pub fn show_background_left(&mut self) -> bool {
-        return (self.mask & MASK_SHOW_BACKGROUND_LEFT) > 0;         
+        return (self.mask & MASK_SHOW_BACKGROUND_LEFT) > 0;
     }
 
     #[inline(always)]
     pub fn emphasize_red(&mut self) -> bool {
-        return (self.mask & MASK_EMPHASIZE_RED) > 0; 
+        return (self.mask & MASK_EMPHASIZE_RED) > 0;
     }
 
     #[inline(always)]
     pub fn emphasize_blue(&mut self) -> bool {
-        return (self.mask & MASK_EMPHASIZE_BLUE) > 0; 
+        return (self.mask & MASK_EMPHASIZE_BLUE) > 0;
     }
 
     #[inline(always)]
     pub fn emphasize_green(&mut self) -> bool {
-        return (self.mask & MASK_EMPHASIZE_GREEN) > 0; 
+        return (self.mask & MASK_EMPHASIZE_GREEN) > 0;
     }
 
     #[inline(always)]
