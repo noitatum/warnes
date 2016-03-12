@@ -50,15 +50,11 @@ const STATUS_SPRITE_0_HIT       : u8 = 0x40;
 const STATUS_VERTICAL_BLANK     : u8 = 0x80; // set = in vertical blank
 */
 
-#[allow(dead_code)]
+
 const SPRITE_INFO_CLEAN_UNIMPLEMENTED_BITS  : u8 = 0xE3;
-#[allow(dead_code)]
 const SPRITE_INFO_PRIORITY                  : u8 = 0x20;
-#[allow(dead_code)]
 const SPRITE_INFO_PALETTE                   : u8 = 0x3;
-#[allow(dead_code)]
 const SPRITE_INFO_HORIZONTALLY              : u8 = 0x40;
-#[allow(dead_code)]
 const SPRITE_INFO_VERTICALLY                : u8 = 0x80;
 
 const PALETTE_SIZE          : usize = 0x20;
@@ -254,13 +250,13 @@ impl Ppu {
             0 => { self.fetch_nametable_addr(scanline_width); },
                     // using that address fetch the tile
             1 => { self.next_ltile = self.fetch_nametable_tile(memory); },
-            2 => { self.fetch_attr_addr() }, // fetch attribute
-            3 => {}, // same as before
-            4 => {}, // fetch low tile byte
-            5 => {}, // as before
-            6 => {}, // fetch high tile byte
-            7 => {}, // as before
-            _ => {}, // 
+            2 => { self.fetch_attr_addr(); },       // fetch attribute
+            3 => { self.fetch_attr(); },            // same as before
+            4 => { self.fetch_tile_addr(true); },   // fetch low tile byte
+            5 => { self.fetch_tile();},             // as before
+            6 => { self.fetch_tile_addr(false); },  // fetch high tile byte
+            7 => { self.fetch_tile(); },            // as before
+            _ => {}, 
         }
         renderer.set_draw_color(Color::RGB(self.scanline as u8, self.scanline as u8, 20));
         renderer.draw_point(Point::new(self.scanline as i32, self.scanline as i32)).unwrap();
@@ -499,13 +495,6 @@ impl Oam {
         *address += 1;
     }
 
-    /*#[inline]
-    fn set_addr(&mut self, value: W<u8>) {
-        self.addr = value;
-    }*/
-
-    // cleans the secondary oam array
-    // setting it to all FFs
     fn reset_sec_oam(&mut self) {
         for i in 0..64 {
             self.secondary_mem[i as usize] = 0xFF;
@@ -597,19 +586,16 @@ impl SpriteInfo {
 }
 
 impl SpriteInfo {
-    #[allow(dead_code)]
     #[inline]
     pub fn y_position(&mut self) -> u8 {
         return self.bytes[0];
     }
 
-    #[allow(dead_code)]
     #[inline]
     pub fn tile_index(&mut self) -> u8 {
         return self.bytes[1];
     }
 
-    #[allow(dead_code)]
     #[inline]
     pub fn x_position(&mut self) -> u8 {
         return self.bytes[3];
@@ -617,25 +603,21 @@ impl SpriteInfo {
 
     // true = in front of background 
     // false = behind background
-    #[allow(dead_code)]
     #[inline]
     pub fn sprite_priority(&mut self) -> bool {
         return (self.bytes[2] & SPRITE_INFO_PRIORITY) != 0;
     }
 
-    #[allow(dead_code)]
     #[inline]
     pub fn palette(&mut self) -> u8 {
         return self.bytes[2] & SPRITE_INFO_PALETTE;
     }
 
-    #[allow(dead_code)]
     #[inline]
     pub fn flip_horizontally(&mut self) -> bool {
         return (self.bytes[2] & SPRITE_INFO_HORIZONTALLY) > 1;
     }
 
-    #[allow(dead_code)]
     #[inline]
     pub fn flip_vertically(&mut self) -> bool {
         return (self.bytes[2] & SPRITE_INFO_VERTICALLY) > 1;
