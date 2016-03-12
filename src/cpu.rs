@@ -50,7 +50,6 @@ impl Cpu {
         self.cycles += 1;
     }
 
-    #[allow(dead_code)]
     pub fn next_instr(&mut self, memory: &mut Mem) -> (String, u32) {
         let index = self.regs.next_opcode(memory) as usize;
         return (OPCODE_TABLE[index].name(), OPCODE_TABLE[index].cycles());
@@ -86,7 +85,6 @@ impl Execution {
         self.cycles_left -= 1;
     }
 
-    #[allow(dead_code)]
     pub fn address(&mut self) -> W<u16> {
         return self.address;
     }
@@ -111,14 +109,11 @@ struct Instruction {
     name        : &'static str
 }
 
-#[allow(dead_code)] 
 impl Instruction {
-    #[inline(always)]
     pub fn name(&mut self) -> String {
         return self.name.to_string();
     }
 
-    #[inline(always)]
     pub fn cycles(&mut self) -> u32 {
         return self.cycles;
     }
