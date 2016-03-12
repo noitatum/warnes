@@ -158,6 +158,11 @@ macro_rules! sprite_pattern_base {
                         })
 }
 
+macro_rules! scanline_end {
+    ($selfie:expr) => 
+        (($selfie.scanline_width == 340 && $selfie.scanline == 261))
+}
+
 impl Ppu {
     pub fn new () -> Ppu {
         Ppu {
@@ -199,14 +204,14 @@ impl Ppu {
             tile_addr       : 0,
         }
     }
-    
+
     pub fn cycle(&mut self, memory: &mut Mem, renderer: &mut sdl2::render::Renderer) {
         self.ls_latches(memory);
 
         // TODO: PPU CODE
         let val = self.load(memory);
         self.store(memory, val);
-        
+
         self.oam.cycle(self.cycles, self.scanline);    // we let the oam prepare the next sprites
 
         // if on a visible scanline 
@@ -219,18 +224,22 @@ impl Ppu {
         }
 
         self.scanline_width +=1;
-        
-        if self.scanline_width == 340 && self.scanline == 261 {
-            self.scanline_width = 0;
-            self.scanline = 0;
-        } else if self.scanline_width == 340 {
+
+        // if we finished the current scanline we pass to the next one
+        if self.scanline_width == 340 {
             self.scanline += 1;
             self.scanline_width = 0;
         }
+
         self.cycles += 1;
+
         if !render_on!(self) && self.cycles == VBLANK_END_NO_RENDER ||
-            render_on!(self) && self.cycles == VBLANK_END 
+            scanline_end!(self)
+            //render_on!(self) && self.cycles == VBLANK_END 
         {
+           // reset scanline values and qty of cycles
+            self.scanline_width = 0;
+            self.scanline = 0;
             self.cycles = 0;
             self.fps += 1;
             self.frame_parity = !self.frame_parity;
@@ -242,10 +251,10 @@ impl Ppu {
         let scanline_width = self.scanline_width;
         match scanline_width % 8 {
                     // fetch nametable address from the sprite unit
-            0 => { self.fetch_nametable_addr(scanline_width); },            
+            0 => { self.fetch_nametable_addr(scanline_width); },
                     // using that address fetch the tile
-            1 => { self.next_ltile = self.fetch_nametable_tile(memory); }, 
-            2 => {}, // fetch attribute
+            1 => { self.next_ltile = self.fetch_nametable_tile(memory); },
+            2 => { self.fetch_attr_addr() }, // fetch attribute
             3 => {}, // same as before
             4 => {}, // fetch low tile byte
             5 => {}, // as before
@@ -270,6 +279,22 @@ impl Ppu {
 
     fn fetch_nametable_tile(&mut self, memory: &mut Mem) -> u8 {
         return self.load(memory).0;
+    }
+
+    fn fetch_attr_addr(&mut self) {
+
+    }
+
+    fn fetch_attr(&mut self ) {
+
+    }
+    // lh = low/high
+    fn fetch_tile_addr(&mut self, lh: bool) {
+
+    }
+
+    fn fetch_tile(&mut self) -> u8 {
+        0
     }
 
     #[inline(always)]
