@@ -461,17 +461,21 @@ impl fmt::Debug for AddressLatch {
 }
 
 struct Oam {
-    mem           : [u8; 0x100],
-    secondary_mem : [SpriteInfo; 8],
-    secondary_idx : usize
+    mem                 : [u8; 0x100],
+    mem_idx             : usize,
+    secondary_mem       : [u8; 0x20],
+    secondary_idx       : usize,
+    copy_leftover_bytes : bool,
 }
 
 impl Default for Oam {
     fn default() -> Oam {
         Oam {
-            mem           : [0; 0x100],
-            secondary_mem : [SpriteInfo::new(); 0x08], 
-            secondary_idx : 0,
+            mem                 : [0; 0x100],
+            mem_idx             : 0,
+            secondary_mem       : [0; 0x20], 
+            secondary_idx       : 0,
+            copy_leftover_bytes : false,
         }
     }
 }
@@ -500,15 +504,51 @@ impl Oam {
     // cleans the secondary oam array
     // setting it to all FFs
     fn reset_sec_oam(&mut self) {
-        for i in 0..8 {
-            self.secondary_mem[i as usize].reset();
+        for i in 0..64 {
+            self.secondary_mem[i as usize] = 0xFF;
             self.secondary_idx = 0;
+            self.mem_idx = 0;
         }
     }
 
-    pub fn store_secondary_oam(&mut self, address: u8) {
+    pub fn cycle_oam(&mut self, cycles: u8, scanline: u8) {
+        if cycles == 1 {
+            self.reset_sec_oam();
+        } else if cycles < 256 {
+            // odd cycles
+            if cycles % 2 == 1 {
+                // TODO: Ignore odd cycles and do everything on even cycles? (reads).
+            // even cycles
+            } else {
+                if self.secondary_idx != 64 && self.mem_idx != 256 {
+                    // If we're on a y-pos byte and it fits with the scanline
+                    // copy it to the current position of secondary oam memory
+                    // else just add to the memory idx
+                    if self.mem[self.mem_idx] == scanline && (self.mem[self.mem_idx] % 4 == 0) {
+                        self.secondary_mem[self.secondary_idx] = self.mem[self.mem_idx];
+                        self.secondary_idx  += 1;
+                    } else if self.copy_leftover_bytes {
+                        self.secondary_mem[self.secondary_idx] = self.mem[self.mem_idx];
+                        self.secondary_idx  += 1;
+                        // If we copied the 4th byte we reset the copyleftover flags
+                        // so we can evaluate the y-pos byte again.
+                        if self.mem_idx % 4 == 3 {
+                            self.copy_leftover_bytes = false;
+                        }
+                    }
+                    self.mem_idx += 1;
+                } else if self.secondary_idx < 64 {
+                    self.reset_sec_oam();
+                }
+            }
+        } else if cycles < 320 {
+            // Copy to the sprite units??
+        }
+    }
+
+    pub fn store_to_secondary_oam(&mut self, address: u8) {
         let address = address as usize;
-        self.secondary_mem[self.secondary_idx].set(&self.mem[address..address+4]);
+
         self.secondary_idx += 1;
     }
 }
