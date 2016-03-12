@@ -65,7 +65,7 @@ const PALETTE_SIZE      : usize = 0x20;
 const PALETTE_ADDRESS   : usize = 0x3f00;
 
 const PPU_ADDRESS_SPACE : usize = 0x4000;
-const VBLANK_END        : u32 = 27902; 
+const VBLANK_END        : u32 = 88740; 
 
 // The tiles are fetched from
 // chr ram
@@ -94,79 +94,6 @@ impl Tile {
 
     pub fn get_tile(&mut self) -> u16 {
         return self.tile;
-    }
-}
-
-#[derive(Copy, Clone)]
-struct SpriteInfo {
-    bytes           : [u8; 4],
-}
-
-impl SpriteInfo {
-    #[allow(dead_code)]
-    pub fn new (/*ppu: &mut Ppu*/) -> SpriteInfo {
-        SpriteInfo {
-            bytes : [0; 4], //bytes,
-        }
-    }
-
-    pub fn reset(&mut self) {
-        for i in 0..4 {
-            self.bytes[i] = 0xFF;
-        }
-    }
-
-    pub fn set(&mut self, arr : &[u8]) {
-        for i in 0..4 {
-            self.bytes[i] = arr[i];
-        }
-        self.bytes[2] = self.bytes[2] & SPRITE_INFO_CLEAN_UNIMPLEMENTED_BITS;
-    }
-}
-
-impl SpriteInfo {
-    #[allow(dead_code)]
-    #[inline]
-    pub fn y_position(&mut self) -> u8 {
-        return self.bytes[0];
-    }
-
-    #[allow(dead_code)]
-    #[inline]
-    pub fn tile_index(&mut self) -> u8 {
-        return self.bytes[1];
-    }
-
-    #[allow(dead_code)]
-    #[inline]
-    pub fn x_position(&mut self) -> u8 {
-        return self.bytes[3];
-    }
-
-    // true = in front of background 
-    // false = behind background
-    #[allow(dead_code)]
-    #[inline]
-    pub fn sprite_priority(&mut self) -> bool {
-        return (self.bytes[2] & SPRITE_INFO_PRIORITY) != 0;
-    }
-
-    #[allow(dead_code)]
-    #[inline]
-    pub fn palette(&mut self) -> u8 {
-        return self.bytes[2] & SPRITE_INFO_PALETTE;
-    }
-
-    #[allow(dead_code)]
-    #[inline]
-    pub fn flip_horizontally(&mut self) -> bool {
-        return (self.bytes[2] & SPRITE_INFO_HORIZONTALLY) > 1;
-    }
-
-    #[allow(dead_code)]
-    #[inline]
-    pub fn flip_vertically(&mut self) -> bool {
-        return (self.bytes[2] & SPRITE_INFO_VERTICALLY) > 1;
     }
 }
 
@@ -205,7 +132,9 @@ pub struct Ppu {
     tile            : Tile,
 }
 
-
+macro_rules! in_render_range {
+    ($scanline:expr) => ($scanline < 257 && $scanline > 1)
+}
 
 impl Ppu {
     pub fn new () -> Ppu {
@@ -246,17 +175,27 @@ impl Ppu {
         let val = self.load(memory);
         self.store(memory, val);
         
+        self.oam.cycle(self.cycles, self.scanline);    // we let the oam prepare the next sprites
 
         // if on a visible scanline 
         // and width % 8 = 1 then we fetch nametable
         // if width % 8 = 3 we fetch attr
         // width % 5 fetch tile high (chr ram)
         // width % 7 fetch tile low (chr ram)
-        if (self.show_sprites() || self.show_background()) && self.cycles == 0{
+        if (self.show_sprites() || self.show_background()) && in_render_range!(self.scanline_width){
             self.draw(renderer); // if rendering is off we only execute VBLANK_END cycles
-        } else {
-            self.cycles +=1; 
         }
+
+        self.scanline_width +=1;
+        
+        if self.scanline_width == 340 && self.scanline == 261 {
+            self.scanline_width = 0;
+            self.scanline = 0;
+        } else if self.scanline_width == 340 {
+            self.scanline += 1;
+            self.scanline_width = 0;
+        }
+        self.cycles += 1;
 
         if self.cycles == VBLANK_END {
             self.cycles = 0;
@@ -265,33 +204,21 @@ impl Ppu {
         } 
     }
 
-    fn update_internals(&mut self) {
-        if self.scanline_width == 1 {
-            self.oam.reset_sec_oam();
-        } else if self.scanline_width < 265 {
-            // we compare X position in oam to move to secondary oam
-        } else if self.scanline_width < 320 {
-            // move secondary oam to sprite units
-        } else {
-        
-        }
-    }
-
     /* for now we dont use mem, remove warning, memory: &mut Mem*/
     fn draw(&mut self, renderer: &mut sdl2::render::Renderer) {
+        match self.scanline_width % 8 {
+            0 => {}, // fetch nametable byte with address from a Sprite_Info
+            1 => {}, // push it into shifting register?
+            2 => {}, // fetch attribute
+            3 => {}, // same as before
+            4 => {}, // fetch low tile byte
+            5 => {}, // as before
+            6 => {}, // fetch high tile byte
+            7 => {}, // as before
+            _ => {}, // 
+        }
         renderer.set_draw_color(Color::RGB(self.scanline as u8, self.scanline as u8, 20));
         renderer.draw_point(Point::new(self.scanline as i32, self.scanline as i32)).unwrap();
-        if self.scanline == 255 && self.scanline < 239 {
-            self.scanline = 0;
-            self.scanline += 1;
-        } else if self.scanline == 255 && self.scanline == 239 {
-            renderer.present(); // Once entire image is draw we present the result 
-            self.scanline = 0;  // and start counting until the next vblank
-            self.scanline = 0;
-            self.cycles += 1;
-        } else {
-            self.scanline += 1;
-        }
     }
 
     #[inline(always)]
@@ -511,7 +438,7 @@ impl Oam {
         }
     }
 
-    pub fn cycle_oam(&mut self, cycles: u8, scanline: u8) {
+    pub fn cycle(&mut self, cycles: u32, scanline: usize) {
         if cycles == 1 {
             self.reset_sec_oam();
         } else if cycles < 256 {
@@ -524,7 +451,7 @@ impl Oam {
                     // If we're on a y-pos byte and it fits with the scanline
                     // copy it to the current position of secondary oam memory
                     // else just add to the memory idx
-                    if self.mem[self.mem_idx] == scanline && (self.mem[self.mem_idx] % 4 == 0) {
+                    if self.mem[self.mem_idx] as usize == scanline && (self.mem[self.mem_idx] % 4 == 0) {
                         self.secondary_mem[self.secondary_idx] = self.mem[self.mem_idx];
                         self.secondary_idx  += 1;
                     } else if self.copy_leftover_bytes {
@@ -565,3 +492,100 @@ impl LoadStore for Oam {
        self.mem[address.0 as usize] = value.0;
     }
 }
+
+#[derive(Copy, Clone)]
+struct SpriteInfo {
+    bytes           : [u8; 4],
+}
+
+impl SpriteInfo {
+    #[allow(dead_code)]
+    pub fn new (/*ppu: &mut Ppu*/) -> SpriteInfo {
+        SpriteInfo {
+            bytes : [0; 4], //bytes,
+        }
+    }
+
+    pub fn reset(&mut self) {
+        for i in 0..4 {
+            self.bytes[i] = 0xFF;
+        }
+    }
+
+    pub fn set(&mut self, arr : &[u8]) {
+        for i in 0..4 {
+            self.bytes[i] = arr[i];
+        }
+        self.bytes[2] = self.bytes[2] & SPRITE_INFO_CLEAN_UNIMPLEMENTED_BITS;
+    }
+}
+
+impl SpriteInfo {
+    #[allow(dead_code)]
+    #[inline]
+    pub fn y_position(&mut self) -> u8 {
+        return self.bytes[0];
+    }
+
+    #[allow(dead_code)]
+    #[inline]
+    pub fn tile_index(&mut self) -> u8 {
+        return self.bytes[1];
+    }
+
+    #[allow(dead_code)]
+    #[inline]
+    pub fn x_position(&mut self) -> u8 {
+        return self.bytes[3];
+    }
+
+    // true = in front of background 
+    // false = behind background
+    #[allow(dead_code)]
+    #[inline]
+    pub fn sprite_priority(&mut self) -> bool {
+        return (self.bytes[2] & SPRITE_INFO_PRIORITY) != 0;
+    }
+
+    #[allow(dead_code)]
+    #[inline]
+    pub fn palette(&mut self) -> u8 {
+        return self.bytes[2] & SPRITE_INFO_PALETTE;
+    }
+
+    #[allow(dead_code)]
+    #[inline]
+    pub fn flip_horizontally(&mut self) -> bool {
+        return (self.bytes[2] & SPRITE_INFO_HORIZONTALLY) > 1;
+    }
+
+    #[allow(dead_code)]
+    #[inline]
+    pub fn flip_vertically(&mut self) -> bool {
+        return (self.bytes[2] & SPRITE_INFO_VERTICALLY) > 1;
+    }
+}
+
+macro_rules! to_RGB {
+    ($r:expr, $g:expr, $b:expr) => { 
+        Color::RGB($r, $g, $b) 
+    }
+}
+const PALLETE : [Color; 0x40] = [
+    to_RGB!(3,3,3), to_RGB!(0,1,4), to_RGB!(0,0,6), to_RGB!(3,2,6), 
+    to_RGB!(4,0,3), to_RGB!(5,0,3), to_RGB!(5,1,0), to_RGB!(4,2,0), 
+    to_RGB!(3,2,0), to_RGB!(1,2,0), to_RGB!(0,3,1), to_RGB!(0,4,0), 
+    to_RGB!(0,2,2), to_RGB!(0,0,0), to_RGB!(0,0,0), to_RGB!(0,0,0), 
+    to_RGB!(5,5,5), to_RGB!(0,3,6), to_RGB!(0,2,7), to_RGB!(4,0,7), 
+    to_RGB!(5,0,7), to_RGB!(7,0,4), to_RGB!(7,0,0), to_RGB!(6,3,0), 
+    to_RGB!(4,3,0), to_RGB!(1,4,0), to_RGB!(0,4,0), to_RGB!(0,5,3), 
+    to_RGB!(0,4,4), to_RGB!(0,0,0), to_RGB!(0,0,0), to_RGB!(0,0,0), 
+    to_RGB!(7,7,7), to_RGB!(3,5,7), to_RGB!(4,4,7), to_RGB!(6,3,7), 
+    to_RGB!(7,0,7), to_RGB!(7,3,7), to_RGB!(7,4,0), to_RGB!(7,5,0), 
+    to_RGB!(6,6,0), to_RGB!(3,6,0), to_RGB!(0,7,0), to_RGB!(2,7,6), 
+    to_RGB!(0,7,7), to_RGB!(0,0,0), to_RGB!(0,0,0), to_RGB!(0,0,0), 
+    to_RGB!(7,7,7), to_RGB!(5,6,7), to_RGB!(6,5,7), to_RGB!(7,5,7), 
+    to_RGB!(7,4,7), to_RGB!(7,5,5), to_RGB!(7,6,4), to_RGB!(7,7,2), 
+    to_RGB!(7,7,3), to_RGB!(5,7,2), to_RGB!(4,7,3), to_RGB!(2,7,6), 
+    to_RGB!(4,6,7), to_RGB!(0,0,0), to_RGB!(0,0,0), to_RGB!(0,0,0),
+];
