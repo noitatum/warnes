@@ -19,7 +19,7 @@ use sdl2::rect::Point;
 // ppuctrl
 // Const values to access the controller register bits.
 const CTRL_BASE_TABLE           : u8 = 0x03;
-/* 0 = 0x2000 e incrementa de a 0x400,
+ 0 = 0x2000 e incrementa de a 0x400,
  1 = 0x2400 etc. */
 const CTRL_INCREMENT            : u8 = 0x04;
 const CTRL_SPRITE_PATTERN       : u8 = 0x08;
@@ -32,7 +32,7 @@ const CTRL_GEN_NMI              : u8 = 0x80;
 // ppu scroll coordinates
 const COORDINATE_X              : u8 = 0x01;
 const COORDINATE_Y              : u8 = 0x02;
-*/
+
 //ppu mask
 const MASK_GRAYSCALE            : u8 = 0x01;
 const MASK_SHOW_BACKGROUND_LEFT : u8 = 0x02; // set = show bacgrkound in leftmost 8 pixels of screen
@@ -130,6 +130,16 @@ pub struct Ppu {
     name_table_byte : u8,
     attr_byte       : u8,
     tile            : Tile,
+    
+    sprite_unit     : [SpriteInfo; 0x08],
+
+    ltile_sreg      : u16, // 2 byte shift register
+    htile_sreg      : u16, // " "
+    palette_sreg    : u8,
+    tile_addr       : u16,
+
+    next_ltile      : u8,
+    next_htile      : u8,
 }
 
 macro_rules! in_render_range {
@@ -138,6 +148,14 @@ macro_rules! in_render_range {
 
 macro_rules! render_on {
     ($selfie:expr) => ($selfie.show_sprites() || $selfie.show_background())
+}
+
+macro_rules! sprite_pattern_base {
+    ($selfie:expr) =>  (if $selfie.mask & CTRL_SPRITE_PATTERN == 0 {
+                            0x0000
+                        } else {
+                            0x1000
+                        })
 }
 
 impl Ppu {
@@ -169,6 +187,16 @@ impl Ppu {
             attr_byte       : 0,
             tile            : Tile::new(),
 
+            sprite_unit     :[SpriteInfo::new(); 0x08],
+
+            ltile_sreg      : 0,
+            htile_sreg      : 0,
+            palette_sreg    : 0,
+
+            next_ltile      : 0,
+            next_htile      : 0,
+
+            tile_addr       : 0,
         }
     }
     
@@ -187,7 +215,7 @@ impl Ppu {
         // width % 5 fetch tile high (chr ram)
         // width % 7 fetch tile low (chr ram)
         if render_on!(self) && in_render_range!(self.scanline_width){
-            self.draw(renderer); // if rendering is off we only execute VBLANK_END cycles
+            self.draw(renderer, memory); // if rendering is off we only execute VBLANK_END cycles
         }
 
         self.scanline_width +=1;
@@ -200,19 +228,23 @@ impl Ppu {
             self.scanline_width = 0;
         }
         self.cycles += 1;
-        if !render_on!(self) && self.cycles == VBLANK_END_NO_RENDER
-            || render_on!(self) && self.cycles == VBLANK_END {
+        if !render_on!(self) && self.cycles == VBLANK_END_NO_RENDER ||
+            render_on!(self) && self.cycles == VBLANK_END 
+        {
             self.cycles = 0;
             self.fps += 1;
             self.frame_parity = !self.frame_parity;
-        }
+       }
     }
 
     /* for now we dont use mem, remove warning, memory: &mut Mem*/
-    fn draw(&mut self, renderer: &mut sdl2::render::Renderer) {
-        match self.scanline_width % 8 {
-            0 => {}, // fetch nametable byte with address from a Sprite_Info
-            1 => {}, // push it into shifting register?
+    fn draw(&mut self, renderer: &mut sdl2::render::Renderer, memory: &mut Mem) {
+        let scanline_width = self.scanline_width;
+        match scanline_width % 8 {
+                    // fetch nametable address from the sprite unit
+            0 => { self.fetch_nametable_addr(scanline_width); },            
+                    // using that address fetch the tile
+            1 => { self.next_ltile = self.fetch_nametable_tile(memory); }, 
             2 => {}, // fetch attribute
             3 => {}, // same as before
             4 => {}, // fetch low tile byte
@@ -223,6 +255,21 @@ impl Ppu {
         }
         renderer.set_draw_color(Color::RGB(self.scanline as u8, self.scanline as u8, 20));
         renderer.draw_point(Point::new(self.scanline as i32, self.scanline as i32)).unwrap();
+    }
+
+    fn fetch_nametable_addr(&mut self, scanline_width: usize) {
+        // we get the sprite unit idx 
+        let sprite_idx = scanline_width % 8;
+        // we get the tile index (offset on 0x0000 or 0x1000 of tiles)
+        let tile_offset = self.sprite_unit[sprite_idx].tile_index() as u16;
+        let base : u16 = sprite_pattern_base!(self) + tile_offset;
+        self.addr.reset_address();
+        self.addr.set_address(W((base >> 8) as u8));
+        self.addr.set_address(W(base as u8));
+    }
+
+    fn fetch_nametable_tile(&mut self, memory: &mut Mem) -> u8 {
+        return self.load(memory).0;
     }
 
     #[inline(always)]
