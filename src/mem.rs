@@ -31,12 +31,12 @@ impl Memory {
     pub fn new(mapper: Box<Mapper>) -> Memory {
         Memory {
             ram                 : [0; RAM_SIZE],
-            vram                : [0; VRAM_SIZE], 
+            vram                : [0; VRAM_SIZE],
 
             mapper              : mapper,
 
             mem_load_status     : MemState::NoState,
-            mem_store_status    : MemState::NoState,            
+            mem_store_status    : MemState::NoState,
 
             io_load_status      : IoState::NoState,
             io_store_status     : IoState::NoState,
@@ -70,7 +70,7 @@ impl Memory {
         self.oamdma = None;
         return status;
     }
-    
+
     pub fn chr_load(&mut self, address: W<u16>) -> W<u8> {
         W(self.mapper.chr_load(&mut self.vram[..], address))
     }

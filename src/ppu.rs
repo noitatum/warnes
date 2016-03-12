@@ -105,12 +105,6 @@ struct SpriteInfo {
 impl SpriteInfo {
     #[allow(dead_code)]
     pub fn new (/*ppu: &mut Ppu*/) -> SpriteInfo {
-        /*let mut bytes : [u8; 4] = [0; 4];
-        for i in 0..4 {
-                bytes[i] = ppu.load_from_oam();
-        }
-        bytes[2] = bytes[2] & SPRITE_INFO_CLEAN_UNIMPLEMENTED_BITS;
-        */
         SpriteInfo {
             bytes : [0; 4], //bytes,
         }
@@ -120,6 +114,13 @@ impl SpriteInfo {
         for i in 0..4 {
             self.bytes[i] = 0xFF;
         }
+    }
+
+    pub fn set(&mut self, arr : &[u8]) {
+        for i in 0..4 {
+            self.bytes[i] = arr[i];
+        }
+        self.bytes[2] = self.bytes[2] & SPRITE_INFO_CLEAN_UNIMPLEMENTED_BITS;
     }
 }
 
@@ -265,7 +266,13 @@ impl Ppu {
     }
 
     fn update_internals(&mut self) {
-        if self.cycles == 0 {
+        if self.scanline_width == 1 {
+            self.oam.reset_sec_oam();
+        } else if self.scanline_width < 265 {
+            // we compare X position in oam to move to secondary oam
+        } else if self.scanline_width < 320 {
+            // move secondary oam to sprite units
+        } else {
         
         }
     }
@@ -484,7 +491,7 @@ impl Oam {
         self.mem[*address as usize] = value.0;
         *address += 1;
     }
-    
+
     /*#[inline]
     fn set_addr(&mut self, value: W<u8>) {
         self.addr = value;
@@ -495,11 +502,14 @@ impl Oam {
     fn reset_sec_oam(&mut self) {
         for i in 0..8 {
             self.secondary_mem[i as usize].reset();
+            self.secondary_idx = 0;
         }
     }
 
-    pub fn store_secondary_oam(&mut self) {
-    
+    pub fn store_secondary_oam(&mut self, address: u8) {
+        let address = address as usize;
+        self.secondary_mem[self.secondary_idx].set(&self.mem[address..address+4]);
+        self.secondary_idx += 1;
     }
 }
 
