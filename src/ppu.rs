@@ -61,12 +61,12 @@ const SPRITE_INFO_HORIZONTALLY              : u8 = 0x40;
 #[allow(dead_code)]
 const SPRITE_INFO_VERTICALLY                : u8 = 0x80;
 
-const PALETTE_SIZE      : usize = 0x20;
-const PALETTE_ADDRESS   : usize = 0x3f00;
+const PALETTE_SIZE          : usize = 0x20;
+const PALETTE_ADDRESS       : usize = 0x3f00;
 
-const PPU_ADDRESS_SPACE : usize = 0x4000;
-const VBLANK_END        : u32 = 88740; 
-
+const PPU_ADDRESS_SPACE     : usize = 0x4000;
+const VBLANK_END            : u32 = 88740; 
+const VBLANK_END_NO_RENDER  : u32 = 27902;
 // The tiles are fetched from
 // chr ram
 struct Tile {
@@ -136,6 +136,10 @@ macro_rules! in_render_range {
     ($scanline:expr) => ($scanline < 257 && $scanline > 1)
 }
 
+macro_rules! render_on {
+    ($selfie:expr) => ($selfie.show_sprites() || $selfie.show_background())
+}
+
 impl Ppu {
     pub fn new () -> Ppu {
         Ppu {
@@ -182,7 +186,7 @@ impl Ppu {
         // if width % 8 = 3 we fetch attr
         // width % 5 fetch tile high (chr ram)
         // width % 7 fetch tile low (chr ram)
-        if (self.show_sprites() || self.show_background()) && in_render_range!(self.scanline_width){
+        if render_on!(self) && in_render_range!(self.scanline_width){
             self.draw(renderer); // if rendering is off we only execute VBLANK_END cycles
         }
 
@@ -196,12 +200,12 @@ impl Ppu {
             self.scanline_width = 0;
         }
         self.cycles += 1;
-
-        if self.cycles == VBLANK_END {
+        if !render_on!(self) && self.cycles == VBLANK_END_NO_RENDER
+            || render_on!(self) && self.cycles == VBLANK_END {
             self.cycles = 0;
             self.fps += 1;
             self.frame_parity = !self.frame_parity;
-        } 
+        }
     }
 
     /* for now we dont use mem, remove warning, memory: &mut Mem*/
