@@ -43,13 +43,11 @@ const MASK_EMPHASIZE_RED        : u8 = 0x20;
 const MASK_EMPHASIZE_GREEN      : u8 = 0x40;
 const MASK_EMPHASIZE_BLUE       : u8 = 0x80;
 
-/*
+
 // ppu status
 const STATUS_SPRITE_OVERFLOW    : u8 = 0x20;
 const STATUS_SPRITE_0_HIT       : u8 = 0x40;
 const STATUS_VERTICAL_BLANK     : u8 = 0x80; // set = in vertical blank
-*/
-
 
 const SPRITE_INFO_CLEAN_UNIMPLEMENTED_BITS  : u8 = 0xE3;
 const SPRITE_INFO_PRIORITY                  : u8 = 0x20;
@@ -223,7 +221,12 @@ impl Ppu {
             self.cycles = 0;
             self.fps += 1;
             self.frame_parity = !self.frame_parity;
-       }
+        }
+        
+        // we enable the vertical blank flag on ppuctrl
+        if self.scanline_width == 1 && self.scanline == 240 {
+            set_flag!(self.ctrl, STATUS_VERTICAL_BLANK);
+        }
     }
     // gets the value for the next line of 8 pixels
     // ie bytes into tile and attr registers
@@ -267,7 +270,7 @@ impl Ppu {
         // we get the sprite unit idx 
         let sprite_idx = scanline_width % 8;
         // we get the tile index (offset on 0x0000 or 0x1000 of tiles)
-        let tile_offset = self.sprite_unit[sprite_idx].tile_index() as u16;
+        let tile_offset = self.sprite_unit[sprite_idx].tile_idx as u16;
         let base : u16 = sprite_pattern_base!(self) + tile_offset;
         self.addr.reset_address();
         self.addr.set_address(W((base >> 8) as u8));
@@ -546,7 +549,7 @@ impl Oam {
             if cycles % 8 < 5 {
                 let idx = self.secondary_idx;
                 spr_units[idx/8 - 1]
-                    .set_byte((idx % 8) - 1, self.secondary_mem[idx]);
+                    .set_sprite_info((idx % 8) - 1, self.secondary_mem[idx]);
             }
             self.secondary_idx += 1;
         }
@@ -571,74 +574,56 @@ impl LoadStore for Oam {
     }
 }
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Default)]
 struct SpriteInfo {
-    bytes           : [u8; 4],
+    pub y_pos       : u8,
+    pub tile_idx    : u8,
+    pub attributes  : u8,
+    pub x_pos       : u8,
 }
 
 impl SpriteInfo {
     #[allow(dead_code)]
     pub fn new (/*ppu: &mut Ppu*/) -> SpriteInfo {
         SpriteInfo {
-            bytes : [0; 4], //bytes,
+            y_pos       : 0,
+            tile_idx    : 0,
+            attributes  : 0,
+            x_pos       : 0,
         }
     }
 
     pub fn reset(&mut self) {
         for i in 0..4 {
-            self.bytes[i] = 0xFF;
+            self.set_sprite_info(i, 0xFF);
         }
     }
 
-    pub fn set(&mut self, arr : &[u8]) {
-        for i in 0..4 {
-            self.bytes[i] = arr[i];
+    pub fn set_sprite_info(&mut self, idx: usize, value: u8) {
+        match idx {
+            0 => { self.y_pos = value; },
+            1 => { self.tile_idx = value; },
+            2 => { self.attributes = value; },
+            3 => { self.x_pos = value; },
+            _ => { panic!("wrong sprite unit index!"); }
         }
-        self.bytes[2] = self.bytes[2] & SPRITE_INFO_CLEAN_UNIMPLEMENTED_BITS;
-    }
-
-    pub fn set_byte(&mut self, idx: usize, byte: u8) {
-        self.bytes[idx] = byte;
     }
 }
 
-impl SpriteInfo {
-    #[inline]
-    pub fn y_position(&mut self) -> u8 {
-        return self.bytes[0];
-    }
+macro_rules! get_sprite_priority {
+    ($attr:expr) => (($attr & SPRITE_INFO_PRIORITY) != 0)
+}
 
-    #[inline]
-    pub fn tile_index(&mut self) -> u8 {
-        return self.bytes[1];
-    }
+macro_rules! get_palette {
+    ($attr:expr) => ($attr & SPRITE_INFO_PALETTE)
+}
 
-    #[inline]
-    pub fn x_position(&mut self) -> u8 {
-        return self.bytes[3];
-    }
+macro_rules! flip_horizontally {
+    ($attr:expr) => (($attr & SPRITE_INFO_HORIZONTALLY) > 1)
+}
 
-    // true = in front of background 
-    // false = behind background
-    #[inline]
-    pub fn sprite_priority(&mut self) -> bool {
-        return (self.bytes[2] & SPRITE_INFO_PRIORITY) != 0;
-    }
-
-    #[inline]
-    pub fn palette(&mut self) -> u8 {
-        return self.bytes[2] & SPRITE_INFO_PALETTE;
-    }
-
-    #[inline]
-    pub fn flip_horizontally(&mut self) -> bool {
-        return (self.bytes[2] & SPRITE_INFO_HORIZONTALLY) > 1;
-    }
-
-    #[inline]
-    pub fn flip_vertically(&mut self) -> bool {
-        return (self.bytes[2] & SPRITE_INFO_VERTICALLY) > 1;
-    }
+macro_rules! flip_vertically {
+    ($attr:expr) => (($attr & SPRITE_INFO_VERTICALLY) > 1)
 }
 
 const PALETTE : [Color; 0x40] = [

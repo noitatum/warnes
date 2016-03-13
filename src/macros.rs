@@ -38,6 +38,11 @@ macro_rules! W8 {
     ($val:expr) => (W($val.0 as u8))
 }
 
+macro_rules! get_bit {
+    ($flags:expr, $flag_bit:expr) => ($flags & $flag_bit;);
+}
+
+
 macro_rules! set_sign_zero {
     ($flags:expr, $val:expr) => (
         set_sign!($flags, $val);
