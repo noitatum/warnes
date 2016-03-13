@@ -543,10 +543,10 @@ impl Oam {
             // set index to 0 so we can copy to the sprite units.
             if cycles == 257 { self.secondary_idx = 0; }
             // cycle 257, 265, 273
-            if cycles % 8 == 1 {
+            if cycles % 8 < 5 {
                 let idx = self.secondary_idx;
-                spr_units[idx/4 - 1]
-                    .set_byte(idx % 4, self.secondary_mem[idx]);
+                spr_units[idx/8 - 1]
+                    .set_byte((idx % 8) - 1, self.secondary_mem[idx]);
             }
             self.secondary_idx += 1;
         }
@@ -554,7 +554,6 @@ impl Oam {
 
     pub fn store_to_secondary_oam(&mut self, address: u8) {
         let address = address as usize;
-
         self.secondary_idx += 1;
     }
 }
