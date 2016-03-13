@@ -134,55 +134,15 @@ pub struct Ppu {
 
     ltile_sreg      : u16, // 2 byte shift register
     htile_sreg      : u16, // " "
-    attr1_sreg   : u8,
-    attr2_sreg   : u8,
+    attr1_sreg      : u8,
+    attr2_sreg      : u8,
     tile_addr       : u16,
 
     next_ltile      : u8,
     next_htile      : u8,
+    next_attr       : u8,
 }
 
-macro_rules! in_render_range {
-    ($scanline:expr) => ($scanline < 257 && $scanline > 1)
-}
-
-macro_rules! render_on {
-    ($selfie:expr) => ($selfie.show_sprites() || $selfie.show_background())
-}
-
-macro_rules! sprite_pattern_base {
-    ($selfie:expr) =>  (if $selfie.mask & CTRL_SPRITE_PATTERN == 0 {
-                            0x0000
-                        } else {
-                            0x1000
-                        })
-}
-
-macro_rules! scanline_end {
-    ($selfie:expr) => 
-        (($selfie.scanline_width == 340 && $selfie.scanline == 261))
-}
-
-macro_rules! attr_bit {
-    ($attr:expr) => (($attr & ATTR_BIT) >> 7)
-}
-
-macro_rules! tile_bit {
-    ($tile:expr) => (($tile & TILE_BIT) >> 15)
-}
-
-macro_rules! join_bits {
-    ($b1:expr, $b2:expr, $b3:expr, $b4:expr) =>
-        (((($b1 as u16) << 3) | (($b2 as u16) << 2) | (($b3 as u16) << 1) | ($b4 as u16)) & 0x00FF)  
-}
-
-macro_rules! shift_bits {
-    ($selfie:expr) => ($selfie.ltile_sreg = $selfie.ltile_sreg << 1;
-                       $selfie.htile_sreg = $selfie.htile_sreg << 1;
-                       $selfie.attr1_sreg = $selfie.attr1_sreg << 1;
-                       $selfie.attr2_sreg = $selfie.attr2_sreg << 1;
-                      )
-}
 
 impl Ppu {
     pub fn new () -> Ppu {
@@ -221,7 +181,7 @@ impl Ppu {
             attr2_sreg      : 0,
             next_ltile      : 0,
             next_htile      : 0,
-
+            next_attr       : 0,
             tile_addr       : 0,
         }
     }
@@ -233,19 +193,20 @@ impl Ppu {
         let val = self.load(memory);
         self.store(memory, val);
 
-        self.oam.cycle(self.cycles, self.scanline);    // we let the oam prepare the next sprites
+        self.oam.cycle(self.cycles, self.scanline, &mut self.sprite_unit);    // we let the oam prepare the next sprites
 
         // if on a visible scanline 
         // and width % 8 = 1 then we fetch nametable
         // if width % 8 = 3 we fetch attr
         // width % 5 fetch tile high (chr ram)
         // width % 7 fetch tile low (chr ram)
-        if render_on!(self) && in_render_range!(self.scanline_width){
-            self.evaluate_next_byte(memory);
+        if render_on!(self) && in_render_range!(self.scanline_width) {
             self.draw(renderer); // if rendering is off we only execute VBLANK_END cycles
+            self.evaluate_next_byte(memory);
         }
 
         self.scanline_width +=1;
+        self.cycles += 1;
 
         // if we finished the current scanline we pass to the next one
         if self.scanline_width == 340 {
@@ -253,11 +214,8 @@ impl Ppu {
             self.scanline_width = 0;
         }
 
-        self.cycles += 1;
-
         if !render_on!(self) && self.cycles == VBLANK_END_NO_RENDER ||
             scanline_end!(self)
-            //render_on!(self) && self.cycles == VBLANK_END 
         {
            // reset scanline values and qty of cycles
             self.scanline_width = 0;
@@ -270,7 +228,7 @@ impl Ppu {
     // gets the value for the next line of 8 pixels
     // ie bytes into tile and attr registers
     fn evaluate_next_byte(&mut self, memory: &mut Mem){
-        let scanline_width = self.scanline_width;
+        let scanline_width = self.scanline_width - 1; // the zeroeth scanline is a nop
         match scanline_width % 8 {
                     // fetch nametable address from the sprite unit
             0 => { self.fetch_nametable_addr(scanline_width); },
@@ -281,10 +239,17 @@ impl Ppu {
             4 => { self.fetch_tile_addr(true); },   // fetch low tile byte
             5 => { self.fetch_tile();},             // as before
             6 => { self.fetch_tile_addr(false); },  // fetch high tile byte
-            7 => { self.fetch_tile(); },            // as before
-            /* TODO: after 7 we load data into the shift registers */
+            7 => { self.fetch_tile();               // fetch the tile
+                   self.set_shift_regs(); },        // load the next shit registers.
             _ => {}, 
         }
+    }
+
+    fn set_shift_regs(&mut self) {
+        self.ltile_sreg = (self.ltile_sreg & 0xFF00) | self.next_ltile as u16;
+        self.htile_sreg = (self.htile_sreg & 0xFF00) | self.next_htile as u16;
+        self.attr1_sreg = self.next_attr;
+        self.attr2_sreg = self.next_attr;
     }
 
     /* for now we dont use mem, remove warning, memory: &mut Mem*/
@@ -531,24 +496,29 @@ impl Oam {
         *address += 1;
     }
 
-    fn reset_sec_oam(&mut self) {
-        for i in 0..64 {
-            self.secondary_mem[i as usize] = 0xFF;
+    fn reset_sec_oam(&mut self, idx: usize) {
+        self.secondary_mem[idx] = 0xFF;
+        self.secondary_idx = 0;
+        self.mem_idx = 0;
+    }
+
+    fn reset_sec_oam_tot(&mut self) {
+        for idx in 0..64 {
+            self.secondary_mem[idx as usize] = 0xFF;
             self.secondary_idx = 0;
             self.mem_idx = 0;
         }
     }
-
-    pub fn cycle(&mut self, cycles: u32, scanline: usize) {
-        if cycles == 1 {
-            self.reset_sec_oam();
-        } else if cycles < 256 {
+    pub fn cycle(&mut self, cycles: u32, scanline: usize, spr_units: &mut [SpriteInfo]) {
+        if cycles <= 64 {
+            self.reset_sec_oam(cycles as usize);
+        } else if cycles < 257 {
             // odd cycles
             if cycles % 2 == 1 {
                 // TODO: Ignore odd cycles and do everything on even cycles? (reads).
             // even cycles
             } else {
-                if self.secondary_idx != 64 && self.mem_idx != 256 {
+                if self.secondary_idx < 64 && self.mem_idx != 256 {
                     // If we're on a y-pos byte and it fits with the scanline
                     // copy it to the current position of secondary oam memory
                     // else just add to the memory idx
@@ -566,11 +536,19 @@ impl Oam {
                     }
                     self.mem_idx += 1;
                 } else if self.secondary_idx < 64 {
-                    self.reset_sec_oam();
+                    self.reset_sec_oam_tot();
                 }
             }
         } else if cycles < 320 {
-            // Copy to the sprite units??
+            // set index to 0 so we can copy to the sprite units.
+            if cycles == 257 { self.secondary_idx = 0; }
+            // cycle 257, 265, 273
+            if cycles % 8 == 1 {
+                let idx = self.secondary_idx;
+                spr_units[idx/4 - 1]
+                    .set_byte(idx % 4, self.secondary_mem[idx]);
+            }
+            self.secondary_idx += 1;
         }
     }
 
@@ -619,6 +597,10 @@ impl SpriteInfo {
         }
         self.bytes[2] = self.bytes[2] & SPRITE_INFO_CLEAN_UNIMPLEMENTED_BITS;
     }
+
+    pub fn set_byte(&mut self, idx: usize, byte: u8) {
+        self.bytes[idx] = byte;
+    }
 }
 
 impl SpriteInfo {
@@ -657,12 +639,6 @@ impl SpriteInfo {
     #[inline]
     pub fn flip_vertically(&mut self) -> bool {
         return (self.bytes[2] & SPRITE_INFO_VERTICALLY) > 1;
-    }
-}
-
-macro_rules! to_RGB {
-    ($r:expr, $g:expr, $b:expr) => { 
-        Color::RGB($r, $g, $b) 
     }
 }
 
