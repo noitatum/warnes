@@ -63,6 +63,9 @@ const PALETTE_ADDRESS       : usize = 0x3f00;
 const PPU_ADDRESS_SPACE     : usize = 0x4000;
 const VBLANK_END            : u32 = 88740; 
 const VBLANK_END_NO_RENDER  : u32 = 27902;
+
+const ATTR_BIT              : u8 = 0x80;
+const TILE_BIT              : u16 = 0x8000;
 // The tiles are fetched from
 // chr ram
 struct Tile {
@@ -131,7 +134,8 @@ pub struct Ppu {
 
     ltile_sreg      : u16, // 2 byte shift register
     htile_sreg      : u16, // " "
-    palette_sreg    : u8,
+    attr1_sreg   : u8,
+    attr2_sreg   : u8,
     tile_addr       : u16,
 
     next_ltile      : u8,
@@ -157,6 +161,27 @@ macro_rules! sprite_pattern_base {
 macro_rules! scanline_end {
     ($selfie:expr) => 
         (($selfie.scanline_width == 340 && $selfie.scanline == 261))
+}
+
+macro_rules! attr_bit {
+    ($attr:expr) => (($attr & ATTR_BIT) >> 7)
+}
+
+macro_rules! tile_bit {
+    ($tile:expr) => (($tile & TILE_BIT) >> 15)
+}
+
+macro_rules! join_bits {
+    ($b1:expr, $b2:expr, $b3:expr, $b4:expr) =>
+        (((($b1 as u16) << 3) | (($b2 as u16) << 2) | (($b3 as u16) << 1) | ($b4 as u16)) & 0x00FF)  
+}
+
+macro_rules! shift_bits {
+    ($selfie:expr) => ($selfie.ltile_sreg = $selfie.ltile_sreg << 1;
+                       $selfie.htile_sreg = $selfie.htile_sreg << 1;
+                       $selfie.attr1_sreg = $selfie.attr1_sreg << 1;
+                       $selfie.attr2_sreg = $selfie.attr2_sreg << 1;
+                      )
 }
 
 impl Ppu {
@@ -192,8 +217,8 @@ impl Ppu {
 
             ltile_sreg      : 0,
             htile_sreg      : 0,
-            palette_sreg    : 0,
-
+            attr1_sreg      : 0,
+            attr2_sreg      : 0,
             next_ltile      : 0,
             next_htile      : 0,
 
@@ -216,7 +241,8 @@ impl Ppu {
         // width % 5 fetch tile high (chr ram)
         // width % 7 fetch tile low (chr ram)
         if render_on!(self) && in_render_range!(self.scanline_width){
-            self.draw(renderer, memory); // if rendering is off we only execute VBLANK_END cycles
+            self.evaluate_next_byte(memory);
+            self.draw(renderer); // if rendering is off we only execute VBLANK_END cycles
         }
 
         self.scanline_width +=1;
@@ -241,9 +267,9 @@ impl Ppu {
             self.frame_parity = !self.frame_parity;
        }
     }
-
-    /* for now we dont use mem, remove warning, memory: &mut Mem*/
-    fn draw(&mut self, renderer: &mut sdl2::render::Renderer, memory: &mut Mem) {
+    // gets the value for the next line of 8 pixels
+    // ie bytes into tile and attr registers
+    fn evaluate_next_byte(&mut self, memory: &mut Mem){
         let scanline_width = self.scanline_width;
         match scanline_width % 8 {
                     // fetch nametable address from the sprite unit
@@ -256,10 +282,20 @@ impl Ppu {
             5 => { self.fetch_tile();},             // as before
             6 => { self.fetch_tile_addr(false); },  // fetch high tile byte
             7 => { self.fetch_tile(); },            // as before
+            /* TODO: after 7 we load data into the shift registers */
             _ => {}, 
         }
-        renderer.set_draw_color(Color::RGB(self.scanline as u8, self.scanline as u8, 20));
+    }
+
+    /* for now we dont use mem, remove warning, memory: &mut Mem*/
+    fn draw(&mut self, renderer: &mut sdl2::render::Renderer) {
+        let color_idx = join_bits!(attr_bit!(self.attr1_sreg),
+                                   attr_bit!(self.attr2_sreg),
+                                   tile_bit!(self.ltile_sreg),
+                                   tile_bit!(self.htile_sreg));
+        renderer.set_draw_color(PALETTE[color_idx as usize]);
         renderer.draw_point(Point::new(self.scanline as i32, self.scanline as i32)).unwrap();
+        shift_bits!(self);
     }
 
     fn fetch_nametable_addr(&mut self, scanline_width: usize) {
@@ -629,7 +665,8 @@ macro_rules! to_RGB {
         Color::RGB($r, $g, $b) 
     }
 }
-const PALLETE : [Color; 0x40] = [
+
+const PALETTE : [Color; 0x40] = [
     to_RGB!(3,3,3), to_RGB!(0,1,4), to_RGB!(0,0,6), to_RGB!(3,2,6), 
     to_RGB!(4,0,3), to_RGB!(5,0,3), to_RGB!(5,1,0), to_RGB!(4,2,0), 
     to_RGB!(3,2,0), to_RGB!(1,2,0), to_RGB!(0,3,1), to_RGB!(0,4,0), 
