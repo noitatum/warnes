@@ -61,27 +61,29 @@ macro_rules! set_sign_zero_carry_cond {
 }
 
 macro_rules! inst {
-    ($addr:ident, $oper:ident, $cycles:expr, $extra:expr, $name:expr) => (
+    ($addr:ident, $oper:ident, $cycles:expr, $extra:expr, $name:expr, $size:expr) => 
+    (
         Instruction {
             addressing  : Regs::$addr,
             operation   : Regs::$oper,
             cycles      : $cycles,
             has_extra   : $extra,
-            name        : $name
+            name        : $name,
+            size        : $size,
         }
     )
 }
 
 // Has zero cycle penalty
 macro_rules! iz {
-    ($addr:ident, $oper:ident, $cycles:expr) =>  
-        (inst!($addr, $oper, $cycles, false, stringify!($oper)))
+    ($addr:ident, $oper:ident, $cycles:expr, $size:expr) =>  
+        (inst!($addr, $oper, $cycles, false, stringify!($oper), $size))
 }
 
 // Has extra cycle penalty
 macro_rules! ix {
-    ($addr:ident, $oper:ident, $cycles:expr) => 
-        (inst!($addr, $oper, $cycles, true, stringify!($oper)))
+    ($addr:ident, $oper:ident, $cycles:expr, $size:expr) => 
+        (inst!($addr, $oper, $cycles, true, stringify!($oper), $size))
 }
 
 macro_rules! in_render_range {

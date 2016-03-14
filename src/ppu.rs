@@ -426,14 +426,14 @@ impl fmt::Debug for Oam {
 
 impl Oam {
 
-    fn store_data(&mut self, value: W<u8>) {
-        self.mem[self.address.0 as usize];
-        self.address = self.address + W(1);
-    }
-
-    fn set_address(&mut self, addr: W<u8>) {
-        self.address = addr;
-    }
+	fn store_data(&mut self, value: W<u8>) {
+	  self.mem[self.address.0 as usize];
+	  self.address = self.address + W(1);
+	}
+	 
+	fn set_address(&mut self, addr: W<u8>) {
+	  self.address = addr;
+	}
 
     fn reset_sec_oam(&mut self, idx: usize) {
         self.secondary_mem[idx] = 0xFF;
@@ -490,11 +490,6 @@ impl Oam {
             }
             self.secondary_idx += 1;
         }
-    }
-
-    pub fn store_to_secondary_oam(&mut self, address: u8) {
-        let address = address as usize;
-        self.secondary_idx += 1;
     }
 }
 

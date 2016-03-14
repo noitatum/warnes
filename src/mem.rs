@@ -112,6 +112,23 @@ impl Memory {
         self.joy1 
     }
 
+
+    pub fn load_no_side_effect(&mut self, address: W<u16>) -> W<u8> {
+        let mem_load_status  = self.mem_load_status;    
+        let mem_store_status = self.mem_store_status;    
+        let io_load_status   = self.io_load_status;
+        let io_store_status  = self.io_store_status;
+
+        let value = self.load(address);
+
+        self.mem_load_status  = mem_load_status;  
+        self.mem_store_status = mem_store_status; 
+        self.io_load_status   = io_load_status;
+        self.io_store_status  = io_store_status;  
+        
+        return value;
+    }
+
 }
 
 impl LoadStore for Memory {

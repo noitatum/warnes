@@ -50,9 +50,22 @@ impl Cpu {
         self.cycles += 1;
     }
 
-    pub fn next_instr(&mut self, memory: &mut Mem) -> (String, u32) {
+    pub fn next_instr(&mut self, memory: &mut Mem) -> (String, u32, Vec<u8>, bool) {
         let index = self.regs.next_opcode(memory) as usize;
-        return (OPCODE_TABLE[index].name(), OPCODE_TABLE[index].cycles());
+        let op_name = OPCODE_TABLE[index].name();
+        let mut arr = vec!(0, 0);
+        let mut size_three : bool = false;
+        match OPCODE_TABLE[index].num_bytes() { 
+            1 => {},
+            2 => { arr[0] = memory.load_no_side_effect(self.regs.PC() + W(1)).0; },
+            3 => { arr[0] = memory.load_no_side_effect(self.regs.PC() + W(1)).0;
+                   arr[1] = memory.load_no_side_effect(self.regs.PC() + W(2)).0; 
+                   size_three = true; },
+            _ => { panic!("no operation has this size of bytes: {}", 
+                         OPCODE_TABLE[index].num_bytes()); }
+        }
+
+        return (OPCODE_TABLE[index].name(), OPCODE_TABLE[index].cycles(), arr, size_three);
     }
 }
 
@@ -106,12 +119,18 @@ struct Instruction {
     operation   : fn(&mut Regs, &mut Mem, W<u16>), 
     cycles      : u32,
     has_extra   : bool,
-    name        : &'static str
+    name        : &'static str,
+    size        : u8, // instr size in bytes
 }
 
 impl Instruction {
     pub fn name(&mut self) -> String {
         return self.name.to_string();
+    }
+
+    #[inline(always)]
+    pub fn num_bytes(&mut self) -> u8 {
+        return self.size;
     }
 
     pub fn cycles(&mut self) -> u32 {
@@ -144,6 +163,11 @@ impl Default for Regs {
 
 // Util functions
 impl Regs {
+    /// for the debuger.
+    #[inline(always)]
+    pub fn PC(&mut self) -> W<u16> {
+        return self.PC;
+    } 
 
     pub fn reset(&mut self, memory: &mut Mem) {
         self.PC = memory.load_word(ADDRESS_RESET); 
@@ -650,83 +674,83 @@ impl fmt::Debug for Regs {
 /* WARNING: Branch instructions are replaced with jumps */
 const OPCODE_TABLE : [Instruction; 256] = [    
     // 0x00
-    iz!(imp, brk, 7), iz!(idx, ora, 6), iz!(imp, nop, 2), iz!(idx, slo, 8), 
-    iz!(zpg, nop, 3), iz!(zpg, ora, 3), iz!(zpg, asl, 5), iz!(zpg, slo, 5), 
-    iz!(imp, php, 3), iz!(imm, ora, 2), iz!(imp, sal, 2), iz!(imp, nop, 2), 
-    iz!(abs, nop, 4), iz!(abs, ora, 4), iz!(abs, asl, 6), iz!(abs, slo, 6),
+    iz!(imp, brk, 7, 1), iz!(idx, ora, 6, 2), iz!(imp, nop, 2, 1), iz!(idx, slo, 8, 2), 
+    iz!(zpg, nop, 3, 2), iz!(zpg, ora, 3, 2), iz!(zpg, asl, 5, 2), iz!(zpg, slo, 5, 2), 
+    iz!(imp, php, 3, 1), iz!(imm, ora, 2, 2), iz!(imp, sal, 2, 1), iz!(imp, nop, 2, 1), 
+    iz!(abs, nop, 4, 3), iz!(abs, ora, 4, 3), iz!(abs, asl, 6, 3), iz!(abs, slo, 6, 3),
     // 0x10 
-    ix!(rel, jmp, 2), ix!(idy, ora, 5), iz!(imp, nop, 2), iz!(idy, slo, 8),
-    iz!(zpx, nop, 4), iz!(zpx, ora, 4), iz!(zpx, asl, 6), iz!(zpx, slo, 6),
-    iz!(imp, clc, 2), ix!(aby, ora, 4), iz!(imp, nop, 2), iz!(aby, slo, 7),
-    ix!(abx, nop, 4), ix!(abx, ora, 4), iz!(abx, asl, 7), iz!(abx, slo, 7),
+    ix!(rel, jmp, 2, 1), ix!(idy, ora, 5, 2), iz!(imp, nop, 2, 1), iz!(idy, slo, 8, 2),
+    iz!(zpx, nop, 4, 2), iz!(zpx, ora, 4, 2), iz!(zpx, asl, 6, 2), iz!(zpx, slo, 6, 2),
+    iz!(imp, clc, 2, 1), ix!(aby, ora, 4, 3), iz!(imp, nop, 2, 1), iz!(aby, slo, 7, 3),
+    ix!(abx, nop, 4, 3), ix!(abx, ora, 4, 3), iz!(abx, asl, 7, 3), iz!(abx, slo, 7, 3),
     // 0x20
-    iz!(abs, jsr, 6), iz!(idx, and, 6), iz!(imp, nop, 2), iz!(idx, rla, 8),
-    iz!(zpg, bit, 3), iz!(zpg, and, 3), iz!(zpg, rol, 5), iz!(zpg, rla, 5),
-    iz!(imp, plp, 4), iz!(imm, and, 2), iz!(imp, ral, 2), iz!(imp, nop, 2),
-    iz!(abs, bit, 4), iz!(abs, and, 4), iz!(abs, rol, 6), iz!(abs, rla, 6),
+    iz!(abs, jsr, 6, 3), iz!(idx, and, 6, 2), iz!(imp, nop, 2, 1), iz!(idx, rla, 8, 2),
+    iz!(zpg, bit, 3, 2), iz!(zpg, and, 3, 2), iz!(zpg, rol, 5, 2), iz!(zpg, rla, 5, 2),
+    iz!(imp, plp, 4, 1), iz!(imm, and, 2, 2), iz!(imp, ral, 2, 1), iz!(imp, nop, 2, 1),
+    iz!(abs, bit, 4, 3), iz!(abs, and, 4, 3), iz!(abs, rol, 6, 3), iz!(abs, rla, 6, 3),
     // 0x30
-    ix!(rel, jmp, 2), ix!(idy, and, 5), iz!(imp, nop, 2), iz!(idy, rla, 8),
-    iz!(zpx, nop, 4), iz!(zpx, and, 4), iz!(zpx, rol, 6), iz!(zpx, rla, 6),
-    iz!(imp, sec, 2), ix!(aby, and, 4), iz!(imp, nop, 2), iz!(aby, rla, 7),
-    ix!(abx, nop, 4), ix!(abx, and, 4), iz!(abx, rol, 7), iz!(abx, rla, 7),
+    ix!(rel, jmp, 2, 1), ix!(idy, and, 5, 2), iz!(imp, nop, 2, 1), iz!(idy, rla, 8, 2),
+    iz!(zpx, nop, 4, 2), iz!(zpx, and, 4, 2), iz!(zpx, rol, 6, 2), iz!(zpx, rla, 6, 2),
+    iz!(imp, sec, 2, 1), ix!(aby, and, 4, 3), iz!(imp, nop, 2, 1), iz!(aby, rla, 7, 3),
+    ix!(abx, nop, 4, 3), ix!(abx, and, 4, 3), iz!(abx, rol, 7, 3), iz!(abx, rla, 7, 3),
     // 0x40
-    iz!(imp, rti, 6), iz!(idx, eor, 6), iz!(imp, nop, 2), iz!(idx, sre, 8),
-    iz!(zpg, nop, 3), iz!(zpg, eor, 3), iz!(zpg, lsr, 5), iz!(zpg, sre, 5),
-    iz!(imp, pha, 3), iz!(imm, eor, 2), iz!(imp, sar, 2), iz!(imp, nop, 2),
-    iz!(abs, jmp, 3), iz!(abs, eor, 4), iz!(abs, lsr, 6), iz!(abs, sre, 6),
+    iz!(imp, rti, 6, 1), iz!(idx, eor, 6, 2), iz!(imp, nop, 2, 1), iz!(idx, sre, 8, 2),
+    iz!(zpg, nop, 3, 2), iz!(zpg, eor, 3, 2), iz!(zpg, lsr, 5, 2), iz!(zpg, sre, 5, 2),
+    iz!(imp, pha, 3, 1), iz!(imm, eor, 2, 2), iz!(imp, sar, 2, 1), iz!(imp, nop, 2, 1),
+    iz!(abs, jmp, 3, 3), iz!(abs, eor, 4, 3), iz!(abs, lsr, 6, 3), iz!(abs, sre, 6, 3),
     // 0x50
-    ix!(rel, jmp, 2), ix!(idy, eor, 5), iz!(imp, nop, 2), iz!(idy, sre, 8),
-    iz!(zpx, nop, 4), iz!(zpx, eor, 4), iz!(zpx, lsr, 6), iz!(zpx, sre, 6),
-    iz!(imp, cli, 2), ix!(aby, eor, 4), iz!(imp, nop, 2), iz!(aby, sre, 7), 
-    ix!(abx, nop, 4), ix!(abx, eor, 4), iz!(abx, lsr, 7), iz!(abx, sre, 7),
+    ix!(rel, jmp, 2, 1), ix!(idy, eor, 5, 2), iz!(imp, nop, 2, 1), iz!(idy, sre, 8, 2),
+    iz!(zpx, nop, 4, 2), iz!(zpx, eor, 4, 2), iz!(zpx, lsr, 6, 2), iz!(zpx, sre, 6, 2),
+    iz!(imp, cli, 2, 1), ix!(aby, eor, 4, 3), iz!(imp, nop, 2, 1), iz!(aby, sre, 7, 3), 
+    ix!(abx, nop, 4, 3), ix!(abx, eor, 4, 3), iz!(abx, lsr, 7, 3), iz!(abx, sre, 7, 3),
     // 0x60
-    iz!(imp, rts, 6), iz!(idx, adc, 6), iz!(imp, nop, 2), iz!(idx, rra, 8),
-    iz!(zpg, nop, 3), iz!(zpg, adc, 3), iz!(zpg, ror, 5), iz!(zpg, rra, 5),
-    iz!(imp, pla, 4), iz!(imm, adc, 2), iz!(imp, rar, 2), iz!(imp, nop, 2),
-    iz!(ind, jmp, 5), iz!(abs, adc, 4), iz!(abs, ror, 6), iz!(abs, rra, 6),
+    iz!(imp, rts, 6, 1), iz!(idx, adc, 6, 2), iz!(imp, nop, 2, 1), iz!(idx, rra, 8, 2),
+    iz!(zpg, nop, 3, 2), iz!(zpg, adc, 3, 2), iz!(zpg, ror, 5, 2), iz!(zpg, rra, 5, 2),
+    iz!(imp, pla, 4, 1), iz!(imm, adc, 2, 2), iz!(imp, rar, 2, 1), iz!(imp, nop, 2, 1),
+    iz!(ind, jmp, 5, 3), iz!(abs, adc, 4, 3), iz!(abs, ror, 6, 3), iz!(abs, rra, 6, 3),
     // 0x70
-    ix!(rel, jmp, 2), ix!(idy, adc, 5), iz!(imp, nop, 2), iz!(idy, rra, 8),
-    iz!(zpx, nop, 4), iz!(zpx, adc, 4), iz!(zpx, ror, 6), iz!(zpx, rra, 6),
-    iz!(imp, sei, 2), ix!(aby, adc, 4), iz!(imp, nop, 2), iz!(aby, rra, 7), 
-    ix!(abx, nop, 4), ix!(abx, adc, 4), iz!(abx, ror, 7), iz!(abx, rra, 7),
+    ix!(rel, jmp, 2, 1), ix!(idy, adc, 5, 2), iz!(imp, nop, 2, 1), iz!(idy, rra, 8, 2),
+    iz!(zpx, nop, 4, 2), iz!(zpx, adc, 4, 2), iz!(zpx, ror, 6, 2), iz!(zpx, rra, 6, 2),
+    iz!(imp, sei, 2, 1), ix!(aby, adc, 4, 3), iz!(imp, nop, 2, 1), iz!(aby, rra, 7, 3), 
+    ix!(abx, nop, 4, 3), ix!(abx, adc, 4, 3), iz!(abx, ror, 7, 3), iz!(abx, rra, 7, 3),
     // 0x80
-    iz!(imm, nop, 2), iz!(idx, sta, 6), iz!(imm, nop, 2), iz!(idx, sax, 6),
-    iz!(zpg, sty, 3), iz!(zpg, sta, 3), iz!(zpg, stx, 3), iz!(zpg, sax, 3),
-    iz!(imp, dey, 2), iz!(imm, nop, 2), iz!(imp, txa, 2), iz!(imp, nop, 2),
-    iz!(abs, sty, 4), iz!(abs, sta, 4), iz!(abs, stx, 4), iz!(abs, sax, 4),
+    iz!(imm, nop, 2, 2), iz!(idx, sta, 6, 2), iz!(imm, nop, 2, 2), iz!(idx, sax, 6, 2),
+    iz!(zpg, sty, 3, 2), iz!(zpg, sta, 3, 2), iz!(zpg, stx, 3, 2), iz!(zpg, sax, 3, 2),
+    iz!(imp, dey, 2, 1), iz!(imm, nop, 2, 2), iz!(imp, txa, 2, 1), iz!(imp, nop, 2, 1),
+    iz!(abs, sty, 4, 3), iz!(abs, sta, 4, 3), iz!(abs, stx, 4, 3), iz!(abs, sax, 4, 3),
     // 0x90
-    ix!(rel, jmp, 2), iz!(idy, sta, 6), iz!(imp, nop, 2), iz!(imp, nop, 2), 
-    iz!(zpx, sty, 4), iz!(zpx, sta, 4), iz!(zpy, stx, 4), iz!(zpy, sax, 4),
-    iz!(imp, tya, 2), iz!(aby, sta, 5), iz!(imp, txs, 2), iz!(imp, nop, 2), 
-    iz!(imp, nop, 2), iz!(abx, sta, 5), iz!(imp, nop, 2), iz!(imp, nop, 2),
+    ix!(rel, jmp, 2, 1), iz!(idy, sta, 6, 2), iz!(imp, nop, 2, 1), iz!(imp, nop, 2, 1), 
+    iz!(zpx, sty, 4, 2), iz!(zpx, sta, 4, 2), iz!(zpy, stx, 4, 2), iz!(zpy, sax, 4, 2),
+    iz!(imp, tya, 2, 1), iz!(aby, sta, 5, 3), iz!(imp, txs, 2, 1), iz!(imp, nop, 2, 1), 
+    iz!(imp, nop, 2, 1), iz!(abx, sta, 5, 3), iz!(imp, nop, 2, 1), iz!(imp, nop, 2, 1),
     // 0xA0
-    iz!(imm, ldy, 2), iz!(idx, lda, 6), iz!(imm, ldx, 2), iz!(idx, lax, 6),
-    iz!(zpg, ldy, 3), iz!(zpg, lda, 3), iz!(zpg, ldx, 3), iz!(zpg, lax, 3),
-    iz!(imp, tay, 2), iz!(imm, lda, 2), iz!(imp, tax, 2), iz!(imm, lax, 2),
-    iz!(abs, ldy, 4), iz!(abs, lda, 4), iz!(abs, ldx, 4), iz!(abs, lax, 4),
+    iz!(imm, ldy, 2, 2), iz!(idx, lda, 6, 2), iz!(imm, ldx, 2, 2), iz!(idx, lax, 6, 2),
+    iz!(zpg, ldy, 3, 2), iz!(zpg, lda, 3, 2), iz!(zpg, ldx, 3, 2), iz!(zpg, lax, 3, 2),
+    iz!(imp, tay, 2, 1), iz!(imm, lda, 2, 2), iz!(imp, tax, 2, 1), iz!(imm, lax, 2, 2),
+    iz!(abs, ldy, 4, 3), iz!(abs, lda, 4, 3), iz!(abs, ldx, 4, 3), iz!(abs, lax, 4, 3),
     // 0xB0
-    ix!(rel, jmp, 2), ix!(idy, lda, 5), iz!(imp, nop, 2), ix!(idy, lax, 5),
-    iz!(zpx, ldy, 4), iz!(zpx, lda, 4), iz!(zpy, ldx, 4), iz!(zpy, lax, 4),
-    iz!(imp, clv, 2), ix!(aby, lda, 4), iz!(imp, tsx, 2), iz!(imp, nop, 2),
-    ix!(abx, ldy, 4), ix!(abx, lda, 4), ix!(aby, ldx, 4), ix!(aby, lax, 4),
+    ix!(rel, jmp, 2, 1), ix!(idy, lda, 5, 2), iz!(imp, nop, 2, 1), ix!(idy, lax, 5, 2),
+    iz!(zpx, ldy, 4, 2), iz!(zpx, lda, 4, 2), iz!(zpy, ldx, 4, 2), iz!(zpy, lax, 4, 2),
+    iz!(imp, clv, 2, 1), ix!(aby, lda, 4, 3), iz!(imp, tsx, 2, 1), iz!(imp, nop, 2, 1),
+    ix!(abx, ldy, 4, 3), ix!(abx, lda, 4, 3), ix!(aby, ldx, 4, 3), ix!(aby, lax, 4, 3),
     // 0xC0
-    iz!(imm, cpy, 2), iz!(idx, cmp, 6), iz!(imm, nop, 2), iz!(idx, dcp, 8), 
-    iz!(zpg, cpy, 3), iz!(zpg, cmp, 3), iz!(zpg, dec, 5), iz!(zpg, dcp, 5),
-    iz!(imp, iny, 2), iz!(imm, cmp, 2), iz!(imp, dex, 2), iz!(imp, nop, 2),
-    iz!(abs, cpy, 4), iz!(abs, cmp, 4), iz!(abs, dec, 6), iz!(abs, dcp, 6),
+    iz!(imm, cpy, 2, 2), iz!(idx, cmp, 6, 2), iz!(imm, nop, 2, 2), iz!(idx, dcp, 8, 2), 
+    iz!(zpg, cpy, 3, 2), iz!(zpg, cmp, 3, 2), iz!(zpg, dec, 5, 2), iz!(zpg, dcp, 5, 2),
+    iz!(imp, iny, 2, 1), iz!(imm, cmp, 2, 2), iz!(imp, dex, 2, 1), iz!(imp, nop, 2, 1),
+    iz!(abs, cpy, 4, 3), iz!(abs, cmp, 4, 3), iz!(abs, dec, 6, 3), iz!(abs, dcp, 6, 3),
     // 0xD0
-    ix!(rel, jmp, 2), ix!(idy, cmp, 5), iz!(imp, nop, 2), iz!(idy, dcp, 8),
-    iz!(zpx, nop, 4), iz!(zpx, cmp, 4), iz!(zpx, dec, 6), iz!(zpx, dcp, 6),
-    iz!(imp, cld, 2), ix!(aby, cmp, 4), iz!(imp, nop, 2), iz!(aby, dcp, 7),
-    ix!(abx, nop, 4), ix!(abx, cmp, 4), iz!(abx, dec, 7), iz!(abx, dcp, 7),
+    ix!(rel, jmp, 2, 1), ix!(idy, cmp, 5, 2), iz!(imp, nop, 2, 1), iz!(idy, dcp, 8, 2),
+    iz!(zpx, nop, 4, 2), iz!(zpx, cmp, 4, 2), iz!(zpx, dec, 6, 2), iz!(zpx, dcp, 6, 2),
+    iz!(imp, cld, 2, 1), ix!(aby, cmp, 4, 3), iz!(imp, nop, 2, 1), iz!(aby, dcp, 7, 3),
+    ix!(abx, nop, 4, 3), ix!(abx, cmp, 4, 3), iz!(abx, dec, 7, 3), iz!(abx, dcp, 7, 3),
     // 0xE0
-    iz!(imm, cpx, 2), iz!(idx, sbc, 6), iz!(imm, nop, 2), iz!(idx, isc, 8),
-    iz!(zpg, cpx, 3), iz!(zpg, sbc, 3), iz!(zpg, inc, 5), iz!(zpg, isc, 5),
-    iz!(imp, inx, 2), iz!(imm, sbc, 2), iz!(imp, nop, 2), iz!(imm, sbc, 2),
-    iz!(abs, cpx, 4), iz!(abs, sbc, 4), iz!(abs, inc, 6), iz!(abs, isc, 6),
+    iz!(imm, cpx, 2, 2), iz!(idx, sbc, 6, 2), iz!(imm, nop, 2, 2), iz!(idx, isc, 8, 2),
+    iz!(zpg, cpx, 3, 2), iz!(zpg, sbc, 3, 2), iz!(zpg, inc, 5, 2), iz!(zpg, isc, 5, 2),
+    iz!(imp, inx, 2, 1), iz!(imm, sbc, 2, 2), iz!(imp, nop, 2, 1), iz!(imm, sbc, 2, 2),
+    iz!(abs, cpx, 4, 3), iz!(abs, sbc, 4, 3), iz!(abs, inc, 6, 3), iz!(abs, isc, 6, 3),
     // 0xF0
-    ix!(rel, jmp, 2), ix!(idy, sbc, 5), iz!(imp, nop, 2), iz!(idy, isc, 8),
-    iz!(zpx, nop, 4), iz!(zpx, sbc, 4), iz!(zpx, inc, 6), iz!(zpx, isc, 6),
-    iz!(imp, sed, 2), ix!(aby, sbc, 4), iz!(imp, nop, 2), iz!(aby, isc, 7), 
-    ix!(abx, nop, 4), ix!(abx, sbc, 4), iz!(abx, inc, 7), iz!(abx, isc, 7),
+    ix!(rel, jmp, 2, 1), ix!(idy, sbc, 5, 2), iz!(imp, nop, 2, 1), iz!(idy, isc, 8, 2),
+    iz!(zpx, nop, 4, 2), iz!(zpx, sbc, 4, 2), iz!(zpx, inc, 6, 2), iz!(zpx, isc, 6, 2),
+    iz!(imp, sed, 2, 1), ix!(aby, sbc, 4, 3), iz!(imp, nop, 2, 1), iz!(aby, isc, 7, 3), 
+    ix!(abx, nop, 4, 3), ix!(abx, sbc, 4, 3), iz!(abx, inc, 7, 3), iz!(abx, isc, 7, 3),
 ];
