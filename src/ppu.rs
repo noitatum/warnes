@@ -103,9 +103,7 @@ pub struct Ppu {
     mask            : u8,
     status          : u8,
     scroll          : AddressLatch,
-    addr            : AddressLatch, 
-    oamaddr         : u8,
-
+    addr            : AddressLatch,
     
     // Scanline should count up until the total numbers of scanlines
     // which is 262
@@ -153,7 +151,6 @@ impl Ppu {
             status          : 0,
             scroll          : AddressLatch::default(),
             addr            : AddressLatch::default(),
-            oamaddr         : 0,
 
             scanline        : 0,
             scanline_width  : 0,
@@ -346,8 +343,8 @@ impl Ppu {
         match status {
             MemState::PpuCtrl   => { self.ctrl = latch.0; }, 
             MemState::PpuMask   => { self.mask = latch.0; },
-            MemState::OamAddr   => { self.oamaddr = latch.0; },
-            MemState::OamData   => { self.oam.store_data(&mut self.oamaddr, latch); },
+            MemState::OamAddr   => { self.oam.set_address(latch); },
+            MemState::OamData   => { self.oam.store_data(latch); },
             MemState::PpuScroll => { self.scroll.set_address(latch); },
             MemState::PpuAddr   => { self.addr.set_address(latch); },
             MemState::PpuData   => { self.store(memory, latch);}, 
@@ -408,9 +405,6 @@ impl Ppu {
         }
     }
 
-    pub fn load_from_oam(&mut self) -> u8 {
-        return self.oam.load(W(self.oamaddr as u16)).0;
-    }
 }
 
 impl Default for Ppu {
@@ -462,8 +456,9 @@ impl fmt::Debug for AddressLatch {
 
 struct Oam {
     mem                 : [u8; 0x100],
-    mem_idx             : usize,
     secondary_mem       : [u8; 0x20],
+    address             : W<u8>,
+    mem_idx             : usize,
     secondary_idx       : usize,
     copy_leftover_bytes : bool,
 }
@@ -472,8 +467,9 @@ impl Default for Oam {
     fn default() -> Oam {
         Oam {
             mem                 : [0; 0x100],
+            secondary_mem       : [0; 0x20],
+			address				: W(0),
             mem_idx             : 0,
-            secondary_mem       : [0; 0x20], 
             secondary_idx       : 0,
             copy_leftover_bytes : false,
         }
@@ -490,10 +486,13 @@ impl fmt::Debug for Oam {
 
 impl Oam {
 
-    #[inline]
-    fn store_data(&mut self, address: &mut u8 , value: W<u8>) {
-        self.mem[*address as usize] = value.0;
-        *address += 1;
+    fn store_data(&mut self, value: W<u8>) {
+        self.mem[self.address.0 as usize];
+        self.address = self.address + W(1);
+    }
+
+    fn set_address(&mut self, addr: W<u8>) {
+        self.address = addr;
     }
 
     fn reset_sec_oam(&mut self, idx: usize) {
@@ -509,6 +508,7 @@ impl Oam {
             self.mem_idx = 0;
         }
     }
+
     pub fn cycle(&mut self, cycles: u32, scanline: usize, spr_units: &mut [SpriteInfo]) {
         if cycles <= 64 {
             self.reset_sec_oam(cycles as usize);
@@ -555,19 +555,6 @@ impl Oam {
     pub fn store_to_secondary_oam(&mut self, address: u8) {
         let address = address as usize;
         self.secondary_idx += 1;
-    }
-}
-
-impl LoadStore for Oam {
-
-    #[inline]
-    fn load(&mut self, address: W<u16>) -> W<u8> {
-       W(self.mem[address.0 as usize])
-    }
-
-    #[inline]
-    fn store(&mut self, address: W<u16>, value: W<u8>) { 
-       self.mem[address.0 as usize] = value.0;
     }
 }
 
