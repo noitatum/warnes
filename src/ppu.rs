@@ -5,6 +5,7 @@ use utils::print_mem;
 use loadstore::LoadStore;
 use mem::{Memory as Mem};
 use enums::{MemState};
+use scroll::Scroll;
 
 // std
 use std::fmt;
@@ -35,8 +36,10 @@ const COORDINATE_Y              : u8 = 0x02;
 
 //ppu mask
 const MASK_GRAYSCALE            : u8 = 0x01;
-const MASK_SHOW_BACKGROUND_LEFT : u8 = 0x02; // set = show bacgrkound in leftmost 8 pixels of screen
-const MASK_SHOW_SPRITES_LEFT    : u8 = 0x04; // set = show sprites in leftmost 8 pixels of screens
+// set = show bacgrkound in leftmost 8 pixels of screen
+const MASK_SHOW_BACKGROUND_LEFT : u8 = 0x02; 
+// set = show sprites in leftmost 8 pixels of screens
+const MASK_SHOW_SPRITES_LEFT    : u8 = 0x04; 
 const MASK_SHOW_BACKGROUND      : u8 = 0x08;
 const MASK_SHOW_SPRITES         : u8 = 0x10;
 const MASK_EMPHASIZE_RED        : u8 = 0x20;
@@ -97,13 +100,12 @@ impl Tile {
 pub struct Ppu {
     palette         : [u8; PALETTE_SIZE],
     oam             : Oam,
+    address         : Scroll,
 
     // Registers
     ctrl            : u8,
     mask            : u8,
     status          : u8,
-    scroll          : AddressLatch,
-    addr            : AddressLatch,
     
     // Scanline should count up until the total numbers of scanlines
     // which is 262
@@ -132,11 +134,11 @@ pub struct Ppu {
     htile_sreg      : u16, // " "
     attr1_sreg      : u8,
     attr2_sreg      : u8,
-    tile_addr       : u16,
 
-    next_ltile      : u8,
-    next_htile      : u8,
-    next_attr       : u8,
+    next_ltile      : W<u8>,
+    next_htile      : W<u8>,
+    next_attr       : W<u8>,
+    next_name       : W<u8>,
 }
 
 
@@ -145,12 +147,11 @@ impl Ppu {
         Ppu {
             palette         : [0; PALETTE_SIZE], 
             oam             : Oam::default(), 
+            address         : Scroll::default(),
 
             ctrl            : 0,
             mask            : 0,
             status          : 0,
-            scroll          : AddressLatch::default(),
-            addr            : AddressLatch::default(),
 
             scanline        : 0,
             scanline_width  : 0,
@@ -168,27 +169,26 @@ impl Ppu {
             attr_byte       : 0,
             tile            : Tile::new(),
 
-            sprite_unit     :[SpriteInfo::new(); 0x08],
+            sprite_unit     : [SpriteInfo::new(); 0x08],
 
             ltile_sreg      : 0,
             htile_sreg      : 0,
             attr1_sreg      : 0,
             attr2_sreg      : 0,
-            next_ltile      : 0,
-            next_htile      : 0,
-            next_attr       : 0,
-            tile_addr       : 0,
+
+            next_ltile      : W(0),
+            next_htile      : W(0),
+            next_attr       : W(0),
+            next_name       : W(0),
         }
     }
 
-    pub fn cycle(&mut self, memory: &mut Mem, renderer: &mut sdl2::render::Renderer) {
+    pub fn cycle(&mut self, memory: &mut Mem, 
+                 renderer: &mut sdl2::render::Renderer) {
         self.ls_latches(memory);
-
-        // TODO: PPU CODE
-        let val = self.load(memory);
-        self.store(memory, val);
-
-        self.oam.cycle(self.cycles, self.scanline, &mut self.sprite_unit);    // we let the oam prepare the next sprites
+        
+        // we let the oam prepare the next sprites
+        self.oam.cycle(self.cycles, self.scanline, &mut self.sprite_unit);
 
         // if on a visible scanline 
         // and width % 8 = 1 then we fetch nametable
@@ -196,7 +196,8 @@ impl Ppu {
         // width % 5 fetch tile high (chr ram)
         // width % 7 fetch tile low (chr ram)
         if render_on!(self) && in_render_range!(self.scanline_width) {
-            self.draw(renderer); // if rendering is off we only execute VBLANK_END cycles
+            // if rendering is off we only execute VBLANK_END cycles
+            self.draw(renderer); 
             self.evaluate_next_byte(memory);
         }
 
@@ -210,8 +211,7 @@ impl Ppu {
         }
 
         if !render_on!(self) && self.cycles == VBLANK_END_NO_RENDER ||
-            scanline_end!(self)
-        {
+            scanline_end!(self) {
            // reset scanline values and qty of cycles
             self.scanline_width = 0;
             self.scanline = 0;
@@ -227,29 +227,35 @@ impl Ppu {
     }
     // gets the value for the next line of 8 pixels
     // ie bytes into tile and attr registers
-    fn evaluate_next_byte(&mut self, memory: &mut Mem){
-        let scanline_width = self.scanline_width - 1; // the zeroeth scanline is a nop
-        match scanline_width % 8 {
-                    // fetch nametable address from the sprite unit
-            0 => { self.fetch_nametable_addr(scanline_width); },
-                    // using that address fetch the tile
-            1 => { self.next_ltile = self.fetch_nametable_tile(memory); },
-            2 => { self.fetch_attr_addr(); },       // fetch attribute
-            3 => { self.fetch_attr(); },            // same as before
-            4 => { self.fetch_tile_addr(true); },   // fetch low tile byte
-            5 => { self.fetch_tile();},             // as before
-            6 => { self.fetch_tile_addr(false); },  // fetch high tile byte
-            7 => { self.fetch_tile();               // fetch the tile
-                   self.set_shift_regs(); },        // load the next shit registers.
+    fn evaluate_next_byte(&mut self, memory: &mut Mem) {
+        // First cycle is idle FIXME: Turbio workaround
+        let scanline_width = self.scanline_width - 1;
+        match scanline_width & 0x7 {
+            1 => { let address = self.address.get_nametable_address(); 
+                   self.next_name = memory.chr_load(address);
+            },
+            3 => { let address = self.address.get_attribute_address();
+                   self.next_attr = memory.chr_load(address); 
+            },
+            5 => { let index = self.next_name;
+                   let address = self.address.get_tile_address(index);
+                   self.next_ltile = memory.chr_load(address);
+            },
+            7 => { let index = self.next_name;
+                   let address = self.address.get_tile_address(index);
+                   self.next_htile = memory.chr_load(address + W(8));
+                   // load the next shift registers.
+                   self.set_shift_regs();
+            },        
             _ => {}, 
         }
     }
 
     fn set_shift_regs(&mut self) {
-        self.ltile_sreg = (self.ltile_sreg & 0xFF00) | self.next_ltile as u16;
-        self.htile_sreg = (self.htile_sreg & 0xFF00) | self.next_htile as u16;
-        self.attr1_sreg = self.next_attr;
-        self.attr2_sreg = self.next_attr;
+        self.ltile_sreg = (self.ltile_sreg & 0xFF00) | self.next_ltile.0 as u16;
+        self.htile_sreg = (self.htile_sreg & 0xFF00) | self.next_htile.0 as u16;
+        self.attr1_sreg = self.next_attr.0;
+        self.attr2_sreg = self.next_attr.0;
     }
 
     /* for now we dont use mem, remove warning, memory: &mut Mem*/
@@ -259,36 +265,9 @@ impl Ppu {
                                    tile_bit!(self.ltile_sreg),
                                    tile_bit!(self.htile_sreg));
         renderer.set_draw_color(PALETTE[color_idx as usize]);
-        renderer.draw_point(Point::new(self.scanline as i32, self.scanline as i32)).unwrap();
+        renderer.draw_point(Point::new(self.scanline as i32, 
+                                       self.scanline as i32)).unwrap();
         shift_bits!(self);
-    }
-
-    fn fetch_nametable_addr(&mut self, scanline_width: usize) {
-        // we get the sprite unit idx 
-        let address : u16 = (self.addr.get_address().0 & 0x0FFF) | 0x2000;
-        self.addr.reset_address();
-        self.addr.set_address(W((address >> 8) as u8));
-        self.addr.set_address(W(address as u8));
-    }
-
-    fn fetch_nametable_tile(&mut self, memory: &mut Mem) -> u8 {
-        return self.load(memory).0;
-    }
-
-    fn fetch_attr_addr(&mut self) {
-
-    }
-
-    fn fetch_attr(&mut self ) {
-
-    }
-    // lh = low/high
-    fn fetch_tile_addr(&mut self, lh: bool) {
-
-    }
-
-    fn fetch_tile(&mut self) -> u8 {
-        0
     }
 
     #[inline(always)]
@@ -341,12 +320,15 @@ impl Ppu {
     fn ls_latches(&mut self, memory: &mut Mem){
         let (latch, status) = memory.get_latch();
         match status {
-            MemState::PpuCtrl   => { self.ctrl = latch.0; }, 
+            MemState::PpuCtrl   => { 
+                self.ctrl = latch.0; 
+                self.address.set_ppuctrl(latch);
+            }, 
             MemState::PpuMask   => { self.mask = latch.0; },
             MemState::OamAddr   => { self.oam.set_address(latch); },
             MemState::OamData   => { self.oam.store_data(latch); },
-            MemState::PpuScroll => { self.scroll.set_address(latch); },
-            MemState::PpuAddr   => { self.addr.set_address(latch); },
+            MemState::PpuScroll => { self.address.set_scroll(latch); },
+            MemState::PpuAddr   => { self.address.set_address(latch); },
             MemState::PpuData   => { self.store(memory, latch);}, 
             _                   => (), 
         }
@@ -355,8 +337,7 @@ impl Ppu {
 
         match read_status {
             MemState::PpuStatus => {
-                self.addr.reset_address();
-                self.scroll.reset_address();
+                self.address.reset();
                 self.status &= 0x60;
             },
             MemState::PpuData   => { 
@@ -378,33 +359,24 @@ impl Ppu {
     }
 
     fn load(&mut self, memory: &mut Mem) -> W<u8> {
-        let address = self.addr.get_address();
+        let address = self.address.get_address();
         let addr = address.0 as usize;
         if addr < PALETTE_ADDRESS {
             memory.chr_load(address)
         } else {
-            if addr < PPU_ADDRESS_SPACE {
-                W(self.palette[self.palette_mirror(addr)])
-            } else {
-                panic!("PPUADDR >= 0x4000");
-            }
+            W(self.palette[self.palette_mirror(addr)])
         }
     }
 
     fn store(&mut self, memory: &mut Mem, value: W<u8>) {
-        let address = self.addr.get_address();
+        let address = self.address.get_address();
         let addr = address.0 as usize;
         if addr < PALETTE_ADDRESS {
             memory.chr_store(address, value);
         } else {
-            if addr < PPU_ADDRESS_SPACE {
-                self.palette[self.palette_mirror(addr)] = value.0;
-            } else {
-                panic!("PPUADDR >= 0x4000");
-            }
+            self.palette[self.palette_mirror(addr)] = value.0;
         }
     }
-
 }
 
 impl Default for Ppu {
@@ -416,41 +388,9 @@ impl Default for Ppu {
 
 impl fmt::Debug for Ppu {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "PPU: \n OAM: {:?}, ctrl: {:?}, mask: {:?}, status: {:?}, scroll: {:?}, addr: {:?}", 
-               self.oam, self.ctrl, self.mask, self.status, self.scroll, self.addr)
-    }
-}
-
-#[derive(Default)]
-struct AddressLatch {
-    laddr   : W<u8>,
-    haddr   : W<u8>,
-    upper   : bool,
-}
-
-
-impl AddressLatch {
-    pub fn reset_address(&mut self) {
-        *self = AddressLatch::default();
-    }
-
-    pub fn get_address(&self) -> W<u16> {
-        W16!(self.haddr) << 8 | W16!(self.laddr)
-    }
-
-    pub fn set_address(&mut self, value: W<u8>) {
-        if self.upper {
-            self.haddr = value;
-        } else {
-            self.laddr = value;
-        }
-        self.upper = !self.upper;
-    }
-}
-
-impl fmt::Debug for AddressLatch {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{:?}", self.get_address())
+        write!(f, "PPU: \n OAM: {:?}, ctrl: {:?}, mask: {:?}, status: {:?}, \
+                   address: {:?}", 
+               self.oam, self.ctrl, self.mask, self.status, self.address)
     }
 }
 
@@ -467,8 +407,8 @@ impl Default for Oam {
     fn default() -> Oam {
         Oam {
             mem                 : [0; 0x100],
-            secondary_mem       : [0; 0x20],
-			address				: W(0),
+            secondary_mem       : [0; 0x20],    
+            address             : W(0),
             mem_idx             : 0,
             secondary_idx       : 0,
             copy_leftover_bytes : false,

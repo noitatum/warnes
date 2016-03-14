@@ -6,6 +6,7 @@ mod macros;
 mod cpu;
 mod mem;
 mod ppu;
+mod scroll;
 mod nes;
 mod controller;
 mod header;
@@ -28,8 +29,6 @@ use sdl2::render::Renderer;
 
 const WIDTH  : u32 = 256;
 const HEIGHT : u32 = 240;
-
-
 
 fn main() {
     let args: Vec<String> = env::args().collect();
