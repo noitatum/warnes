@@ -1,6 +1,6 @@
 extern crate sdl2;
 
-// nes
+//nes
 use utils::print_mem;
 use loadstore::LoadStore;
 use mem::{Memory as Mem};
@@ -268,13 +268,10 @@ impl Ppu {
 
     fn fetch_nametable_addr(&mut self, scanline_width: usize) {
         // we get the sprite unit idx 
-        let sprite_idx = scanline_width % 8;
-        // we get the tile index (offset on 0x0000 or 0x1000 of tiles)
-        let tile_offset = self.sprite_unit[sprite_idx].tile_idx as u16;
-        let base : u16 = sprite_pattern_base!(self) + tile_offset;
+        let address : u16 = (self.addr.get_address().0 & 0x0FFF) | 0x2000;
         self.addr.reset_address();
-        self.addr.set_address(W((base >> 8) as u8));
-        self.addr.set_address(W(base as u8));
+        self.addr.set_address(W((address >> 8) as u8));
+        self.addr.set_address(W(address as u8));
     }
 
     fn fetch_nametable_tile(&mut self, memory: &mut Mem) -> u8 {
