@@ -87,7 +87,7 @@ impl Nes  {
     // cpc = cycle per cycle debug.
     pub fn step(&mut self, cpc: bool, renderer: &mut Renderer, event_pump: &mut EventPump) {
         if !cpc {
-            let (_, cycles) = self.cpu.next_instr(&mut self.mem);
+            let (_, cycles, _, _) = self.cpu.next_instr(&mut self.mem);
             // We do enough cycles to finish the instruction
             for _ in 0..cycles {
                 self.cycle(renderer, event_pump);  
@@ -115,7 +115,7 @@ impl Nes  {
 
 // Debug stuff
 impl Nes {
-    pub fn next_instr(&mut self) -> (String, u32) {
+    pub fn next_instr(&mut self) -> (String, u32, Vec<u8>, bool) {
         return self.cpu.next_instr(&mut self.mem);
     }
 }

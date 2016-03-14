@@ -50,9 +50,22 @@ impl Cpu {
         self.cycles += 1;
     }
 
-    pub fn next_instr(&mut self, memory: &mut Mem) -> (String, u32) {
+    pub fn next_instr(&mut self, memory: &mut Mem) -> (String, u32, Vec<u8>, bool) {
         let index = self.regs.next_opcode(memory) as usize;
-        return (OPCODE_TABLE[index].name(), OPCODE_TABLE[index].cycles());
+        let op_name = OPCODE_TABLE[index].name();
+        let mut arr = vec!(0, 0);
+        let mut size_three : bool = false;
+        match OPCODE_TABLE[index].num_bytes() { 
+            1 => {},
+            2 => { arr[0] = memory.load_no_side_effect(self.regs.PC() + W(1)).0; },
+            3 => { arr[0] = memory.load_no_side_effect(self.regs.PC() + W(1)).0;
+                   arr[1] = memory.load_no_side_effect(self.regs.PC() + W(2)).0; 
+                   size_three = true; },
+            _ => { panic!("no operation has this size of bytes: {}", 
+                         OPCODE_TABLE[index].num_bytes()); }
+        }
+
+        return (OPCODE_TABLE[index].name(), OPCODE_TABLE[index].cycles(), arr, size_three);
     }
 }
 
@@ -115,6 +128,11 @@ impl Instruction {
         return self.name.to_string();
     }
 
+    #[inline(always)]
+    pub fn num_bytes(&mut self) -> u8 {
+        return self.size;
+    }
+
     pub fn cycles(&mut self) -> u32 {
         return self.cycles;
     }
@@ -145,6 +163,11 @@ impl Default for Regs {
 
 // Util functions
 impl Regs {
+    /// for the debuger.
+    #[inline(always)]
+    pub fn PC(&mut self) -> W<u16> {
+        return self.PC;
+    } 
 
     pub fn reset(&mut self, memory: &mut Mem) {
         self.PC = memory.load_word(ADDRESS_RESET); 
