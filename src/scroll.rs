@@ -142,7 +142,9 @@ impl Scroll {
 impl fmt::Debug for Scroll {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "address: {:#X}, temporal: {:#X}, \
-                   fine_x: {:#X}, write_flag: {:?}", 
-               self.address.0, self.temporal.0, self.fine_x.0, self.write_flag)
+                   fine_x: {:#X}, write_flag: {:?}, \
+                   bg_offset: {:#X}, increment: {:?}", 
+               self.address.0, self.temporal.0, self.fine_x.0, 
+               self.write_flag, self.bg_offset.0, self.increment.0)
     }
 }
