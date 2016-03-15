@@ -260,10 +260,11 @@ impl Ppu {
 
     /* for now we dont use mem, remove warning, memory: &mut Mem*/
     fn draw(&mut self, renderer: &mut sdl2::render::Renderer) {
-        let color_idx = join_bits!(attr_bit!(self.attr1_sreg),
-                                   attr_bit!(self.attr2_sreg),
-                                   tile_bit!(self.ltile_sreg),
-                                   tile_bit!(self.htile_sreg));
+        let fine_x = self.address.get_scroll_x();
+        let color_idx = join_bits!(attr_bit!(self.attr1_sreg, fine_x),
+                                   attr_bit!(self.attr2_sreg, fine_x),
+                                   tile_bit!(self.ltile_sreg, fine_x),
+                                   tile_bit!(self.htile_sreg, fine_x));
         renderer.set_draw_color(PALETTE[color_idx as usize]);
         renderer.draw_point(Point::new(self.scanline as i32, 
                                        self.scanline as i32)).unwrap();
@@ -493,6 +494,22 @@ impl Oam {
     }
 }
 
+macro_rules! get_sprite_priority {
+    ($attr:expr) => (($attr & SPRITE_INFO_PRIORITY) != 0)
+}
+
+macro_rules! get_palette {
+    ($attr:expr) => ($attr & SPRITE_INFO_PALETTE)
+}
+
+macro_rules! flip_horizontally {
+    ($attr:expr) => (($attr & SPRITE_INFO_HORIZONTALLY) > 1)
+}
+
+macro_rules! flip_vertically {
+    ($attr:expr) => (($attr & SPRITE_INFO_VERTICALLY) > 1)
+}
+
 #[derive(Copy, Clone, Default)]
 struct SpriteInfo {
     pub y_pos       : u8,
@@ -527,22 +544,6 @@ impl SpriteInfo {
             _ => { panic!("wrong sprite unit index!"); }
         }
     }
-}
-
-macro_rules! get_sprite_priority {
-    ($attr:expr) => (($attr & SPRITE_INFO_PRIORITY) != 0)
-}
-
-macro_rules! get_palette {
-    ($attr:expr) => ($attr & SPRITE_INFO_PALETTE)
-}
-
-macro_rules! flip_horizontally {
-    ($attr:expr) => (($attr & SPRITE_INFO_HORIZONTALLY) > 1)
-}
-
-macro_rules! flip_vertically {
-    ($attr:expr) => (($attr & SPRITE_INFO_VERTICALLY) > 1)
 }
 
 const PALETTE : [Color; 0x40] = [

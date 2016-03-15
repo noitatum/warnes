@@ -38,6 +38,10 @@ macro_rules! W8 {
     ($val:expr) => (W($val.0 as u8))
 }
 
+macro_rules! get_bit {
+        ($flags:expr, $flag_bit:expr) => ($flags & $flag_bit;);
+}
+
 macro_rules! set_low_byte {
     ($val:expr, $byte:expr) => ($val & W(0xFF00) | W16!($byte))
 }
@@ -93,7 +97,7 @@ macro_rules! in_render_range {
 macro_rules! render_on {
     ($selfie:expr) => ($selfie.show_sprites() || $selfie.show_background())
 }
-
+/*
 macro_rules! sprite_pattern_base {
     ($selfie:expr) =>  (if $selfie.mask & CTRL_SPRITE_PATTERN == 0 {
                             0x0000
@@ -101,18 +105,19 @@ macro_rules! sprite_pattern_base {
                             0x1000
                         })
 }
+*/
 
 macro_rules! scanline_end {
-    ($selfie:expr) => 
+    ($selfie:expr) =>
         (($selfie.scanline_width == 340 && $selfie.scanline == 261))
 }
 
 macro_rules! attr_bit {
-    ($attr:expr) => (($attr & ATTR_BIT) >> 7)
+    ($attr:expr, $bit:expr) => (($attr & (ATTR_BIT - $bit)) >> 7)
 }
 
 macro_rules! tile_bit {
-    ($tile:expr) => (($tile & TILE_BIT) >> 15)
+    ($tile:expr, $bit:expr) => (($tile & (TILE_BIT - (($bit as u16) << 7)) >> 15))
 }
 
 macro_rules! join_bits {
@@ -133,3 +138,5 @@ macro_rules! to_RGB {
         Color::RGB($r, $g, $b) 
     }
 }
+
+

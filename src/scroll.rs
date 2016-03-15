@@ -86,6 +86,10 @@ impl Scroll {
         self.temporal = self.temporal & !COARSE_X_MASK | coarse_x; 
     }
 
+    pub fn get_scroll_x(&mut self) -> u8 {
+        return self.fine_x.0;
+    }
+
     pub fn set_scroll_y(&mut self, value: W<u8>) {
         let fine_y = W16!(value & W(0x07)) << 12; 
         let coarse_y = W16!(value & W(0xF8)) << 2; 
