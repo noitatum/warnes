@@ -53,3 +53,23 @@ impl fmt::Display for IoState {
         )
     }
 }
+
+
+#[derive(Clone, Copy)]
+#[allow(non_camel_case_types)] 
+pub enum OpType {
+    imp,
+    imm,
+    ind,
+    idx,
+    idy,
+    zpg,
+    zpx,
+    zpy,
+    abs,
+    abx,
+    aby,
+    rel,
+}
+
+

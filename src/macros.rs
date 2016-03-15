@@ -74,19 +74,20 @@ macro_rules! inst {
             has_extra   : $extra,
             name        : $name,
             size        : $size,
+            op_type     : OpType::$addr,
         }
     )
 }
 
 // Has zero cycle penalty
 macro_rules! iz {
-    ($addr:ident, $oper:ident, $cycles:expr, $size:expr) =>  
+    ($addr:ident, $oper:ident, $cycles:expr, $size:expr) =>
         (inst!($addr, $oper, $cycles, false, stringify!($oper), $size))
 }
 
 // Has extra cycle penalty
 macro_rules! ix {
-    ($addr:ident, $oper:ident, $cycles:expr, $size:expr) => 
+    ($addr:ident, $oper:ident, $cycles:expr, $size:expr) =>
         (inst!($addr, $oper, $cycles, true, stringify!($oper), $size))
 }
 
@@ -97,6 +98,7 @@ macro_rules! in_render_range {
 macro_rules! render_on {
     ($selfie:expr) => ($selfie.show_sprites() || $selfie.show_background())
 }
+
 /*
 macro_rules! sprite_pattern_base {
     ($selfie:expr) =>  (if $selfie.mask & CTRL_SPRITE_PATTERN == 0 {

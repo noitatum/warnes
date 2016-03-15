@@ -69,33 +69,6 @@ const ATTR_BIT              : u8 = 0x80;
 const TILE_BIT              : u16 = 0x8000;
 // The tiles are fetched from
 // chr ram
-struct Tile {
-    tile : u16,
-    high : bool,
-}
-
-impl Tile {
-    pub fn new () -> Tile {
-        Tile {
-            tile : 0,
-            high : true,
-        }
-    }
-}
-
-impl Tile {
-    pub fn set_tile_byte(&mut self, byte : u8) {
-        if self.high {
-            self.tile = (self.tile & 0) | ((byte as u16) << 8);
-        } else {
-            self.tile |= byte as u16 & 0xFF;
-        }
-    }
-
-    pub fn get_tile(&mut self) -> u16 {
-        return self.tile;
-    }
-}
 
 pub struct Ppu {
     palette         : [u8; PALETTE_SIZE],
@@ -123,10 +96,6 @@ pub struct Ppu {
 
     // even/odd frame?
     frame_parity    : bool,
-
-    name_table_byte : u8,
-    attr_byte       : u8,
-    tile            : Tile,
     
     sprite_unit     : [SpriteInfo; 0x08],
 
@@ -159,16 +128,11 @@ impl Ppu {
             cycles          : 0,
             fps             : 0,
 
-            // index
-
             oam_index       : W(0),
 
             frame_parity    : true,
 
-            name_table_byte : 0,
-            attr_byte       : 0,
-            tile            : Tile::new(),
-
+            // for sprite rendering
             sprite_unit     : [SpriteInfo::new(); 0x08],
 
             ltile_sreg      : 0,
@@ -271,46 +235,55 @@ impl Ppu {
         shift_bits!(self);
     }
 
+    #[allow(dead_code)]
     #[inline(always)]
     pub fn grayscale(&mut self) -> bool {
         return (self.mask & MASK_GRAYSCALE) > 0;
     }
 
+    #[allow(dead_code)]
     #[inline(always)]
     pub fn show_sprites(&mut self) -> bool {
         return (self.mask & MASK_SHOW_SPRITES) > 0;
     }
 
+    #[allow(dead_code)]
     #[inline(always)]
     pub fn show_background(&mut self) -> bool {
         return (self.mask & MASK_SHOW_BACKGROUND) > 0;
     }
 
+    #[allow(dead_code)]
     #[inline(always)]
     pub fn show_sprites_left(&mut self) -> bool {
         return (self.mask & MASK_SHOW_SPRITES_LEFT) > 0;
     }
 
+    #[allow(dead_code)]
     #[inline(always)]
     pub fn show_background_left(&mut self) -> bool {
         return (self.mask & MASK_SHOW_BACKGROUND_LEFT) > 0;
     }
 
+    #[allow(dead_code)]
     #[inline(always)]
     pub fn emphasize_red(&mut self) -> bool {
         return (self.mask & MASK_EMPHASIZE_RED) > 0;
     }
 
+    #[allow(dead_code)]
     #[inline(always)]
     pub fn emphasize_blue(&mut self) -> bool {
         return (self.mask & MASK_EMPHASIZE_BLUE) > 0;
     }
 
+    #[allow(dead_code)]
     #[inline(always)]
     pub fn emphasize_green(&mut self) -> bool {
         return (self.mask & MASK_EMPHASIZE_GREEN) > 0;
     }
 
+    #[allow(dead_code)]
     #[inline(always)]
     pub fn print_fps(&mut self) {
         println!("fps: {}", self.fps);
@@ -428,7 +401,7 @@ impl fmt::Debug for Oam {
 impl Oam {
 
     fn store_data(&mut self, value: W<u8>) {
-        self.mem[self.address.0 as usize];
+        self.mem[self.address.0 as usize] = value.0;
         self.address = self.address + W(1);
     }
 
@@ -535,12 +508,12 @@ impl SpriteInfo {
             x_pos       : 0,
         }
     }
-
+    /*
     pub fn reset(&mut self) {
         for i in 0..4 {
             self.set_sprite_info(i, 0xFF);
         }
-    }
+    }*/
 
     pub fn set_sprite_info(&mut self, idx: usize, value: u8) {
         match idx {

@@ -1,5 +1,6 @@
 // nes
 use nes::Nes;
+use enums::OpType;
 
 // std
 use std::io;
@@ -70,7 +71,7 @@ impl Debug {
                     // all these commands are the same
                     "n"|"nexti"|"ni"|"stepi"|"si"
                         => { //println!("{} next", rdbg!());
-                             let (name, _, vecb, size_three) = self.nes.next_instr();
+                             let (name, _, vecb, size_three, op_type) = self.nes.next_instr();
                              // need to get info when the value is an imm and not an address
                              // TODO ^.
                              if vecb[0] == 1 {
@@ -79,7 +80,10 @@ impl Debug {
                                 let val : u16 = (vecb[2] as u16) << 7 | vecb[1] as u16; 
                                 println!("{} {} #{:x}", DEBUG_SPACE, name, val);
                              } else {
-                                println!("{} {} #{:x}", DEBUG_SPACE, name, vecb[1]);
+                                match op_type {
+                                    OpType::imm => { println!("{} {} #!{:x}", DEBUG_SPACE, name, vecb[1]); },
+                                    _           => { println!("{} {} #{:x}", DEBUG_SPACE, name, vecb[1]) },
+                                }
                              }
                              self.nes.step(self.cpc, renderer, event_pump);
                              // Print executed instruction

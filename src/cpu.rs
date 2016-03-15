@@ -4,6 +4,7 @@ use loadstore::LoadStore;
 use std::num::Wrapping as W;
 use dma::DMA;
 //use enums::{MemState, IoState};
+use enums::OpType;
 
 /* Branch flag types */
 const BRANCH_FLAG_CHECK : u8 = 0x20;
@@ -49,23 +50,26 @@ impl Cpu {
         }
         self.cycles += 1;
     }
-
-    pub fn next_instr(&mut self, memory: &mut Mem) -> (String, u32, Vec<u8>, bool) {
+    
+    /// Debug
+    pub fn next_instr(&mut self, memory: &mut Mem) -> (String, u32, Vec<u8>, bool, OpType) {
         let index = self.regs.next_opcode(memory) as usize;
         let op_name = OPCODE_TABLE[index].name();
         let mut arr = vec!(0, 0, 0);
-        let mut size_three : bool = false;
+        let mut two_bytes : bool = false;
         match OPCODE_TABLE[index].num_bytes() { 
             1 => { arr[0] = 1; },
-            2 => { arr[1] = memory.load_no_side_effect(self.regs.PC() + W(1)).0; },
-            3 => { arr[2] = memory.load_no_side_effect(self.regs.PC() + W(2)).0;
-                   arr[2] = memory.load_no_side_effect(self.regs.PC() + W(2)).0; 
-                   size_three = true; },
+            2 => { arr[1] = memory.load_no_side_effect(self.regs.pc() + W(1)).0; },
+            3 => { arr[2] = memory.load_no_side_effect(self.regs.pc() + W(2)).0;
+                   arr[2] = memory.load_no_side_effect(self.regs.pc() + W(2)).0; 
+                   two_bytes = true; },
             _ => { panic!("no operation has this size of bytes: {}", 
                          OPCODE_TABLE[index].num_bytes()); }
         }
-
-        return (OPCODE_TABLE[index].name(), OPCODE_TABLE[index].cycles(), arr, size_three);
+        // two_bytes is true if the operation takes two more bytes
+        // generally for adressing
+        return (op_name, OPCODE_TABLE[index].cycles(),
+                 arr, two_bytes, OPCODE_TABLE[index].op_type);
     }
 }
 
@@ -98,6 +102,7 @@ impl Execution {
         self.cycles_left -= 1;
     }
 
+    #[allow(dead_code)]
     pub fn address(&mut self) -> W<u16> {
         return self.address;
     }
@@ -121,6 +126,7 @@ struct Instruction {
     has_extra   : bool,
     name        : &'static str,
     size        : u8, // instr size in bytes
+    op_type     : OpType,
 }
 
 impl Instruction {
@@ -163,15 +169,15 @@ impl Default for Regs {
 
 // Util functions
 impl Regs {
-    /// for the debuger.
+    /// Debug.
     #[inline(always)]
-    pub fn PC(&mut self) -> W<u16> {
+    pub fn pc(&mut self) -> W<u16> {
         return self.PC;
     } 
 
     pub fn reset(&mut self, memory: &mut Mem) {
         self.PC = memory.load_word(ADDRESS_RESET); 
-        //self.PC = W(0xC000);
+        self.PC = W(0xC000);
     }
 
     pub fn next_opcode(&self, memory: &mut Mem) -> u8 {
