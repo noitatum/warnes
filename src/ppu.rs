@@ -219,7 +219,7 @@ impl Ppu {
             self.fps += 1;
             self.frame_parity = !self.frame_parity;
         }
-        
+
         // we enable the vertical blank flag on ppuctrl
         if self.scanline_width == 1 && self.scanline == 240 {
             set_flag!(self.ctrl, STATUS_VERTICAL_BLANK);
@@ -246,7 +246,7 @@ impl Ppu {
                    self.next_htile = memory.chr_load(address + W(8));
                    // load the next shift registers.
                    self.set_shift_regs();
-            },        
+            },
             _ => {}, 
         }
     }
@@ -484,10 +484,17 @@ impl Oam {
             // set index to 0 so we can copy to the sprite units.
             if cycles == 257 { self.secondary_idx = 0; }
             // cycle 257, 265, 273
-            if cycles % 8 < 5 {
-                let idx = self.secondary_idx;
-                spr_units[idx/8 - 1]
-                    .set_sprite_info((idx % 8) - 1, self.secondary_mem[idx]);
+            let idx = self.secondary_idx;
+            match cycles % 0x7 {
+                1 => { spr_units[idx / 8].
+                        set_sprite_info(0 , self.secondary_mem[idx]); },
+                3 => { spr_units[idx / 8].
+                        set_sprite_info(1 , self.secondary_mem[idx]); },
+                5 => { spr_units[idx / 8].
+                        set_sprite_info(2 , self.secondary_mem[idx]); },
+                7 => { spr_units[idx / 8].
+                        set_sprite_info(3 , self.secondary_mem[idx]); },
+                _ => {},
             }
             self.secondary_idx += 1;
         }
@@ -564,3 +571,6 @@ const PALETTE : [Color; 0x40] = [
     to_RGB!(7,7,3), to_RGB!(5,7,2), to_RGB!(4,7,3), to_RGB!(2,7,6), 
     to_RGB!(4,6,7), to_RGB!(0,0,0), to_RGB!(0,0,0), to_RGB!(0,0,0),
 ];
+
+
+

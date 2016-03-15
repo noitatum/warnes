@@ -34,7 +34,7 @@ fn main() {
     let args: Vec<String> = env::args().collect();
     if args.len() > 3 {
        println!("Usage: rnes rom_file or rnes rom_file dbgi/dbgc"); 
-    } else{
+    } else {
         let sdl_context = sdl2::init().ok().expect("Sdl context init_sdl()");
         let video_subsystem = sdl_context.video().unwrap();
         let window = video_subsystem.window("RNES -----", WIDTH, HEIGHT)

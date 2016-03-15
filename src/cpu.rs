@@ -171,7 +171,7 @@ impl Regs {
 
     pub fn reset(&mut self, memory: &mut Mem) {
         self.PC = memory.load_word(ADDRESS_RESET); 
-        self.PC = W(0xC000);
+        //self.PC = W(0xC000);
     }
 
     pub fn next_opcode(&self, memory: &mut Mem) -> u8 {
