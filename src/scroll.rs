@@ -10,6 +10,7 @@ const COARSE_X_MASK    : W<u16> = W(0x001F);
 const COARSE_Y_MASK    : W<u16> = W(0x03E0);
 const FINE_Y_MASK      : W<u16> = W(0x7000);
 const BG_OFFSET_FLAG   : W<u8>  = W(0x10);
+const INCREMENT_FLAG   : W<u8>  = W(0x40);
 
 /* Coarse is 5 upper bits of a scroll (Byte selection) 
  * Fine is 3 lower bits of a scroll (Pixel selection inside byte)
@@ -19,13 +20,26 @@ const BG_OFFSET_FLAG   : W<u8>  = W(0x10);
  * fine_x has its own separate register
  */
 
-#[derive(Default)]
 pub struct Scroll { 
     address     : W<u16>,
     temporal    : W<u16>,
     fine_x      : W<u8>,
     write_flag  : bool,
     bg_offset   : W<u16>,
+    increment   : W<u16>,
+}
+
+impl Default for Scroll {
+    fn default() -> Scroll {
+        Scroll {
+            address     : W(0),
+            temporal    : W(0),
+            fine_x      : W(0),
+            write_flag  : false,
+            bg_offset   : W(0),
+            increment   : W(1),
+        }
+    }
 }
 
 impl Scroll { 
@@ -59,6 +73,7 @@ impl Scroll {
         self.temporal = self.temporal & !NAMETABLE_MASK |
                         W16!(value & W(0x3)) << 10;
         self.bg_offset = W16!(value & BG_OFFSET_FLAG) << 8; 
+        self.increment = if value & INCREMENT_FLAG > W(0) {W(1)} else {W(32)};
     }
 
     pub fn set_address(&mut self, value: W<u8>) {
