@@ -27,6 +27,8 @@ macro_rules! rnl {
     ($input:expr) => ($input[0..$input.len()-1]);
 }
 
+const DEBUG_SPACE : &'static str = "          ";
+
 pub struct Debug  {
     nes: Nes,
     // cycle per cycle
@@ -67,10 +69,18 @@ impl Debug {
                     // Since we only have 6502 assembly
                     // all these commands are the same
                     "n"|"nexti"|"ni"|"stepi"|"si"
-                        => { println!("{} next", rdbg!());
-                             println!("next instr: {}, cycles: {}",
-                                self.nes.next_instr().0,
-                                self.nes.next_instr().1);
+                        => { //println!("{} next", rdbg!());
+                             let (name, _, vecb, size_three) = self.nes.next_instr();
+                             // need to get info when the value is an imm and not an address
+                             // TODO ^.
+                             if vecb[0] == 1 {
+                                println!("{} {}", DEBUG_SPACE, name);
+                             } else if size_three == true {
+                                let val : u16 = (vecb[2] as u16) << 7 | vecb[1] as u16; 
+                                println!("{} {} #{:x}", DEBUG_SPACE, name, val);
+                             } else {
+                                println!("{} {} #{:x}", DEBUG_SPACE, name, vecb[1]);
+                             }
                              self.nes.step(self.cpc, renderer, event_pump);
                              // Print executed instruction
                             },

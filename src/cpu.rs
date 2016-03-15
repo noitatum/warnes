@@ -53,13 +53,13 @@ impl Cpu {
     pub fn next_instr(&mut self, memory: &mut Mem) -> (String, u32, Vec<u8>, bool) {
         let index = self.regs.next_opcode(memory) as usize;
         let op_name = OPCODE_TABLE[index].name();
-        let mut arr = vec!(0, 0);
+        let mut arr = vec!(0, 0, 0);
         let mut size_three : bool = false;
         match OPCODE_TABLE[index].num_bytes() { 
-            1 => {},
-            2 => { arr[0] = memory.load_no_side_effect(self.regs.PC() + W(1)).0; },
-            3 => { arr[0] = memory.load_no_side_effect(self.regs.PC() + W(1)).0;
-                   arr[1] = memory.load_no_side_effect(self.regs.PC() + W(2)).0; 
+            1 => { arr[0] = 1; },
+            2 => { arr[1] = memory.load_no_side_effect(self.regs.PC() + W(1)).0; },
+            3 => { arr[2] = memory.load_no_side_effect(self.regs.PC() + W(2)).0;
+                   arr[2] = memory.load_no_side_effect(self.regs.PC() + W(2)).0; 
                    size_three = true; },
             _ => { panic!("no operation has this size of bytes: {}", 
                          OPCODE_TABLE[index].num_bytes()); }

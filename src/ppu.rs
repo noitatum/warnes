@@ -396,7 +396,7 @@ impl fmt::Debug for Ppu {
 
 struct Oam {
     mem                 : [u8; 0x100],
-    secondary_mem       : [u8; 0x20],
+    secondary_mem       : [u8; 0x40],
     address             : W<u8>,
     mem_idx             : usize,
     secondary_idx       : usize,
@@ -407,7 +407,7 @@ impl Default for Oam {
     fn default() -> Oam {
         Oam {
             mem                 : [0; 0x100],
-            secondary_mem       : [0; 0x20],    
+            secondary_mem       : [0; 0x40],    
             address             : W(0),
             mem_idx             : 0,
             secondary_idx       : 0,
@@ -426,14 +426,14 @@ impl fmt::Debug for Oam {
 
 impl Oam {
 
-	fn store_data(&mut self, value: W<u8>) {
-	  self.mem[self.address.0 as usize];
-	  self.address = self.address + W(1);
-	}
-	 
-	fn set_address(&mut self, addr: W<u8>) {
-	  self.address = addr;
-	}
+    fn store_data(&mut self, value: W<u8>) {
+        self.mem[self.address.0 as usize];
+        self.address = self.address + W(1);
+    }
+
+    fn set_address(&mut self, addr: W<u8>) {
+        self.address = addr;
+    }
 
     fn reset_sec_oam(&mut self, idx: usize) {
         self.secondary_mem[idx] = 0xFF;
@@ -450,8 +450,8 @@ impl Oam {
     }
 
     pub fn cycle(&mut self, cycles: u32, scanline: usize, spr_units: &mut [SpriteInfo]) {
-        if cycles <= 64 {
-            self.reset_sec_oam(cycles as usize);
+        if cycles <= 64 && cycles != 0 {
+            self.reset_sec_oam((cycles - 1) as usize);
         } else if cycles < 257 {
             // odd cycles
             if cycles % 2 == 1 {
