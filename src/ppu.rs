@@ -333,7 +333,8 @@ impl Ppu {
     }
 
     fn load(&mut self, memory: &mut Mem) -> W<u8> {
-        let address = self.address.get_address();
+        // FIXME: Add rendering boolean to call
+        let address = self.address.get_address(false);
         let addr = address.0 as usize;
         if addr < PALETTE_ADDRESS {
             memory.chr_load(address)
@@ -343,7 +344,8 @@ impl Ppu {
     }
 
     fn store(&mut self, memory: &mut Mem, value: W<u8>) {
-        let address = self.address.get_address();
+        // FIXME: Add rendering boolean to call
+        let address = self.address.get_address(false);
         let addr = address.0 as usize;
         if addr < PALETTE_ADDRESS {
             memory.chr_store(address, value);

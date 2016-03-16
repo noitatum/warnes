@@ -47,9 +47,18 @@ impl Scroll {
         self.write_flag = false;
     }
 
-    pub fn get_address(&self) -> W<u16> {
+    pub fn get_address(&mut self, rendering: bool) -> W<u16> {
         // The lower 14 bits compose a full address
-        self.address & W(0x3FFF)
+        let ret = self.address & W(0x3FFF);
+        // FIXME: While rendering if increment_y or increment_coarse_x
+        //        are called it should increment address normally
+        if rendering {
+            self.increment_coarse_x();
+            self.increment_y();
+        } else {
+            self.address = self.address + self.increment;
+        }
+        ret
     }
 
     pub fn get_nametable_address(&self) -> W<u16> {
