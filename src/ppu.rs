@@ -85,7 +85,7 @@ pub struct Ppu {
     scanline        : usize,
     // while scanline width goes up to 340 and visible pixels
     // ie drawn pixels start at 0 and go up to 256 width (240 scanlines)
-    scanline_width  : usize,
+    dot             : usize,
     
     cycles          : u32,
     fps             : u32,
@@ -123,7 +123,7 @@ impl Ppu {
             status          : 0,
 
             scanline        : 0,
-            scanline_width  : 0,
+            dot             : 0,
 
             cycles          : 0,
             fps             : 0,
@@ -159,25 +159,25 @@ impl Ppu {
         // if width % 8 = 3 we fetch attr
         // width % 5 fetch tile high (chr ram)
         // width % 7 fetch tile low (chr ram)
-        if render_on!(self) && in_render_range!(self.scanline_width) {
+        if render_on!(self) && in_render_range!(self.dot) {
             // if rendering is off we only execute VBLANK_END cycles
             self.draw(renderer); 
             self.evaluate_next_byte(memory);
         }
 
-        self.scanline_width +=1;
+        self.dot +=1;
         self.cycles += 1;
 
         // if we finished the current scanline we pass to the next one
-        if self.scanline_width == 340 {
+        if self.dot == 340 {
             self.scanline += 1;
-            self.scanline_width = 0;
+            self.dot = 0;
         }
 
         if !render_on!(self) && self.cycles == VBLANK_END_NO_RENDER ||
             scanline_end!(self) {
            // reset scanline values and qty of cycles
-            self.scanline_width = 0;
+            self.dot = 0;
             self.scanline = 0;
             self.cycles = 0;
             self.fps += 1;
@@ -186,7 +186,7 @@ impl Ppu {
         }
 
         // we enable the vertical blank flag on ppuctrl
-        if self.scanline_width == 1 && self.scanline == 240 {
+        if self.dot == 1 && self.scanline == 240 {
             set_flag!(self.ctrl, STATUS_VERTICAL_BLANK);
         }
     }
@@ -194,8 +194,8 @@ impl Ppu {
     // ie bytes into tile and attr registers
     fn evaluate_next_byte(&mut self, memory: &mut Mem) {
         // First cycle is idle FIXME: Turbio workaround
-        let scanline_width = self.scanline_width - 1;
-        match scanline_width & 0x7 {
+        let dot = self.dot - 1;
+        match dot & 0x7 {
             1 => { let address = self.address.get_nametable_address(); 
                    self.next_name = memory.chr_load(address);
             },
@@ -231,7 +231,7 @@ impl Ppu {
                                    tile_bit!(self.ltile_sreg, fine_x),
                                    tile_bit!(self.htile_sreg, fine_x));
         renderer.set_draw_color(PALETTE[color_idx as usize]);
-        renderer.draw_point(Point::new((self.scanline_width - 1) as i32, 
+        renderer.draw_point(Point::new((self.dot - 1) as i32, 
                                         self.scanline as i32)).unwrap();
         shift_bits!(self);
     }

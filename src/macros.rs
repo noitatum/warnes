@@ -111,7 +111,7 @@ macro_rules! sprite_pattern_base {
 
 macro_rules! scanline_end {
     ($selfie:expr) =>
-        (($selfie.scanline_width == 340 && $selfie.scanline == 261))
+        (($selfie.dot == 340 && $selfie.scanline == 261))
 }
 
 macro_rules! attr_bit {
