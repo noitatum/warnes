@@ -59,9 +59,9 @@ impl Cpu {
         let mut two_bytes : bool = false;
         match OPCODE_TABLE[index].num_bytes() { 
             1 => { arr[0] = 1; },
-            2 => { arr[1] = memory.load_no_side_effect(self.regs.pc() + W(1)).0; },
-            3 => { arr[2] = memory.load_no_side_effect(self.regs.pc() + W(2)).0;
-                   arr[2] = memory.load_no_side_effect(self.regs.pc() + W(2)).0; 
+            2 => { arr[1] = memory.load_no_side_effect(self.regs.pc().0 + W(1)).0; },
+            3 => { arr[2] = memory.load_no_side_effect(self.regs.pc().0 + W(2)).0;
+                   arr[2] = memory.load_no_side_effect(self.regs.pc().0 + W(2)).0; 
                    two_bytes = true; },
             _ => { panic!("no operation has this size of bytes: {}", 
                          OPCODE_TABLE[index].num_bytes()); }
@@ -152,6 +152,7 @@ struct Regs {
     Flags       : u8,       // Status
     SP          : W<u8>,    // Stack pointer
     PC          : W<u16>,   // Program counter
+    PC_DEBUG    : W<u16>,   // PC to list instructions when using the debugger.
 }
 
 impl Default for Regs {
@@ -163,6 +164,7 @@ impl Default for Regs {
             Flags           : 0x34, 
             SP              : W(0xfd),
             PC              : W(0),
+            PC_DEBUG        : W(0),
         }
     }
 }
@@ -171,13 +173,14 @@ impl Default for Regs {
 impl Regs {
     /// Debug.
     #[inline(always)]
-    pub fn pc(&mut self) -> W<u16> {
-        return self.PC;
+    pub fn pc(&mut self) -> (W<u16>, W<u16>) {
+        return (self.PC, self.PC_DEBUG);
     } 
 
     pub fn reset(&mut self, memory: &mut Mem) {
         self.PC = memory.load_word(ADDRESS_RESET); 
         self.PC = W(0xC000);
+        self.PC_DEBUG = self.PC;
     }
 
     pub fn next_opcode(&self, memory: &mut Mem) -> u8 {

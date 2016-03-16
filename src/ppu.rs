@@ -150,7 +150,7 @@ impl Ppu {
     pub fn cycle(&mut self, memory: &mut Mem, 
                  renderer: &mut sdl2::render::Renderer) {
         self.ls_latches(memory);
-        
+
         // we let the oam prepare the next sprites
         self.oam.cycle(self.cycles, self.scanline, &mut self.sprite_unit);
 
@@ -182,6 +182,7 @@ impl Ppu {
             self.cycles = 0;
             self.fps += 1;
             self.frame_parity = !self.frame_parity;
+            renderer.present();
         }
 
         // we enable the vertical blank flag on ppuctrl
@@ -230,8 +231,8 @@ impl Ppu {
                                    tile_bit!(self.ltile_sreg, fine_x),
                                    tile_bit!(self.htile_sreg, fine_x));
         renderer.set_draw_color(PALETTE[color_idx as usize]);
-        renderer.draw_point(Point::new(self.scanline as i32, 
-                                       self.scanline as i32)).unwrap();
+        renderer.draw_point(Point::new((self.scanline_width - 1) as i32, 
+                                        self.scanline as i32)).unwrap();
         shift_bits!(self);
     }
 
@@ -241,13 +242,11 @@ impl Ppu {
         return (self.mask & MASK_GRAYSCALE) > 0;
     }
 
-    #[allow(dead_code)]
     #[inline(always)]
     pub fn show_sprites(&mut self) -> bool {
         return (self.mask & MASK_SHOW_SPRITES) > 0;
     }
 
-    #[allow(dead_code)]
     #[inline(always)]
     pub fn show_background(&mut self) -> bool {
         return (self.mask & MASK_SHOW_BACKGROUND) > 0;
@@ -283,7 +282,6 @@ impl Ppu {
         return (self.mask & MASK_EMPHASIZE_GREEN) > 0;
     }
 
-    #[allow(dead_code)]
     #[inline(always)]
     pub fn print_fps(&mut self) {
         println!("fps: {}", self.fps);

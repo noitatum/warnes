@@ -71,28 +71,15 @@ impl Debug {
                     // all these commands are the same
                     "n"|"nexti"|"ni"|"stepi"|"si"
                         => { //println!("{} next", rdbg!());
-                             let (name, _, vecb, size_three, op_type) = self.nes.next_instr();
-                             // need to get info when the value is an imm and not an address
-                             // TODO ^.
-                             if vecb[0] == 1 {
-                                println!("{} {}", DEBUG_SPACE, name);
-                             } else if size_three == true {
-                                let val : u16 = (vecb[2] as u16) << 7 | vecb[1] as u16; 
-                                println!("{} {} #{:x}", DEBUG_SPACE, name, val);
-                             } else {
-                                match op_type {
-                                    OpType::imm => { println!("{} {} #!{:x}", DEBUG_SPACE, name, vecb[1]); },
-                                    _           => { println!("{} {} #{:x}", DEBUG_SPACE, name, vecb[1]) },
-                                }
-                             }
-                             self.nes.step(self.cpc, renderer, event_pump);
-                             // Print executed instruction
+                             self.print_instr(renderer, event_pump);
                             },
                     "c" => { println!("{} continue", rdbg!());
-                             self.nes.run(renderer, event_pump);
+                             self.nes_run(renderer, event_pump);
                              break 'debug;
                             },
-                    "p" => { println!("{} print", rdbg!()); },
+                    "p" => { println!("{} print", rdbg!()); 
+                             self.print_reg(renderer, event_pump); },
+                    
                     "b" => { println!("{} breakpoint", rdbg!());},
                     "q" => { print!("{} ", rdbg!());
                              break 'debug; },
@@ -102,6 +89,37 @@ impl Debug {
         }
     }
 }
+
+impl Debug {
+    fn print_instr(&mut self, renderer: &mut Renderer, event_pump: &mut EventPump) {
+         let (name, _, vecb, size_three, op_type) = self.nes.next_instr();
+         // need to get info when the value is an imm and not an address
+         // TODO ^.
+         if vecb[0] == 1 {
+            println!("{} {}", DEBUG_SPACE, name);
+         } else if size_three == true {
+            let val : u16 = (vecb[2] as u16) << 7 | vecb[1] as u16; 
+            println!("{} {} #{:x}", DEBUG_SPACE, name, val);
+         } else {
+            match op_type {
+                OpType::imm => { println!("{} {} #!{:x}", DEBUG_SPACE, name, vecb[1]); },
+                _           => { println!("{} {} #{:x}",  DEBUG_SPACE, name, vecb[1]); },
+            }
+         }
+         self.nes.step(self.cpc, renderer, event_pump);
+         // Print executed instruction
+    }
+    
+    fn print_reg(&mut self, _: &mut Renderer, _: &mut EventPump) {
+       (); 
+    }
+
+    fn nes_run(&mut self, renderer: &mut Renderer, event_pump: &mut EventPump) {
+        self.nes.run(renderer, event_pump)
+    }
+
+}
+
 
 
 
