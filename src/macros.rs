@@ -92,7 +92,7 @@ macro_rules! ix {
 }
 
 macro_rules! in_render_range {
-    ($scanline:expr) => ($scanline < 257 && $scanline > 1)
+    ($scanline:expr) => ($scanline < 257 && $scanline >= 1)
 }
 
 macro_rules! render_on {
