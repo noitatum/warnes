@@ -8,7 +8,7 @@ use enums::OpType;
 
 /* Branch flag types */
 const BRANCH_FLAG_CHECK : u8 = 0x20;
-const BRANCH_FLAG_TABLE : [u8; 4] = 
+const BRANCH_FLAG_TABLE : [W<u8>; 4] = 
     [FLAG_SIGN, FLAG_OVERFLOW, FLAG_CARRY, FLAG_ZERO];
 
 /* Memory */
@@ -18,14 +18,14 @@ const ADDRESS_INTERRUPT : W<u16> = W(0xFFFE as u16);
 const ADDRESS_RESET     : W<u16> = W(0xFFFC as u16);
 
 /* Flag bits */
-const FLAG_CARRY        : u8 = 0x01;
-const FLAG_ZERO         : u8 = 0x02;
-const FLAG_INTERRUPT    : u8 = 0x04;
-const FLAG_DECIMAL      : u8 = 0x08;
-const FLAG_BRK          : u8 = 0x10;
-const FLAG_PUSHED       : u8 = 0x20;
-const FLAG_OVERFLOW     : u8 = 0x40;
-const FLAG_SIGN         : u8 = 0x80;
+const FLAG_CARRY        : W<u8> = W(0x01);
+const FLAG_ZERO         : W<u8> = W(0x02);
+const FLAG_INTERRUPT    : W<u8> = W(0x04);
+const FLAG_DECIMAL      : W<u8> = W(0x08);
+const FLAG_BRK          : W<u8> = W(0x10);
+const FLAG_PUSHED       : W<u8> = W(0x20);
+const FLAG_OVERFLOW     : W<u8> = W(0x40);
+const FLAG_SIGN         : W<u8> = W(0x80);
 
 #[derive(Default, Debug)]
 pub struct Cpu {
@@ -149,7 +149,7 @@ struct Regs {
     A           : W<u8>,    // Accumulator
     X           : W<u8>,    // Indexes
     Y           : W<u8>,    //
-    Flags       : u8,       // Status
+    P           : W<u8>,    // Status
     SP          : W<u8>,    // Stack pointer
     PC          : W<u16>,   // Program counter
     PC_DEBUG    : W<u16>,   // PC to list instructions when using the debugger.
@@ -161,7 +161,7 @@ impl Default for Regs {
             A               : W(0),
             X               : W(0),
             Y               : W(0),
-            Flags           : 0x34, 
+            P               : W(0x34), 
             SP              : W(0xfd),
             PC              : W(0),
             PC_DEBUG        : W(0),
@@ -171,8 +171,6 @@ impl Default for Regs {
 
 // Util functions
 impl Regs {
-    /// Debug.
-    #[inline(always)]
     pub fn pc(&mut self) -> (W<u16>, W<u16>) {
         return (self.PC, self.PC_DEBUG);
     } 
@@ -210,42 +208,42 @@ impl Regs {
     fn add_with_carry(&mut self, value: W<u8>) {
         let m = W16!(value);
         let a = W16!(self.A);
-        let sum = a + m + W((self.Flags & FLAG_CARRY) as u16);
-        set_flag_cond!(self.Flags, FLAG_OVERFLOW, 
+        let sum = a + m + W16!(self.P & FLAG_CARRY);
+        set_flag_cond!(self.P, FLAG_OVERFLOW, 
                        (a ^ sum) & (m ^ sum) & W(0x80) > W(0));
-        set_flag_cond!(self.Flags, FLAG_CARRY, sum > W(0xFF));
+        set_flag_cond!(self.P, FLAG_CARRY, sum > W(0xFF));
         self.A = W8!(sum);
-        set_sign_zero!(self.Flags, self.A);
+        set_sign_zero!(self.P, self.A);
     } 
 
     fn compare(&mut self, reg: W<u8>, value: W<u8>) {
         let comp = W16!(reg) - W16!(value);
-        set_sign_zero_carry_cond!(self.Flags, W8!(comp), comp <= W(0xFF));
+        set_sign_zero_carry_cond!(self.P, W8!(comp), comp <= W(0xFF));
     }
 
     fn rotate_right(&mut self, value: W<u8>) -> W<u8> {
         let carry = value & W(1) > W(0);
-        let rot = (value >> 1) | (W(self.Flags & FLAG_CARRY) << 7);
-        set_sign_zero_carry_cond!(self.Flags, rot, carry);
+        let rot = value >> 1 | (self.P & FLAG_CARRY) << 7;
+        set_sign_zero_carry_cond!(self.P, rot, carry);
         rot
     }
 
     fn rotate_left(&mut self, value: W<u8>) -> W<u8> {
         let carry = value & W(0x80) > W(0);
-        let rot = (value << 1) | W(self.Flags & FLAG_CARRY);
-        set_sign_zero_carry_cond!(self.Flags, rot, carry);
+        let rot = value << 1 | self.P & FLAG_CARRY;
+        set_sign_zero_carry_cond!(self.P, rot, carry);
         rot
     }
 
     fn shift_right(&mut self, value: W<u8>) -> W<u8> {
         let shift = value >> 1;
-        set_sign_zero_carry_cond!(self.Flags, shift, value & W(1) > W(0));
+        set_sign_zero_carry_cond!(self.P, shift, value & W(1) > W(0));
         shift
     }
 
     fn shift_left(&mut self, value: W<u8>) -> W<u8> {
         let shift = value << 1;
-        set_sign_zero_carry_cond!(self.Flags, shift, value & W(0x80) > W(0));
+        set_sign_zero_carry_cond!(self.P, shift, value & W(0x80) > W(0));
         shift
     }
 }
@@ -324,7 +322,7 @@ impl Regs {
         let index = (opcode >> 6) as usize;
         let check = is_flag_set!(opcode, BRANCH_FLAG_CHECK);
         let next_opcode = self.PC + W(2);
-        if is_flag_set!(self.Flags, BRANCH_FLAG_TABLE[index]) != check {
+        if is_bit_set!(self.P, BRANCH_FLAG_TABLE[index]) != check {
             (next_opcode, 0)
         } else {
             // Branch taken
@@ -358,17 +356,17 @@ impl Regs {
 
     fn brk(&mut self, memory: &mut Mem, _: W<u16>) {
        // Two bits are set on memory when pushing flags 
-       let flags = W(self.Flags | FLAG_PUSHED | FLAG_BRK);
+       let flags = self.P | FLAG_PUSHED | FLAG_BRK;
        let pc = self.PC + W(1);
        self.push_word(memory, pc);
        self.push(memory, flags);
-       set_flag!(self.Flags, FLAG_INTERRUPT);
+       set_flag!(self.P, FLAG_INTERRUPT);
        self.PC = memory.load_word(ADDRESS_INTERRUPT);
     }
 
     fn rti(&mut self, memory: &mut Mem, _: W<u16>) {
         // Ignore the two bits not present
-        self.Flags = self.pop(memory).0 & !(FLAG_PUSHED | FLAG_BRK);
+        self.P = self.pop(memory) & !(FLAG_PUSHED | FLAG_BRK);
         self.PC = self.pop_word(memory);
     }
 
@@ -380,7 +378,7 @@ impl Regs {
 
     fn php(&mut self, memory: &mut Mem, _: W<u16>) {
         // Two bits are set on memory when pushing flags 
-        let flags = W(self.Flags | FLAG_PUSHED | FLAG_BRK);
+        let flags = self.P | FLAG_PUSHED | FLAG_BRK;
         self.push(memory, flags);
     }
 
@@ -390,12 +388,12 @@ impl Regs {
     }
 
     fn clc(&mut self, _: &mut Mem, _: W<u16>) {
-        unset_flag!(self.Flags, FLAG_CARRY);
+        unset_flag!(self.P, FLAG_CARRY);
     }
 
     fn plp(&mut self, memory: &mut Mem, _: W<u16>) {
         // Ignore the two bits not present
-        self.Flags = self.pop(memory).0 & !(FLAG_PUSHED | FLAG_BRK);
+        self.P = self.pop(memory) & !(FLAG_PUSHED | FLAG_BRK);
     }
 
     fn ral(&mut self, _: &mut Mem, _: W<u16>) {
@@ -404,7 +402,7 @@ impl Regs {
     }
 
     fn sec(&mut self, _: &mut Mem, _: W<u16>) {
-        set_flag!(self.Flags, FLAG_CARRY);
+        set_flag!(self.P, FLAG_CARRY);
     }
 
     fn pha(&mut self, memory: &mut Mem, _: W<u16>) {
@@ -418,12 +416,12 @@ impl Regs {
     }
 
     fn cli(&mut self, _: &mut Mem, _: W<u16>) {
-        unset_flag!(self.Flags, FLAG_INTERRUPT);
+        unset_flag!(self.P, FLAG_INTERRUPT);
     }
 
     fn pla(&mut self, memory: &mut Mem, _: W<u16>) {
         self.A = self.pop(memory);
-        set_sign_zero!(self.Flags, self.A);
+        set_sign_zero!(self.P, self.A);
     }
 
     fn rar(&mut self, _: &mut Mem, _: W<u16>) {
@@ -432,22 +430,22 @@ impl Regs {
     }
 
     fn sei(&mut self, _: &mut Mem, _: W<u16>) {
-        set_flag!(self.Flags, FLAG_INTERRUPT);
+        set_flag!(self.P, FLAG_INTERRUPT);
     }
 
     fn dey(&mut self, _: &mut Mem, _: W<u16>) {
         self.Y = self.Y - W(1);
-        set_sign_zero!(self.Flags, self.Y);
+        set_sign_zero!(self.P, self.Y);
     }
 
     fn txa(&mut self, _: &mut Mem, _: W<u16>) {
         self.A = self.X;
-        set_sign_zero!(self.Flags, self.A);
+        set_sign_zero!(self.P, self.A);
     }
 
     fn tya(&mut self, _: &mut Mem, _: W<u16>) {
         self.A = self.Y;
-        set_sign_zero!(self.Flags, self.A);
+        set_sign_zero!(self.P, self.A);
     }
 
     fn txs(&mut self, _: &mut Mem, _: W<u16>) {
@@ -456,40 +454,40 @@ impl Regs {
 
     fn tay(&mut self, _: &mut Mem, _: W<u16>) {
         self.Y = self.A;
-        set_sign_zero!(self.Flags, self.Y);
+        set_sign_zero!(self.P, self.Y);
     }
 
     fn tax(&mut self, _: &mut Mem, _: W<u16>) {
         self.X = self.A;
-        set_sign_zero!(self.Flags, self.X);
+        set_sign_zero!(self.P, self.X);
     }
 
     fn clv(&mut self, _: &mut Mem, _: W<u16>) {
-        unset_flag!(self.Flags, FLAG_OVERFLOW);
+        unset_flag!(self.P, FLAG_OVERFLOW);
     }
 
     fn tsx(&mut self, _: &mut Mem, _: W<u16>) {
         self.X = self.SP;
-        set_sign_zero!(self.Flags, self.X);
+        set_sign_zero!(self.P, self.X);
     }
 
     fn iny(&mut self, _: &mut Mem, _: W<u16>) {
         self.Y = self.Y + W(1);
-        set_sign_zero!(self.Flags, self.Y);
+        set_sign_zero!(self.P, self.Y);
     }
 
     fn dex(&mut self, _: &mut Mem, _: W<u16>) {
         self.X = self.X - W(1);
-        set_sign_zero!(self.Flags, self.X);
+        set_sign_zero!(self.P, self.X);
     }
 
     fn cld(&mut self, _: &mut Mem, _: W<u16>) {
-        unset_flag!(self.Flags, FLAG_DECIMAL);
+        unset_flag!(self.P, FLAG_DECIMAL);
     }
 
     fn inx(&mut self, _: &mut Mem, _: W<u16>) {
         self.X = self.X + W(1);
-        set_sign_zero!(self.Flags, self.X);
+        set_sign_zero!(self.P, self.X);
     }
 
     fn nop(&mut self, _: &mut Mem, _: W<u16>) {
@@ -497,7 +495,7 @@ impl Regs {
     }
 
     fn sed(&mut self, _: &mut Mem, _: W<u16>) {
-        set_flag!(self.Flags, FLAG_DECIMAL);
+        set_flag!(self.P, FLAG_DECIMAL);
     }
 
     // Common
@@ -505,7 +503,7 @@ impl Regs {
     fn ora(&mut self, memory: &mut Mem, address: W<u16>) {
         let m = memory.load(address);
         self.A = self.A | m;
-        set_sign_zero!(self.Flags, self.A);
+        set_sign_zero!(self.P, self.A);
     }
 
     fn asl(&mut self, memory: &mut Mem, address: W<u16>) {
@@ -515,15 +513,15 @@ impl Regs {
 
     fn bit(&mut self, memory: &mut Mem, address: W<u16>) {
         let m = memory.load(address);
-        copy_flag!(self.Flags, m, FLAG_OVERFLOW);
-        set_sign!(self.Flags, m); 
-        set_zero!(self.Flags, self.A & m);
+        copy_bits!(self.P, m, FLAG_OVERFLOW);
+        set_sign!(self.P, m); 
+        set_zero!(self.P, self.A & m);
     }
 
     fn and(&mut self, memory: &mut Mem, address: W<u16>) {
         let m = memory.load(address);
         self.A = self.A & m;
-        set_sign_zero!(self.Flags, self.A);
+        set_sign_zero!(self.P, self.A);
     }
 
     fn rol(&mut self, memory: &mut Mem, address: W<u16>) {
@@ -534,7 +532,7 @@ impl Regs {
     fn eor(&mut self, memory: &mut Mem, address: W<u16>) {
         let m = memory.load(address);
         self.A = m ^ self.A;
-        set_sign_zero!(self.Flags, self.A);
+        set_sign_zero!(self.P, self.A);
     }
 
     fn lsr(&mut self, memory: &mut Mem, address: W<u16>) {
@@ -565,17 +563,17 @@ impl Regs {
 
     fn ldy(&mut self, memory: &mut Mem, address: W<u16>) {
         self.Y = memory.load(address);
-        set_sign_zero!(self.Flags, self.Y);
+        set_sign_zero!(self.P, self.Y);
     }
 
     fn ldx(&mut self, memory: &mut Mem, address: W<u16>) {
         self.X = memory.load(address);
-        set_sign_zero!(self.Flags, self.X);
+        set_sign_zero!(self.P, self.X);
     }
 
     fn lda(&mut self, memory: &mut Mem, address: W<u16>) {
         self.A = memory.load(address);
-        set_sign_zero!(self.Flags, self.A);
+        set_sign_zero!(self.P, self.A);
     }
 
     fn cpy(&mut self, memory: &mut Mem, address: W<u16>) {
@@ -595,7 +593,7 @@ impl Regs {
 
     fn dec(&mut self, memory: &mut Mem, address: W<u16>) {
         let m = memory.load(address) - W(1);
-        set_sign_zero!(self.Flags, m);
+        set_sign_zero!(self.P, m);
         memory.store(address, m);
     }
 
@@ -605,7 +603,7 @@ impl Regs {
    
     fn inc(&mut self, memory: &mut Mem, address: W<u16>) {
         let m = memory.load(address) + W(1);
-        set_sign_zero!(self.Flags, m);
+        set_sign_zero!(self.P, m);
         memory.store(address, m);
     }
 }
@@ -618,7 +616,7 @@ impl Regs {
         let m = memory.load(address);
         self.A = m;
         self.X = m;
-        set_sign_zero!(self.Flags, m);
+        set_sign_zero!(self.P, m);
     }
 
     fn sax(&mut self, memory: &mut Mem, address: W<u16>) {
@@ -642,21 +640,21 @@ impl Regs {
         let shift = self.shift_left(memory.load(address));
         memory.store(address, shift);
         self.A = self.A | shift;
-        set_sign_zero!(self.Flags, self.A);
+        set_sign_zero!(self.P, self.A);
     }
 
     fn rla(&mut self, memory: &mut Mem, address: W<u16>) {
         let rot = self.rotate_left(memory.load(address)); 
         memory.store(address, rot);
         self.A = self.A & rot;
-        set_sign_zero!(self.Flags, self.A);
+        set_sign_zero!(self.P, self.A);
     }
 
     fn sre(&mut self, memory: &mut Mem, address: W<u16>) {
         let shift = self.shift_right(memory.load(address));
         memory.store(address, shift);
         self.A = self.A ^ shift;
-        set_sign_zero!(self.Flags, self.A);
+        set_sign_zero!(self.P, self.A);
     }
 
     fn rra(&mut self, memory: &mut Mem, address: W<u16>) {
@@ -676,7 +674,7 @@ impl fmt::Debug for Execution {
 impl fmt::Debug for Regs {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{{Regs: A: {:02X}, X: {:02X}, Y: {:02X}, P: {:02X}, SP: {:02X}, PC: {:04X} }}",
-               self.A.0 , self.X.0 , self.Y.0 , self.Flags , self.SP.0 , self.PC.0)
+               self.A.0 , self.X.0 , self.Y.0 , self.P.0 , self.SP.0 , self.PC.0)
     }
 }
 

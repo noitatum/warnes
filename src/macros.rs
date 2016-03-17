@@ -1,9 +1,9 @@
 macro_rules! set_flag {
-    ($flags:expr, $val:expr) => ($flags |= $val)
+    ($flags:expr, $val:expr) => ($flags = $flags | $val)
 }
 
 macro_rules! unset_flag {
-    ($flags:expr, $val:expr) => ($flags &= !$val)
+    ($flags:expr, $val:expr) => ($flags = $flags & !$val)
 }
 
 macro_rules! copy_bits {
@@ -11,9 +11,8 @@ macro_rules! copy_bits {
         ($dest = $dest & !$mask | $src & $mask)
 }
 
-macro_rules! copy_flag {
-    ($flags:expr, $src:expr, $val:expr) => 
-        ($flags = $flags & !$val | $src.0 & $val)
+macro_rules! is_bit_set {
+    ($flags:expr, $val:expr) => ($flags & $val > W(0))
 }
 
 macro_rules! is_flag_set {
@@ -27,7 +26,7 @@ macro_rules! set_flag_cond {
 
 macro_rules! set_sign {
     ($flags:expr, $val:expr) => 
-        (copy_flag!($flags, $val, FLAG_SIGN))
+        (copy_bits!($flags, $val, FLAG_SIGN))
 }
 
 macro_rules! set_zero {
