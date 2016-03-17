@@ -9,6 +9,8 @@ const NAMETABLE_MASK   : W<u16> = W(0x0C00);
 const COARSE_X_MASK    : W<u16> = W(0x001F);
 const COARSE_Y_MASK    : W<u16> = W(0x03E0);
 const FINE_Y_MASK      : W<u16> = W(0x7000);
+const HORIZONTAL_MASK  : W<u16> = W(0x041F);
+const VERTICAL_MASK    : W<u16> = W(0x7BE0);
 const BG_OFFSET_FLAG   : W<u8>  = W(0x10);
 const INCREMENT_FLAG   : W<u8>  = W(0x40);
 
@@ -79,8 +81,10 @@ impl Scroll {
     }
 
     pub fn set_ppuctrl(&mut self, value: W<u8>) {
+        // Set one of the four nametables from ppuctrl
         self.temporal = self.temporal & !NAMETABLE_MASK |
                         W16!(value & W(0x3)) << 10;
+        // bg_offset will be either 0x1000 or 0x0000 depending on the flag
         self.bg_offset = W16!(value & BG_OFFSET_FLAG) << 8; 
         self.increment = if value & INCREMENT_FLAG > W(0) {W(1)} else {W(32)};
     }
@@ -117,7 +121,8 @@ impl Scroll {
     pub fn set_scroll_y(&mut self, value: W<u8>) {
         let fine_y = W16!(value & W(0x07)) << 12; 
         let coarse_y = W16!(value & W(0xF8)) << 2; 
-        self.temporal = self.temporal & !COARSE_Y_MASK | fine_y | coarse_y; 
+        self.temporal = self.temporal & !(COARSE_Y_MASK | FINE_Y_MASK) | 
+                        fine_y | coarse_y; 
     }
 
     pub fn get_scroll_y(&mut self) -> W<u8> {
@@ -145,6 +150,14 @@ impl Scroll {
             self.address = self.address ^ NAMETABLE_Y_BIT;
         } 
         self.set_scroll_y(scroll_y);
+    }
+
+    pub fn copy_horizontal(&mut self) {
+        copy_bits!(self.address, self.temporal, HORIZONTAL_MASK);
+    }
+
+    pub fn copy_vertical(&mut self) {
+        copy_bits!(self.address, self.temporal, VERTICAL_MASK);
     }
 }
 

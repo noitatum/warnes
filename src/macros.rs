@@ -6,6 +6,11 @@ macro_rules! unset_flag {
     ($flags:expr, $val:expr) => ($flags &= !$val)
 }
 
+macro_rules! copy_bits {
+    ($dest:expr, $src:expr, $mask:expr) => 
+        ($dest = $dest & !$mask | $src & $mask)
+}
+
 macro_rules! copy_flag {
     ($flags:expr, $src:expr, $val:expr) => 
         ($flags = $flags & !$val | $src.0 & $val)
