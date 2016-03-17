@@ -96,7 +96,7 @@ macro_rules! in_render_range {
 }
 
 macro_rules! render_on {
-    ($selfie:expr) => ($selfie.show_sprites() || $selfie.show_background())
+    ($selfie:expr) => (($selfie.show_sprites() || $selfie.show_background()))
 }
 
 /*

@@ -119,7 +119,7 @@ impl Ppu {
             address         : Scroll::default(),
 
             ctrl            : 0,
-            mask            : 0,
+            mask            : 0x8,//0,
             status          : 0,
 
             scanline        : 0,
@@ -169,12 +169,12 @@ impl Ppu {
         self.cycles += 1;
 
         // if we finished the current scanline we pass to the next one
-        if self.scycle == 340 {
+        if self.scycle == 340 && self.scanline < 261 {
             self.scanline += 1;
             self.scycle = 0;
         }
 
-        if !render_on!(self) && self.cycles == VBLANK_END_NO_RENDER ||
+        if (!render_on!(self) && self.cycles == VBLANK_END_NO_RENDER) ||
             scanline_end!(self) {
            // reset scanline values and qty of cycles
             self.scycle = 0;
