@@ -71,6 +71,10 @@ impl Cpu {
         return (op_name, OPCODE_TABLE[index].cycles(),
                  arr, two_bytes, OPCODE_TABLE[index].op_type);
     }
+
+    pub fn return_regs(&mut self) -> (u16, u16, u16, u16, u16, u16) {
+        return self.regs.return_regs();
+    }
 }
 
 struct Execution {
@@ -171,6 +175,12 @@ impl Default for Regs {
 
 // Util functions
 impl Regs {
+    
+    pub fn return_regs(&mut self) -> (u16, u16, u16, u16, u16, u16) {
+        return (self.A.0 as u16, self.X.0 as u16, self.Y.0 as u16, 
+                self.Flags as u16, self.SP.0 as u16, self.PC.0);
+    }
+
     /// Debug.
     #[inline(always)]
     pub fn pc(&mut self) -> (W<u16>, W<u16>) {

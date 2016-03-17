@@ -112,6 +112,10 @@ impl Nes  {
     pub fn reset(&mut self) {
         self.cpu.reset(&mut self.mem);
     }
+    
+    pub fn return_regs(&mut self) -> (u16, u16, u16, u16, u16, u16) {
+        return self.cpu.return_regs();
+    }
 }
 
 // Debug stuff

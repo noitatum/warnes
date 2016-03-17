@@ -20,7 +20,7 @@ macro_rules! rdbg {
 macro_rules! undefinedc {
     ($input:expr) => (
         println!("{} Undefined command: {}. Try 'help'", rdbg!(),
-                        $input[0..$input.len()-1].to_string());
+                        $input.trim());
     );
 }
 
@@ -58,32 +58,46 @@ impl Debug {
         'debug: loop {
             print!("{} ", rdbg!());
             io::stdout().flush().ok().expect("io flush");
-            input = "".to_string();
+            input = String::new();
             stdin.read_line(&mut input).unwrap();
             let words : Vec<&str> = input.split(" ").collect();
+
             if words.len() > 0 {
-                match &rnl!(words[0]) {
-                    "l" => { println!("{} list", rdbg!()); }
+                match words[0].trim() {
+                    "l"|"list" => { println!("{} list", rdbg!()); }
                     // alone just one step
                     // with a number steps several instrs
-                    "s" => { println!("{} step", rdbg!()); },
+                    "s"|"step" => { println!("{} step", rdbg!()); },
                     // Since we only have 6502 assembly
-                    // all these commands are the same
+                    // all these commands do the same
                     "n"|"nexti"|"ni"|"stepi"|"si"
-                        => { //println!("{} next", rdbg!());
-                             self.print_instr(renderer, event_pump);
-                            },
-                    "c" => { println!("{} continue", rdbg!());
-                             self.nes_run(renderer, event_pump);
-                             break 'debug;
-                            },
-                    "p" => { println!("{} print", rdbg!()); 
-                             self.print_reg(renderer, event_pump); },
-                    
-                    "b" => { println!("{} breakpoint", rdbg!());},
-                    "q" => { print!("{} ", rdbg!());
-                             break 'debug; },
-                    _   => { undefinedc!(words[0]); },
+                            => { //println!("{} next", rdbg!());
+                                 self.print_instr(renderer, event_pump, "garbage");
+                               },
+                    "c"|"continue"
+                            => { println!("{} continue", rdbg!());
+                                 self.nes_run(renderer, event_pump, "garbage");
+                                 break 'debug;
+                               },
+                    "p"     => { if words.len() == 1 {
+                                     undefinedc!("No register or memory position given");
+                                 } else {
+                                     self.print_reg(renderer, event_pump, words[1]);
+                                 }
+                               },
+                    "pb"    => { println!("{} print", rdbg!());
+                                 if words.len() == 1 {
+                                     undefinedc!("No register or memory position given");
+                                 } else {
+                                     self.print_reg_binary(renderer, event_pump, words[1]);
+                                 }
+                               }, 
+                    "b"     => { println!("{} breakpoint", rdbg!());},
+                    "q"|"quit"
+                            => { print!("{} ", rdbg!());
+                                break 'debug; },
+                    "help"  => { self.help(renderer, event_pump, "garbage"); },
+                    _       => { undefinedc!(words[0]); },
                 }
             }
         }
@@ -91,7 +105,7 @@ impl Debug {
 }
 
 impl Debug {
-    fn print_instr(&mut self, renderer: &mut Renderer, event_pump: &mut EventPump) {
+    fn print_instr(&mut self, renderer: &mut Renderer, event_pump: &mut EventPump, _: &str) {
          let (name, _, vecb, size_three, op_type) = self.nes.next_instr();
          // need to get info when the value is an imm and not an address
          // TODO ^.
@@ -109,13 +123,39 @@ impl Debug {
          self.nes.step(self.cpc, renderer, event_pump);
          // Print executed instruction
     }
-    
-    fn print_reg(&mut self, _: &mut Renderer, _: &mut EventPump) {
-       (); 
+
+    fn print_reg(&mut self, _: &mut Renderer, _: &mut EventPump, word: &str) {
+        println!("{} {}: {:x}", rdbg!(), word.trim(), self.get_reg(word));
     }
 
-    fn nes_run(&mut self, renderer: &mut Renderer, event_pump: &mut EventPump) {
+    fn print_reg_binary(&mut self, _: &mut Renderer, _: &mut EventPump, word: &str) {
+        println!("{} {}: {:b}", rdbg!(), word.trim(), self.get_reg(word));
+    }
+
+    fn get_reg(&mut self, word: &str) -> u16{
+        return match word.trim() {
+            "A"|"a"         => { self.nes.return_regs().0 },
+            "X"|"x"         => { self.nes.return_regs().1 },
+            "Y"|"y"         => { self.nes.return_regs().2 },
+            "PC"|"pc"       => { self.nes.return_regs().3 },
+            "FLAGS"|"flags" => { self.nes.return_regs().4 },
+            _               => { println!("{} Error non register returning 0", rdbg!()); 0},
+        }
+    }
+
+    fn nes_run(&mut self, renderer: &mut Renderer, event_pump: &mut EventPump, _: &str) {
         self.nes.run(renderer, event_pump)
+    }
+
+    fn help(&mut self, _: &mut Renderer, _: &mut EventPump, _: &str) {
+        print!("{} Help commands\n", rdbg!());
+        print!("{} 'c' or 'continue' to continue the execution.\n", rdbg!());
+        print!("{} 'n', 'next', 'step' or 'step' to do execute the next instruction or do a single cpu cycle.\n", rdbg!());
+        print!("{} 'b' or 'breakpoint' for breakpoints (NOT IMPLEMENTED YET).\n", rdbg!());
+        print!("{} 'q' or 'quit' to quit.\n", rdbg!());
+        print!("{} 'l' or 'list' to show the next instructions to be executed", rdbg!());
+        print!("{} 'p' plus a register name to show the value of the register (ex: p A).\n", rdbg!());
+        print!("{} 'pb' to show that value in binary (ex: pb A).\n", rdbg!());
     }
 
 }
