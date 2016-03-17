@@ -52,20 +52,26 @@ impl Cpu {
     }
     
     /// Debug
-    pub fn next_instr(&mut self, memory: &mut Mem) -> (String, u32, Vec<u8>, bool, OpType) {
-        let index = self.regs.next_opcode(memory) as usize;
+    pub fn next_instr(&mut self, memory: &mut Mem, list: bool) -> (String, u32, Vec<u8>, bool, OpType) {
+        let mut index : usize = 0;
+        match list { // false = execute one instr, true = show 5 instrs
+            false => { index = memory.load_no_side_effect(self.regs.pc().0).0 as usize; },
+            true  => { index = memory.load_no_side_effect(self.regs.pc().1).0 as usize; },
+        }
         let op_name = OPCODE_TABLE[index].name();
         let mut arr = vec!(0, 0, 0);
         let mut two_bytes : bool = false;
         match OPCODE_TABLE[index].num_bytes() { 
             1 => { arr[0] = 1; },
             2 => { arr[1] = memory.load_no_side_effect(self.regs.pc().0 + W(1)).0; },
-            3 => { arr[2] = memory.load_no_side_effect(self.regs.pc().0 + W(2)).0;
+            3 => { arr[1] = memory.load_no_side_effect(self.regs.pc().0 + W(1)).0;
                    arr[2] = memory.load_no_side_effect(self.regs.pc().0 + W(2)).0; 
                    two_bytes = true; },
             _ => { panic!("no operation has this size of bytes: {}", 
                          OPCODE_TABLE[index].num_bytes()); }
         }
+
+        if list { self.regs.PC_DEBUG = self.regs.PC_DEBUG + W(OPCODE_TABLE[index].num_bytes() as u16); }
         // two_bytes is true if the operation takes two more bytes
         // generally for adressing
         return (op_name, OPCODE_TABLE[index].cycles(),
@@ -150,25 +156,25 @@ impl Instruction {
 
 #[allow(non_snake_case)]
 struct Regs {
-    A           : W<u8>,    // Accumulator
-    X           : W<u8>,    // Indexes
-    Y           : W<u8>,    //
-    P           : W<u8>,    // Status
-    SP          : W<u8>,    // Stack pointer
-    PC          : W<u16>,   // Program counter
-    PC_DEBUG    : W<u16>,   // PC to list instructions when using the debugger.
+    A               : W<u8>,    // Accumulator
+    X               : W<u8>,    // Indexes
+    Y               : W<u8>,    //
+    P               : W<u8>,    // Status
+    SP              : W<u8>,    // Stack pointer
+    PC              : W<u16>,   // Program counter
+    pub PC_DEBUG    : W<u16>,   // PC to list instructions when using the debugger.
 }
 
 impl Default for Regs {
     fn default() -> Regs {
         Regs {
-            A               : W(0),
-            X               : W(0),
-            Y               : W(0),
-            P               : W(0x34), 
-            SP              : W(0xfd),
-            PC              : W(0),
-            PC_DEBUG        : W(0),
+            A        : W(0),
+            X        : W(0),
+            Y        : W(0),
+            P        : W(0x34), 
+            SP       : W(0xfd),
+            PC       : W(0),
+            PC_DEBUG : W(0),
         }
     }
 }
