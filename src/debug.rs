@@ -26,7 +26,7 @@ macro_rules! rnl {
     ($input:expr) => ($input[0..$input.len()-1]);
 }
 
-const DEBUG_SPACE : &'static str = "          ";
+const DEBUG_SPACE : &'static str = "                     ";
 
 pub struct Debug  {
     nes: Nes,
@@ -62,39 +62,39 @@ impl Debug {
 
             if words.len() > 0 {
                 match words[0].trim() {
-                    "l"|"list" => { println!("{} list", rdbg!()); }
+                    "l"|"list" => { self.print_list(renderer, event_pump); }
                     // alone just one step
                     // with a number steps several instrs
                     "s"|"step" => { println!("{} step", rdbg!()); },
                     // Since we only have 6502 assembly
                     // all these commands do the same
                     "n"|"nexti"|"ni"|"stepi"|"si"
-                            => { //println!("{} next", rdbg!());
-                                 self.print_instr(renderer, event_pump, "garbage");
+                            => { 
+                                 self.next(renderer, event_pump);
                                },
                     "c"|"continue"
                             => { println!("{} continue", rdbg!());
-                                 self.nes_run(renderer, event_pump, "garbage");
+                                 self.nes_run(renderer, event_pump);
                                  break 'debug;
                                },
                     "p"     => { if words.len() == 1 {
                                      undefinedc!("No register or memory position given");
                                  } else {
-                                     self.print_reg(renderer, event_pump, words[1]);
+                                     self.print_reg(words[1]);
                                  }
                                },
                     "pb"    => { println!("{} print", rdbg!());
                                  if words.len() == 1 {
                                      undefinedc!("No register or memory position given");
                                  } else {
-                                     self.print_reg_binary(renderer, event_pump, words[1]);
+                                     self.print_reg_binary(words[1]);
                                  }
                                }, 
                     "b"     => { println!("{} breakpoint", rdbg!());},
                     "q"|"quit"
                             => { print!("{} ", rdbg!());
                                 break 'debug; },
-                    "help"  => { self.help(renderer, event_pump, "garbage"); },
+                    "help"  => { self.help(); },
                     _       => { undefinedc!(words[0]); },
                 }
             }
@@ -103,8 +103,13 @@ impl Debug {
 }
 
 impl Debug {
-    fn print_instr(&mut self, renderer: &mut Renderer, 
-                   event_pump: &mut EventPump, _: &str) {
+
+    fn next(&mut self, renderer: &mut Renderer, event_pump: &mut EventPump) {
+        self.print_next();
+        self.nes.step(self.cpc, renderer, event_pump);
+    }
+
+    fn print_next(&mut self) {
         let operation = self.nes.next_operation();
         let inst = operation.inst;
         let operand = operation.operand.0;
@@ -116,19 +121,24 @@ impl Debug {
             11 => println!("#{:04X}", operand),
             _  => println!("Invalid Mode"),
         }
-        self.nes.step(self.cpc, renderer, event_pump);
-        // Print executed instruction
     }
 
-    fn print_reg(&mut self, _: &mut Renderer, _: &mut EventPump, word: &str) {
+    fn print_list(&mut self, renderer: &mut Renderer, event_pump: &mut EventPump) {
+        // FIXME
+        for _ in 1..6 {
+            self.print_next();
+        }
+    }
+
+    fn print_reg(&mut self, word: &str) {
         println!("{} {}: {:x}", rdbg!(), word.trim(), self.get_reg(word));
     }
 
-    fn print_reg_binary(&mut self, _: &mut Renderer, _: &mut EventPump, word: &str) {
+    fn print_reg_binary(&mut self, word: &str) {
         println!("{} {}: {:b}", rdbg!(), word.trim(), self.get_reg(word));
     }
 
-    fn get_reg(&mut self, word: &str) -> u16{
+    fn get_reg(&mut self, word: &str) -> u16 {
         return match word.trim() {
             "A"|"a"         => { self.nes.return_regs().0 },
             "X"|"x"         => { self.nes.return_regs().1 },
@@ -139,11 +149,11 @@ impl Debug {
         }
     }
 
-    fn nes_run(&mut self, renderer: &mut Renderer, event_pump: &mut EventPump, _: &str) {
+    fn nes_run(&mut self, renderer: &mut Renderer, event_pump: &mut EventPump) {
         self.nes.run(renderer, event_pump)
     }
 
-    fn help(&mut self, _: &mut Renderer, _: &mut EventPump, _: &str) {
+    fn help(&self) {
         print!("{} Help commands\n", rdbg!());
         print!("{} 'c' or 'continue' to continue the execution.\n", rdbg!());
         print!("{} 'n', 'next', 'step' or 'step' to do execute the next instruction or do a single cpu cycle.\n", rdbg!());
