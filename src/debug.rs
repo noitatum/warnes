@@ -1,5 +1,6 @@
 // nes
 use nes::Nes;
+use cpu::{Operation, DebugRegs};
 // std
 use std::io;
 use std::io::Error;
@@ -26,7 +27,8 @@ macro_rules! rnl {
     ($input:expr) => ($input[0..$input.len()-1]);
 }
 
-const DEBUG_SPACE : &'static str = "                     ";
+const DEBUG_SPACE       : &'static str = "                     ";
+const DEBUG_LIST_SIZE   : u32 = 5;
 
 pub struct Debug  {
     nes: Nes,
@@ -59,44 +61,46 @@ impl Debug {
             input = String::new();
             stdin.read_line(&mut input).unwrap();
             let words : Vec<&str> = input.split(" ").collect();
-
-            if words.len() > 0 {
-                match words[0].trim() {
-                    "l"|"list" => { self.print_list(renderer, event_pump); }
-                    // alone just one step
-                    // with a number steps several instrs
-                    "s"|"step" => { println!("{} step", rdbg!()); },
-                    // Since we only have 6502 assembly
-                    // all these commands do the same
-                    "n"|"nexti"|"ni"|"stepi"|"si"
-                            => { 
-                                 self.next(renderer, event_pump);
-                               },
-                    "c"|"continue"
-                            => { println!("{} continue", rdbg!());
-                                 self.nes_run(renderer, event_pump);
-                                 break 'debug;
-                               },
-                    "p"     => { if words.len() == 1 {
-                                     undefinedc!("No register or memory position given");
-                                 } else {
-                                     self.print_reg(words[1]);
-                                 }
-                               },
-                    "pb"    => { println!("{} print", rdbg!());
-                                 if words.len() == 1 {
-                                     undefinedc!("No register or memory position given");
-                                 } else {
-                                     self.print_reg_binary(words[1]);
-                                 }
-                               }, 
-                    "b"     => { println!("{} breakpoint", rdbg!());},
-                    "q"|"quit"
-                            => { print!("{} ", rdbg!());
-                                break 'debug; },
-                    "help"  => { self.help(); },
-                    _       => { undefinedc!(words[0]); },
-                }
+            if words.len() == 0 {
+                continue 'debug;
+            }
+            match words[0].trim() {
+                "l"|"list" => self.print_list(DEBUG_LIST_SIZE),
+                // alone just one step
+                // with a number steps several instrs
+                "s"|"step" => println!("{} step", rdbg!()),
+                // Since we only have 6502 assembly
+                // all these commands do the same
+                "n"|"nexti"|"ni"|"stepi"|"si" => { 
+                    self.next(renderer, event_pump);
+                },
+                "c"|"continue" => { 
+                    println!("{} continue", rdbg!());
+                    self.nes_run(renderer, event_pump);
+                    break 'debug;
+                },
+                "p" => { 
+                    if words.len() == 1 {
+                        undefinedc!("No register or memory position given");
+                    } else {
+                        self.print_reg(words[1]);
+                    }
+                },
+                "pb" => { 
+                    println!("{} print", rdbg!());
+                    if words.len() == 1 {
+                        undefinedc!("No register or memory position given");
+                    } else {
+                        self.print_reg_binary(words[1]);
+                    }
+                }, 
+                "b" => println!("{} breakpoint", rdbg!()),
+                "q"|"quit" => { 
+                    print!("{} ", rdbg!());
+                    break 'debug; 
+                },
+                "help"  => self.help(),
+                _       => undefinedc!(words[0]),
             }
         }
     }
@@ -104,13 +108,19 @@ impl Debug {
 
 impl Debug {
 
-    fn next(&mut self, renderer: &mut Renderer, event_pump: &mut EventPump) {
-        self.print_next();
-        self.nes.step(self.cpc, renderer, event_pump);
+    fn next_operation(&mut self) -> Operation {
+        let pc = self.nes.cpu_registers().PC;
+        let mem = self.nes.memory();
+        Operation::from_address(mem, pc)
     }
 
-    fn print_next(&mut self) {
-        let operation = self.nes.next_operation();
+    fn next(&mut self, renderer: &mut Renderer, event_pump: &mut EventPump) {
+        let operation = self.next_operation();
+        self.print_operation(&operation);
+        self.nes.cycle(renderer, event_pump);
+    }
+
+    fn print_operation(&self, operation: &Operation) {
         let inst = operation.inst;
         let operand = operation.operand.0;
         print!("{} {}", DEBUG_SPACE, inst.name);
@@ -123,11 +133,13 @@ impl Debug {
         }
     }
 
-    fn print_list(&mut self, renderer: &mut Renderer, event_pump: &mut EventPump) {
-        // FIXME
-        for _ in 1..6 {
-            self.print_next();
-        }
+    fn print_list(&mut self, count: u32) {
+        let mut pc = self.nes.cpu_registers().PC;
+        for _ in 0..count {
+            let operation = Operation::from_address(self.nes.memory(), pc);
+            self.print_operation(&operation);
+            pc = pc + operation.mode.size;
+        } 
     }
 
     fn print_reg(&mut self, word: &str) {
@@ -140,12 +152,12 @@ impl Debug {
 
     fn get_reg(&mut self, word: &str) -> u16 {
         return match word.trim() {
-            "A"|"a"         => { self.nes.return_regs().0 },
-            "X"|"x"         => { self.nes.return_regs().1 },
-            "Y"|"y"         => { self.nes.return_regs().2 },
-            "PC"|"pc"       => { self.nes.return_regs().3 },
-            "FLAGS"|"flags" => { self.nes.return_regs().4 },
-            _               => { println!("{} Error non register returning 0", rdbg!()); 0},
+            "A"|"a"         => self.nes.cpu_registers().A.0 as u16,
+            "X"|"x"         => self.nes.cpu_registers().X.0 as u16,
+            "Y"|"y"         => self.nes.cpu_registers().Y.0 as u16,
+            "PC"|"pc"       => self.nes.cpu_registers().PC.0,
+            "FLAGS"|"flags" => self.nes.cpu_registers().P.0 as u16,
+            _               => {println!("{} Error non register returning 0", rdbg!()); 0},
         }
     }
 
@@ -165,7 +177,3 @@ impl Debug {
     }
 
 }
-
-
-
-

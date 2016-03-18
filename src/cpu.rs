@@ -49,13 +49,8 @@ impl Cpu {
         self.cycles += 1;
     }
     
-    // Debug
-    pub fn next_operation(&mut self, memory: &mut Mem) -> Operation { 
-        self.regs.next_operation(memory)
-    }
-
-    pub fn return_regs(&mut self) -> (u16, u16, u16, u16, u16, u16) {
-        return self.regs.return_regs();
+    pub fn registers(&self) -> DebugRegs { 
+        self.regs.debug_regs()
     }
 }
 
@@ -77,7 +72,7 @@ impl Execution {
             // Advance the PC
             regs.PC = regs.PC + addressing.size; 
             // Get next operation
-            self.operation = regs.next_operation(memory);
+            self.operation = Operation::from_address(memory, regs.PC);
             self.cycles_left = self.operation.inst.cycles; 
             // Add the extra cycles if needed
             if self.operation.inst.has_extra {
@@ -100,6 +95,25 @@ pub struct Operation {
     pub mode        : &'static Addressing,
     pub opcode      : u8,
     pub operand     : W<u16>,
+}
+
+impl Operation {
+    pub fn from_address(memory: &mut Mem, address: W<u16>) -> Operation {
+        let opcode = memory.load(address).0;
+        let inst = &OPCODE_TABLE[opcode as usize];
+        let mode = &ADDRESSING_TABLE[inst.mode];
+        let operand : W<u16> = match mode.size {
+            W(1) => W16!(memory.load(address + W(1))),
+            W(2) => memory.load_word(address + W(1)),
+            _    => W(0),
+        };
+        Operation {
+            inst    : inst,
+            mode    : mode,
+            opcode  : opcode,
+            operand : operand, 
+        }
+    }
 }
 
 impl fmt::Debug for Operation {
@@ -159,34 +173,34 @@ impl Default for Regs {
     }
 }
 
+#[allow(non_snake_case)]
+#[derive(Clone, Copy)]
+pub struct DebugRegs {
+    pub A   : W<u8>,    // Accumulator
+    pub X   : W<u8>,    // Indexes
+    pub Y   : W<u8>,    //
+    pub P   : W<u8>,    // Status
+    pub SP  : W<u8>,    // Stack pointer
+    pub PC  : W<u16>,   // Program counter
+}
+
 // Util functions
 impl Regs {
 
-    pub fn return_regs(&mut self) -> (u16, u16, u16, u16, u16, u16) {
-        return (self.A.0 as u16, self.X.0 as u16, self.Y.0 as u16, 
-                self.P.0 as u16, self.SP.0 as u16, self.PC.0);
+    pub fn debug_regs(&self) -> DebugRegs {
+        DebugRegs {
+            A   : self.A,
+            X   : self.X,
+            Y   : self.Y,
+            P   : self.P,
+            SP  : self.SP,
+            PC  : self.PC,
+        }
     }
 
     pub fn reset(&mut self, memory: &mut Mem) {
         self.PC = memory.load_word(ADDRESS_RESET); 
         self.PC = W(0xC000);
-    }
-
-    pub fn next_operation(&self, memory: &mut Mem) -> Operation {
-        let opcode = memory.load(self.PC).0;
-        let inst = &OPCODE_TABLE[opcode as usize];
-        let mode = &ADDRESSING_TABLE[inst.mode];
-        let operand : W<u16> = match mode.size {
-            W(1) => W16!(memory.load(self.PC + W(1))),
-            W(2) => memory.load_word(self.PC + W(1)),
-            _    => W(0),
-        };
-        Operation {
-            inst    : inst,
-            mode    : mode,
-            opcode  : opcode,
-            operand : operand, 
-        }
     }
 
     fn pop(&mut self, memory: &mut Mem) -> W<u8> {
@@ -656,6 +670,7 @@ impl fmt::Debug for Regs {
                self.A.0 , self.X.0 , self.Y.0 , self.P.0 , self.SP.0 , self.PC.0)
     }
 }
+
 
 const ADDRESSING_TABLE : &'static [Addressing; 12] = &[
     addressing!(imp, 1), addressing!(imm, 2), addressing!(rel, 2), 

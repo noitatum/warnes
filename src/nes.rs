@@ -7,7 +7,7 @@ use std::path::Path;
 
 // Custom stuff
 use header::Header;
-use cpu::{Cpu, Operation};
+use cpu::{Cpu, DebugRegs};
 use ppu::Ppu;
 use mem::Memory as Mem;
 use controller::Controller;
@@ -82,21 +82,6 @@ impl Nes  {
         }
     }
 
-    // Runs a full instruction (all cycles needed)
-    // Or executes a full CPU cycle (3ppu cycles),
-    // cpc = cycle per cycle debug.
-    pub fn step(&mut self, cpc: bool, renderer: &mut Renderer, event_pump: &mut EventPump) {
-        if !cpc {
-            let cycles = self.cpu.next_operation(&mut self.mem).inst.cycles;
-            // We do enough cycles to finish the instruction
-            for _ in 0..cycles {
-                self.cycle(renderer, event_pump);  
-            }
-        } else{
-            self.cycle(renderer, event_pump);
-        }
-    }
-
     // This function does a complete CPU cycle
     // Including joy I/O and 3 PPU cycles.
     #[inline(always)]
@@ -115,11 +100,11 @@ impl Nes  {
 
 // Debug stuff
 impl Nes {
-    pub fn return_regs(&mut self) -> (u16, u16, u16, u16, u16, u16) {
-        self.cpu.return_regs()
+    pub fn cpu_registers(&self) -> DebugRegs {
+        self.cpu.registers()
     }
 
-    pub fn next_operation(&mut self) -> Operation { 
-        self.cpu.next_operation(&mut self.mem)
-    }
+    pub fn memory(&mut self) -> &mut Mem {
+        &mut self.mem
+    } 
 }
