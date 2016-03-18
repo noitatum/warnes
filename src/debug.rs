@@ -117,7 +117,10 @@ impl Debug {
     fn next(&mut self, renderer: &mut Renderer, event_pump: &mut EventPump) {
         let operation = self.next_operation();
         self.print_operation(&operation);
-        self.nes.cycle(renderer, event_pump);
+        let cycles = if self.cpc {1} else {operation.inst.cycles};
+        for _ in 0..cycles {
+            self.nes.cycle(renderer, event_pump);
+        }
     }
 
     fn print_operation(&self, operation: &Operation) {
