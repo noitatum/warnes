@@ -7,11 +7,10 @@ use std::path::Path;
 
 // Custom stuff
 use header::Header;
-use cpu::Cpu;
+use cpu::{Cpu, Operation};
 use ppu::Ppu;
 use mem::Memory as Mem;
 use controller::Controller;
-use enums::OpType;
 
 // Time
 use time::PreciseTime;
@@ -88,7 +87,7 @@ impl Nes  {
     // cpc = cycle per cycle debug.
     pub fn step(&mut self, cpc: bool, renderer: &mut Renderer, event_pump: &mut EventPump) {
         if !cpc {
-            let (_, cycles, _, _, _) = self.cpu.next_instr(&mut self.mem);
+            let cycles = self.cpu.next_operation(&mut self.mem).inst.cycles;
             // We do enough cycles to finish the instruction
             for _ in 0..cycles {
                 self.cycle(renderer, event_pump);  
@@ -112,15 +111,15 @@ impl Nes  {
     pub fn reset(&mut self) {
         self.cpu.reset(&mut self.mem);
     }
-    
-    pub fn return_regs(&mut self) -> (u16, u16, u16, u16, u16, u16) {
-        return self.cpu.return_regs();
-    }
 }
 
 // Debug stuff
 impl Nes {
-    pub fn next_instr(&mut self) -> (String, u32, Vec<u8>, bool, OpType) {
-        return self.cpu.next_instr(&mut self.mem);
+    pub fn return_regs(&mut self) -> (u16, u16, u16, u16, u16, u16) {
+        self.cpu.return_regs()
+    }
+
+    pub fn next_operation(&mut self) -> Operation { 
+        self.cpu.next_operation(&mut self.mem)
     }
 }

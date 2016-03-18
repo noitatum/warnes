@@ -68,31 +68,38 @@ macro_rules! set_sign_zero_carry_cond {
     )
 }
 
+macro_rules! addressing {
+    ($addr:ident, $size:expr) => {
+        Addressing {
+            function    : Regs::$addr,
+            size        : W($size),
+            name        : stringify!($addr),
+        }
+    }
+}
+
 macro_rules! inst {
-    ($addr:ident, $oper:ident, $cycles:expr, $extra:expr, $name:expr, $size:expr) => 
-    (
+    ($addr:expr, $oper:ident, $cycles:expr, $extra:expr) => (
         Instruction {
-            addressing  : Regs::$addr,
-            operation   : Regs::$oper,
+            function    : Regs::$oper,
+            mode        : $addr,
             cycles      : $cycles,
             has_extra   : $extra,
-            name        : $name,
-            size        : $size,
-            op_type     : OpType::$addr,
+            name        : stringify!($oper),
         }
     )
 }
 
 // Has zero cycle penalty
 macro_rules! iz {
-    ($addr:ident, $oper:ident, $cycles:expr, $size:expr) =>
-        (inst!($addr, $oper, $cycles, false, stringify!($oper), $size))
+    ($addr:ident, $oper:ident, $cycles:expr) =>
+        (inst!($addr, $oper, $cycles, false))
 }
 
 // Has extra cycle penalty
 macro_rules! ix {
-    ($addr:ident, $oper:ident, $cycles:expr, $size:expr) =>
-        (inst!($addr, $oper, $cycles, true, stringify!($oper), $size))
+    ($addr:ident, $oper:ident, $cycles:expr) =>
+        (inst!($addr, $oper, $cycles, true))
 }
 
 macro_rules! in_render_range {

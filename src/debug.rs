@@ -1,7 +1,5 @@
 // nes
 use nes::Nes;
-use enums::OpType;
-
 // std
 use std::io;
 use std::io::Error;
@@ -105,23 +103,21 @@ impl Debug {
 }
 
 impl Debug {
-    fn print_instr(&mut self, renderer: &mut Renderer, event_pump: &mut EventPump, _: &str) {
-         let (name, _, vecb, size_three, op_type) = self.nes.next_instr();
-         // need to get info when the value is an imm and not an address
-         // TODO ^.
-         if vecb[0] == 1 {
-            println!("{} {}", DEBUG_SPACE, name);
-         } else if size_three == true {
-            let val : u16 = (vecb[2] as u16) << 7 | vecb[1] as u16; 
-            println!("{} {} #{:x}", DEBUG_SPACE, name, val);
-         } else {
-            match op_type {
-                OpType::imm => { println!("{} {} #!{:x}", DEBUG_SPACE, name, vecb[1]); },
-                _           => { println!("{} {} #{:x}",  DEBUG_SPACE, name, vecb[1]); },
-            }
-         }
-         self.nes.step(self.cpc, renderer, event_pump);
-         // Print executed instruction
+    fn print_instr(&mut self, renderer: &mut Renderer, 
+                   event_pump: &mut EventPump, _: &str) {
+        let operation = self.nes.next_operation();
+        let inst = operation.inst;
+        let operand = operation.operand.0;
+        print!("{} {}", DEBUG_SPACE, inst.name);
+        // TODO: Use constants from cpu.rs until we can cast enums to integers
+        match inst.mode {
+            0  => println!(""),
+            1  => println!("#!{:02X}", operand),
+            11 => println!("#{:04X}", operand),
+            _  => println!("Invalid Mode"),
+        }
+        self.nes.step(self.cpc, renderer, event_pump);
+        // Print executed instruction
     }
 
     fn print_reg(&mut self, _: &mut Renderer, _: &mut EventPump, word: &str) {
