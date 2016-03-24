@@ -79,28 +79,34 @@ macro_rules! addressing {
 }
 
 macro_rules! inst {
-    ($addr:expr, $oper:ident, $cycles:expr, $extra:expr) => (
+    ($addr:expr, $oper:ident, $cycles:expr, $extra:expr, $opcode:expr) => (
         Instruction {
             function    : Regs::$oper,
             mode        : $addr,
             cycles      : $cycles,
             has_extra   : $extra,
-            name        : stringify!($oper),
-        }
+            name        : $opcode
+        }           
     )
 }
 
 // Has zero cycle penalty
 macro_rules! iz {
-    ($addr:ident, $oper:ident, $cycles:expr) =>
-        (inst!($addr, $oper, $cycles, false))
+    ($addr:ident, $oper:ident, $cycles:expr, $opcode:expr) =>
+        (inst!($addr, $oper, $cycles, false, stringify!($oper)))
 }
 
 // Has extra cycle penalty
 macro_rules! ix {
-    ($addr:ident, $oper:ident, $cycles:expr) =>
-        (inst!($addr, $oper, $cycles, true))
+    ($addr:ident, $oper:ident, $cycles:expr, $opcode:expr) =>
+        (inst!($addr, $oper, $cycles, true, stringify!($oper)))
 }
+
+macro_rules! jj {
+    ($addr:ident, $oper:ident, $cycles:expr, $opcode:expr) =>
+        (inst!($addr, $oper, $cycles, true, stringify!($opcode)))
+}
+
 
 macro_rules! in_render_range {
     ($scanline:expr) => ($scanline < 257 && $scanline >= 1)
