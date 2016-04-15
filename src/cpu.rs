@@ -490,9 +490,7 @@ impl Regs {
         set_sign_zero!(self.P, self.X);
     }
 
-    fn nop(&mut self, _: &mut Mem, _: W<u16>) {
-        
-    }
+    fn nop(&mut self, _: &mut Mem, _: W<u16>) {}
 
     fn sed(&mut self, _: &mut Mem, _: W<u16>) {
         set_flag!(self.P, FLAG_DECIMAL);
@@ -501,8 +499,7 @@ impl Regs {
     // Common
 
     fn ora(&mut self, memory: &mut Mem, address: W<u16>) {
-        let m = memory.load(address);
-        self.A = self.A | m;
+        self.A |= memory.load(address);
         set_sign_zero!(self.P, self.A);
     }
 
@@ -519,8 +516,7 @@ impl Regs {
     }
 
     fn and(&mut self, memory: &mut Mem, address: W<u16>) {
-        let m = memory.load(address);
-        self.A = self.A & m;
+        self.A &= memory.load(address);
         set_sign_zero!(self.P, self.A);
     }
 
@@ -530,8 +526,7 @@ impl Regs {
     }
 
     fn eor(&mut self, memory: &mut Mem, address: W<u16>) {
-        let m = memory.load(address);
-        self.A = m ^ self.A;
+        self.A ^= memory.load(address);
         set_sign_zero!(self.P, self.A);
     }
 
@@ -639,21 +634,21 @@ impl Regs {
     fn slo(&mut self, memory: &mut Mem, address: W<u16>) {
         let shift = self.shift_left(memory.load(address));
         memory.store(address, shift);
-        self.A = self.A | shift;
+        self.A |= shift;
         set_sign_zero!(self.P, self.A);
     }
 
     fn rla(&mut self, memory: &mut Mem, address: W<u16>) {
         let rot = self.rotate_left(memory.load(address)); 
         memory.store(address, rot);
-        self.A = self.A & rot;
+        self.A &= rot;
         set_sign_zero!(self.P, self.A);
     }
 
     fn sre(&mut self, memory: &mut Mem, address: W<u16>) {
         let shift = self.shift_right(memory.load(address));
         memory.store(address, shift);
-        self.A = self.A ^ shift;
+        self.A ^= shift;
         set_sign_zero!(self.P, self.A);
     }
 
