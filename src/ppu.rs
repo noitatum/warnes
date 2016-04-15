@@ -402,7 +402,7 @@ impl Oam {
 
     fn store_data(&mut self, value: W<u8>) {
         self.mem[self.address.0 as usize] = value.0;
-        self.address = self.address + W(1);
+        self.address += W(1);
     }
 
     fn set_address(&mut self, addr: W<u8>) {

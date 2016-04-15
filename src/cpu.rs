@@ -434,7 +434,7 @@ impl Regs {
     }
 
     fn dey(&mut self, _: &mut Mem, _: W<u16>) {
-        self.Y = self.Y - W(1);
+        self.Y -= W(1);
         set_sign_zero!(self.P, self.Y);
     }
 
@@ -472,12 +472,12 @@ impl Regs {
     }
 
     fn iny(&mut self, _: &mut Mem, _: W<u16>) {
-        self.Y = self.Y + W(1);
+        self.Y += W(1);
         set_sign_zero!(self.P, self.Y);
     }
 
     fn dex(&mut self, _: &mut Mem, _: W<u16>) {
-        self.X = self.X - W(1);
+        self.X -= W(1);
         set_sign_zero!(self.P, self.X);
     }
 
@@ -486,7 +486,7 @@ impl Regs {
     }
 
     fn inx(&mut self, _: &mut Mem, _: W<u16>) {
-        self.X = self.X + W(1);
+        self.X += W(1);
         set_sign_zero!(self.P, self.X);
     }
 
