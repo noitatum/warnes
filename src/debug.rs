@@ -1,6 +1,6 @@
 // nes
 use nes::Nes;
-use cpu::{Operation, DebugRegs};
+use cpu::Operation;
 // std
 use std::io;
 use std::io::Error;

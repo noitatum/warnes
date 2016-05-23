@@ -88,8 +88,8 @@ impl Cpu {
         self.cycles += 1;
     }
     
-    pub fn registers(&self) -> DebugRegs { 
-        self.regs.debug_regs()
+    pub fn registers(&self) -> Regs { 
+        self.regs.clone()
     }
 }
 
@@ -189,14 +189,14 @@ pub struct Addressing {
     pub name        : &'static str,
 }
 
-#[allow(non_snake_case)]
+#[derive(Clone)]
 pub struct Regs {
-    A           : W<u8>,    // Accumulator
-    X           : W<u8>,    // Indexes
-    Y           : W<u8>,    //
-    P           : W<u8>,    // Status
-    SP          : W<u8>,    // Stack pointer
-    PC          : W<u16>,   // Program counter
+    pub A           : W<u8>,    // Accumulator
+    pub X           : W<u8>,    // Indexes
+    pub Y           : W<u8>,    //
+    pub P           : W<u8>,    // Status
+    pub SP          : W<u8>,    // Stack pointer
+    pub PC          : W<u16>,   // Program counter
 }
 
 impl Default for Regs {
@@ -212,30 +212,8 @@ impl Default for Regs {
     }
 }
 
-#[allow(non_snake_case)]
-#[derive(Clone, Copy)]
-pub struct DebugRegs {
-    pub A   : W<u8>,    // Accumulator
-    pub X   : W<u8>,    // Indexes
-    pub Y   : W<u8>,    //
-    pub P   : W<u8>,    // Status
-    pub SP  : W<u8>,    // Stack pointer
-    pub PC  : W<u16>,   // Program counter
-}
-
 // Util functions
 impl Regs {
-
-    pub fn debug_regs(&self) -> DebugRegs {
-        DebugRegs {
-            A   : self.A,
-            X   : self.X,
-            Y   : self.Y,
-            P   : self.P,
-            SP  : self.SP,
-            PC  : self.PC,
-        }
-    }
 
     pub fn reset(&mut self, memory: &mut Mem) {
         self.PC = memory.load_word(ADDRESS_RESET); 

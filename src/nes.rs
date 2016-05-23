@@ -7,7 +7,7 @@ use std::path::Path;
 
 // Custom stuff
 use header::Header;
-use cpu::{Cpu, DebugRegs};
+use cpu::{Cpu, Regs};
 use ppu::Ppu;
 use mem::Memory as Mem;
 use controller::Controller;
@@ -100,7 +100,7 @@ impl Nes  {
 
 // Debug stuff
 impl Nes {
-    pub fn cpu_registers(&self) -> DebugRegs {
+    pub fn cpu_registers(&self) -> Regs {
         self.cpu.registers()
     }
 
