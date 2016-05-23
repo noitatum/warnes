@@ -15,8 +15,47 @@ use std::num::Wrapping as W;
 use sdl2::pixels::Color;
 use sdl2::rect::Point;
 
-/*
+macro_rules! in_render_range {
+    ($scanline:expr) => ($scanline < 257 && $scanline >= 1)
+}
 
+macro_rules! render_on {
+    ($selfie:expr) => (($selfie.show_sprites() || $selfie.show_background()))
+}
+
+macro_rules! scanline_end {
+    ($selfie:expr) =>
+        (($selfie.scycle == 340 && $selfie.scanline == 261))
+}
+
+macro_rules! attr_bit {
+    ($attr:expr, $bit:expr) => (($attr & (ATTR_BIT - $bit)) >> 7)
+}
+
+macro_rules! tile_bit {
+    ($tile:expr, $bit:expr) => (($tile & (TILE_BIT - (($bit as u16) << 7)) >> 15))
+}
+
+macro_rules! join_bits {
+    ($b1:expr, $b2:expr, $b3:expr, $b4:expr) =>
+        (((($b1 as u16) << 3) | (($b2 as u16) << 2) | (($b3 as u16) << 1) | ($b4 as u16)) & 0x00FF)  
+}
+
+macro_rules! shift_bits {
+    ($selfie:expr) => ($selfie.ltile_sreg = $selfie.ltile_sreg << 1;
+                       $selfie.htile_sreg = $selfie.htile_sreg << 1;
+                       $selfie.attr1_sreg = $selfie.attr1_sreg << 1;
+                       $selfie.attr2_sreg = $selfie.attr2_sreg << 1;
+                      )
+}
+
+macro_rules! to_RGB {
+    ($r:expr, $g:expr, $b:expr) => { 
+        Color::RGB($r, $g, $b) 
+    }
+}
+
+/*
 // ppuctrl
 // Const values to access the controller register bits.
 const CTRL_BASE_TABLE           : u8 = 0x03;
@@ -538,56 +577,4 @@ const PALETTE : [Color; 0x40] = [
     to_RGB!(7,7,3), to_RGB!(5,7,2), to_RGB!(4,7,3), to_RGB!(2,7,6), 
     to_RGB!(4,6,7), to_RGB!(0,0,0), to_RGB!(0,0,0), to_RGB!(0,0,0),
 ];
-
-
-macro_rules! in_render_range {
-    ($scanline:expr) => ($scanline < 257 && $scanline >= 1)
-}
-
-macro_rules! render_on {
-    ($selfie:expr) => (($selfie.show_sprites() || $selfie.show_background()))
-}
-
-/*
-macro_rules! sprite_pattern_base {
-    ($selfie:expr) =>  (if $selfie.mask & CTRL_SPRITE_PATTERN == 0 {
-                            0x0000
-                        } else {
-                            0x1000
-                        })
-}
-*/
-
-macro_rules! scanline_end {
-    ($selfie:expr) =>
-        (($selfie.scycle == 340 && $selfie.scanline == 261))
-}
-
-macro_rules! attr_bit {
-    ($attr:expr, $bit:expr) => (($attr & (ATTR_BIT - $bit)) >> 7)
-}
-
-macro_rules! tile_bit {
-    ($tile:expr, $bit:expr) => (($tile & (TILE_BIT - (($bit as u16) << 7)) >> 15))
-}
-
-macro_rules! join_bits {
-    ($b1:expr, $b2:expr, $b3:expr, $b4:expr) =>
-        (((($b1 as u16) << 3) | (($b2 as u16) << 2) | (($b3 as u16) << 1) | ($b4 as u16)) & 0x00FF)  
-}
-
-macro_rules! shift_bits {
-    ($selfie:expr) => ($selfie.ltile_sreg = $selfie.ltile_sreg << 1;
-                       $selfie.htile_sreg = $selfie.htile_sreg << 1;
-                       $selfie.attr1_sreg = $selfie.attr1_sreg << 1;
-                       $selfie.attr2_sreg = $selfie.attr2_sreg << 1;
-                      )
-}
-
-macro_rules! to_RGB {
-    ($r:expr, $g:expr, $b:expr) => { 
-        Color::RGB($r, $g, $b) 
-    }
-}
-
 
