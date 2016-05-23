@@ -89,7 +89,7 @@ impl Cpu {
     }
     
     pub fn registers(&self) -> Regs { 
-        self.regs.clone()
+        self.regs
     }
 }
 
@@ -189,7 +189,7 @@ pub struct Addressing {
     pub name        : &'static str,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Copy)]
 pub struct Regs {
     pub A           : W<u8>,    // Accumulator
     pub X           : W<u8>,    // Indexes
