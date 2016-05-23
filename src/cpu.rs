@@ -330,28 +330,28 @@ impl Regs {
         (dest, (W8!(dest) < self.Y) as u32)
     }
 
-    fn zpg(&mut self, memory: &mut Mem, operand: W<u16>) -> (W<u16>, u32) {
+    fn zpg(&mut self, _: &mut Mem, operand: W<u16>) -> (W<u16>, u32) {
         (operand, 0)
     }
 
-    fn zpx(&mut self, memory: &mut Mem, operand: W<u16>) -> (W<u16>, u32) {
+    fn zpx(&mut self, _: &mut Mem, operand: W<u16>) -> (W<u16>, u32) {
         (W16!(W8!(operand) + self.X), 0)
     }
 
-    fn zpy(&mut self, memory: &mut Mem, operand: W<u16>) -> (W<u16>, u32) {
+    fn zpy(&mut self, _: &mut Mem, operand: W<u16>) -> (W<u16>, u32) {
         (W16!(W8!(operand) + self.Y), 0)
     }
 
-    fn abs(&mut self, memory: &mut Mem, operand: W<u16>) -> (W<u16>, u32) {
+    fn abs(&mut self, _: &mut Mem, operand: W<u16>) -> (W<u16>, u32) {
         (operand, 0)
     }
 
-    fn abx(&mut self, memory: &mut Mem, operand: W<u16>) -> (W<u16>, u32) {
+    fn abx(&mut self, _: &mut Mem, operand: W<u16>) -> (W<u16>, u32) {
         let address = operand + W16!(self.X);
         (address, (W8!(address) < self.X) as u32)
     }
 
-    fn aby(&mut self, memory: &mut Mem, operand: W<u16>) -> (W<u16>, u32) {
+    fn aby(&mut self, _: &mut Mem, operand: W<u16>) -> (W<u16>, u32) {
         let address = operand + W16!(self.Y);
         (address, (W8!(address) < self.Y) as u32)
     }
