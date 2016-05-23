@@ -770,3 +770,42 @@ const OPCODE_TABLE : &'static [Instruction; 256] = &[
     iz!(IMP, sed, 2, noi), ix!(ABY, sbc, 4, noi), iz!(IMP, nop, 2, noi), iz!(ABY, isc, 7, noi), 
     ix!(ABX, nop, 4, noi), ix!(ABX, sbc, 4, noi), iz!(ABX, inc, 7, noi), iz!(ABX, isc, 7, noi),
 ];
+
+macro_rules! addressing {
+    ($addr:ident, $size:expr) => {
+        Addressing {
+            function    : Regs::$addr,
+            size        : W($size),
+            name        : stringify!($addr),
+        }
+    }
+}
+
+macro_rules! inst {
+    ($addr:expr, $oper:ident, $cycles:expr, $extra:expr, $opcode:expr) => (
+        Instruction {
+            function    : Regs::$oper,
+            mode        : $addr,
+            cycles      : $cycles,
+            has_extra   : $extra,
+            name        : $opcode
+        }           
+    )
+}
+
+// Has zero cycle penalty
+macro_rules! iz {
+    ($addr:ident, $oper:ident, $cycles:expr, $opcode:expr) =>
+        (inst!($addr, $oper, $cycles, false, stringify!($oper)))
+}
+
+// Has extra cycle penalty
+macro_rules! ix {
+    ($addr:ident, $oper:ident, $cycles:expr, $opcode:expr) =>
+        (inst!($addr, $oper, $cycles, true, stringify!($oper)))
+}
+
+macro_rules! jj {
+    ($addr:ident, $oper:ident, $cycles:expr, $opcode:expr) =>
+        (inst!($addr, $oper, $cycles, true, stringify!($opcode)))
+}
