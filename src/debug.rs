@@ -127,11 +127,10 @@ impl Debug {
         let inst = operation.inst;
         let operand = operation.operand.0;
         print!("{} {}", DEBUG_SPACE, inst.name);
-        // TODO: Use constants from cpu.rs until we can cast enums to integers
-        match inst.mode {
-            0  => println!(""),
-            1  => println!("#!{:02X}", operand),
-            11 => println!("#{:04X}", operand),
+        match inst.mode.name {
+            "imp" => println!(""),
+            "imm" => println!("#!{:02X}", operand),
+            "abs" => println!("#{:04X}", operand),
             _  => println!("Invalid Mode"),
         }
     }
@@ -141,7 +140,7 @@ impl Debug {
         for _ in 0..count {
             let operation = Operation::from_address(self.nes.memory(), pc);
             self.print_operation(&operation);
-            pc = pc + operation.mode.size;
+            pc = pc + operation.inst.mode.size;
         } 
     }
 
