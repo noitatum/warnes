@@ -716,10 +716,10 @@ const ZPY : &'static Addressing = &addressing!(zpy, 2);
 const ZPG : &'static Addressing = &addressing!(zpg, 2);
 const IDX : &'static Addressing = &addressing!(idx, 2);
 const IDY : &'static Addressing = &addressing!(idy, 2);
-const IND : &'static Addressing = &addressing!(ind, 2);
-const ABX : &'static Addressing = &addressing!(abx, 2);
-const ABY : &'static Addressing = &addressing!(aby, 2);
-const ABS : &'static Addressing = &addressing!(abs, 2);
+const IND : &'static Addressing = &addressing!(ind, 3);
+const ABX : &'static Addressing = &addressing!(abx, 3);
+const ABY : &'static Addressing = &addressing!(aby, 3);
+const ABS : &'static Addressing = &addressing!(abs, 3);
 
 /* WARNING: Branch instructions are replaced with jumps */
 const OPCODE_TABLE : &'static [Instruction; 256] = &[    
