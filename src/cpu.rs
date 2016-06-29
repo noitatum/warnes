@@ -56,7 +56,7 @@ impl Cpu {
     }
 }
 
-#[derive(Default)]
+#[derive(Default, Debug)]
 struct Execution {
     cycles_left     : u32,
     operation       : Operation, 
@@ -82,13 +82,6 @@ impl Execution {
             }
         }
         self.cycles_left -= 1;
-    }
-}
-
-impl fmt::Debug for Execution {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{{Execution: cycles_left: {}, operation: {:?}}}",
-               self.cycles_left, self.operation)
     }
 }
 
@@ -147,6 +140,7 @@ pub struct Addressing {
 }
 
 #[derive(Clone, Copy)]
+#[allow(non_snake_case)]
 pub struct Regs {
     pub A           : W<u8>,    // Accumulator
     pub X           : W<u8>,    // Indexes
@@ -300,8 +294,7 @@ impl Regs {
             (next_opcode, 0)
         } else {
             // Branch taken
-            let offset = W(operand.0 as i8 as u16);  
-            let branch = next_opcode + offset;
+            let branch = next_opcode + W(operand.0 as i8 as u16);
             let crossed = (branch & PAGE_MASK) != (next_opcode & PAGE_MASK); 
             // Additional cycle if branch taken and page boundary crossed
             (branch, 1 + crossed as u32) 
@@ -684,7 +677,7 @@ macro_rules! addressing {
     }
 }
 
-macro_rules! inst {
+macro_rules! instruction {
     ($addr:expr, $oper:ident, $cycles:expr, $extra:expr) => (
         Instruction {
             function    : Regs::$oper,
@@ -699,13 +692,13 @@ macro_rules! inst {
 // Has zero cycle penalty
 macro_rules! iz {
     ($addr:ident, $oper:ident, $cycles:expr) =>
-        (inst!($addr, $oper, $cycles, false))
+        (instruction!($addr, $oper, $cycles, false))
 }
 
 // Has extra cycle penalty
 macro_rules! ix {
     ($addr:ident, $oper:ident, $cycles:expr) =>
-        (inst!($addr, $oper, $cycles, true))
+        (instruction!($addr, $oper, $cycles, true))
 }
 
 const IMP : &'static Addressing = &addressing!(imp, 1);
@@ -721,7 +714,6 @@ const ABX : &'static Addressing = &addressing!(abx, 3);
 const ABY : &'static Addressing = &addressing!(aby, 3);
 const ABS : &'static Addressing = &addressing!(abs, 3);
 
-/* WARNING: Branch instructions are replaced with jumps */
 const OPCODE_TABLE : &'static [Instruction; 256] = &[    
     // 0x00
     iz!(IMP, brk, 7), iz!(IDX, ora, 6), iz!(IMP, nop, 2), iz!(IDX, slo, 8),
