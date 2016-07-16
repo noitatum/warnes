@@ -1,6 +1,6 @@
 extern crate sdl2;
 
-//nes
+// NES
 use utils::print_mem;
 use loadstore::LoadStore;
 use mem::{Memory as Mem};
@@ -39,20 +39,6 @@ macro_rules! tile_bit {
 macro_rules! join_bits {
     ($b1:expr, $b2:expr, $b3:expr, $b4:expr) =>
         (((($b1 as u16) << 3) | (($b2 as u16) << 2) | (($b3 as u16) << 1) | ($b4 as u16)) & 0x00FF)  
-}
-
-macro_rules! shift_bits {
-    ($selfie:expr) => ($selfie.ltile_sreg = $selfie.ltile_sreg << 1;
-                       $selfie.htile_sreg = $selfie.htile_sreg << 1;
-                       $selfie.attr1_sreg = $selfie.attr1_sreg << 1;
-                       $selfie.attr2_sreg = $selfie.attr2_sreg << 1;
-                      )
-}
-
-macro_rules! to_RGB {
-    ($r:expr, $g:expr, $b:expr) => { 
-        Color::RGB($r, $g, $b) 
-    }
 }
 
 /*
@@ -172,7 +158,7 @@ impl Ppu {
             frame_parity    : true,
 
             // for sprite rendering
-            sprite_unit     : [SpriteInfo::new(); 0x08],
+            sprite_unit     : [SpriteInfo::default(); 0x08],
 
             ltile_sreg      : 0,
             htile_sreg      : 0,
@@ -272,7 +258,10 @@ impl Ppu {
         renderer.set_draw_color(PALETTE[color_idx as usize]);
         renderer.draw_point(Point::new((self.scycle - 1) as i32, 
                                         self.scanline as i32)).unwrap();
-        shift_bits!(self);
+        self.ltile_sreg <<= 1;
+        self.htile_sreg <<= 1;
+        self.attr1_sreg <<= 1;
+        self.attr2_sreg <<= 1;
     }
 
     #[allow(dead_code)]
@@ -538,16 +527,6 @@ struct SpriteInfo {
 }
 
 impl SpriteInfo {
-    #[allow(dead_code)]
-    pub fn new (/*ppu: &mut Ppu*/) -> SpriteInfo {
-        SpriteInfo {
-            y_pos       : 0,
-            tile_idx    : 0,
-            attributes  : 0,
-            x_pos       : 0,
-        }
-    }
-
     pub fn set_sprite_info(&mut self, idx: usize, value: u8) {
         match idx {
             0 => { self.y_pos = value; },
@@ -556,6 +535,12 @@ impl SpriteInfo {
             3 => { self.x_pos = value; },
             _ => { panic!("wrong sprite unit index!"); }
         }
+    }
+}
+
+macro_rules! to_RGB {
+    ($r:expr, $g:expr, $b:expr) => { 
+        Color::RGB($r, $g, $b) 
     }
 }
 
