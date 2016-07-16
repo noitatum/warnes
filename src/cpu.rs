@@ -96,9 +96,10 @@ impl Operation {
         let opcode = memory.load(address).0;
         let inst = &OPCODE_TABLE[opcode as usize];
         let operand : W<u16> = match inst.mode.size {
-            W(1) => W16!(memory.load(address + W(1))),
-            W(2) => memory.load_word(address + W(1)),
-            _    => W(0),
+            W(1) => W(0),
+            W(2) => W16!(memory.load(address + W(1))),
+            W(3) => memory.load_word(address + W(1)),
+            _    => unreachable!(),
         };
         Operation {
             inst    : inst,
@@ -602,11 +603,8 @@ impl Regs {
         set_sign_zero!(self.P, m);
         memory.store(address, m);
     }
-}
 
-// Unofficial Instructions
-
-impl Regs {
+    // Unofficial Instructions
 
     fn lax(&mut self, memory: &mut Mem, address: W<u16>) {
         let m = memory.load(address);
