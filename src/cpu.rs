@@ -67,7 +67,7 @@ impl Execution {
         if self.cycles_left == 0 {
             // Get address and extra cycles from mode
             let operand = self.operation.operand;
-            let addressing = self.operation.inst.mode;
+            let addressing = &self.operation.inst.mode;
             let (address, extra) = (addressing.function)(regs, memory, operand);
             // Execute the instruction
             (self.operation.inst.function)(regs, memory, address);
@@ -126,8 +126,8 @@ impl Default for Operation {
 }
 
 pub struct Instruction {
+    pub mode        : Addressing, 
     pub function    : fn(&mut Regs, &mut Mem, W<u16>),
-    pub mode        : &'static Addressing, 
     pub cycles      : u32,
     pub has_extra   : bool,
     pub name        : &'static str,
@@ -680,8 +680,8 @@ macro_rules! addressing {
 macro_rules! instruction {
     ($addr:expr, $oper:ident, $cycles:expr, $extra:expr) => (
         Instruction {
-            function    : Regs::$oper,
             mode        : $addr,
+            function    : Regs::$oper,
             cycles      : $cycles,
             has_extra   : $extra,
             name        : stringify!($oper),
@@ -701,20 +701,20 @@ macro_rules! ix {
         (instruction!($addr, $oper, $cycles, true))
 }
 
-const IMP : &'static Addressing = &addressing!(imp, 1);
-const IMM : &'static Addressing = &addressing!(imm, 2);
-const REL : &'static Addressing = &addressing!(rel, 2);
-const ZPX : &'static Addressing = &addressing!(zpx, 2);
-const ZPY : &'static Addressing = &addressing!(zpy, 2);
-const ZPG : &'static Addressing = &addressing!(zpg, 2);
-const IDX : &'static Addressing = &addressing!(idx, 2);
-const IDY : &'static Addressing = &addressing!(idy, 2);
-const IND : &'static Addressing = &addressing!(ind, 3);
-const ABX : &'static Addressing = &addressing!(abx, 3);
-const ABY : &'static Addressing = &addressing!(aby, 3);
-const ABS : &'static Addressing = &addressing!(abs, 3);
+const IMP : Addressing = addressing!(imp, 1);
+const IMM : Addressing = addressing!(imm, 2);
+const REL : Addressing = addressing!(rel, 2);
+const ZPX : Addressing = addressing!(zpx, 2);
+const ZPY : Addressing = addressing!(zpy, 2);
+const ZPG : Addressing = addressing!(zpg, 2);
+const IDX : Addressing = addressing!(idx, 2);
+const IDY : Addressing = addressing!(idy, 2);
+const IND : Addressing = addressing!(ind, 3);
+const ABX : Addressing = addressing!(abx, 3);
+const ABY : Addressing = addressing!(aby, 3);
+const ABS : Addressing = addressing!(abs, 3);
 
-const OPCODE_TABLE : &'static [Instruction; 256] = &[    
+static OPCODE_TABLE : &'static [Instruction; 256] = &[    
     // 0x00
     iz!(IMP, brk, 7), iz!(IDX, ora, 6), iz!(IMP, nop, 2), iz!(IDX, slo, 8),
     iz!(ZPG, nop, 3), iz!(ZPG, ora, 3), iz!(ZPG, asl, 5), iz!(ZPG, slo, 5), 
