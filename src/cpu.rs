@@ -2,20 +2,19 @@ use std::fmt;
 use mem::Memory as Mem;
 use loadstore::LoadStore;
 use std::num::Wrapping as W;
-use dma::DMA;
 
-/* Branch flag types */
+// Branch flag types
 const BRANCH_FLAG_CHECK : u8 = 0x20;
-const BRANCH_FLAG_TABLE : [W<u8>; 4] = 
+const BRANCH_FLAG_TABLE : [W<u8>; 4] =
     [FLAG_SIGN, FLAG_OVERFLOW, FLAG_CARRY, FLAG_ZERO];
 
-/* Memory */
-const STACK_PAGE        : W<u16> = W(0x0100 as u16); 
+// Memory
+const STACK_PAGE        : W<u16> = W(0x0100 as u16);
 const PAGE_MASK         : W<u16> = W(0xFF00 as u16);
 const ADDRESS_INTERRUPT : W<u16> = W(0xFFFE as u16);
 const ADDRESS_RESET     : W<u16> = W(0xFFFC as u16);
 
-/* Flag bits */
+// Flag bits
 const FLAG_CARRY        : W<u8> = W(0x01);
 const FLAG_ZERO         : W<u8> = W(0x02);
 const FLAG_INTERRUPT    : W<u8> = W(0x04);
@@ -25,70 +24,146 @@ const FLAG_PUSHED       : W<u8> = W(0x20);
 const FLAG_OVERFLOW     : W<u8> = W(0x40);
 const FLAG_SIGN         : W<u8> = W(0x80);
 
-const OPCODE_NOP        : u8 = 0xEA;
+// DMA
+const OAMDATA           : W<u16> = W(0x2004);
+const DMA_CYCLES        : u32 = 512;
 
 #[derive(Default, Debug)]
 pub struct Cpu {
     // Cycle count since power up
     cycles      : u64,
+    // Instruction count since power up
+    insts       : u64,
     regs        : Regs,
     exec        : Execution,
     dma         : DMA,
-} 
+}
 
 impl Cpu {
-
     pub fn reset(&mut self, memory: &mut Mem) {
         *self = Cpu::default();
         self.regs.reset(memory);
+        self.exec.load_operation(memory, &mut self.regs);
     }
 
     pub fn cycle(&mut self, memory: &mut Mem) {
         // Dma takes priority
-        if !self.dma.cycle(memory, self.cycles) {
-            self.exec.cycle(memory, &mut self.regs);
-        }
+        self.insts += (!self.dma.cycle(memory, self.cycles) &&
+                       self.exec.cycle(memory, &mut self.regs)) as u64;
         self.cycles += 1;
     }
-    
-    pub fn registers(&self) -> Regs { 
+
+    pub fn instruction_count(&self) -> u64 {
+        self.insts
+    }
+
+    pub fn execution(&self) -> &Execution {
+        &self.exec
+    }
+
+    pub fn registers(&self) -> Regs {
         self.regs
+    }
+
+    pub fn cycle_count(&self) -> u64 {
+        self.cycles
+    }
+}
+
+#[derive(Default)]
+struct DMA {
+    cycles_left : u32,
+    address     : W<u16>,
+    value       : W<u8>,
+}
+
+impl fmt::Debug for DMA {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{{DMA: cycles_left: {}, address: {:#x}, value: {:#x}}}",
+               self.cycles_left, self.address.0, self.value.0)
+    }
+}
+
+impl DMA {
+    // Returns true if DMA is active
+    pub fn cycle(&mut self, memory: &mut Mem, cycles: u64) -> bool {
+        if self.cycles_left > 0 {
+            self.cycles_left -= 1;
+            // Simulate idle cycles
+            if self.cycles_left < DMA_CYCLES {
+                // Read on odd cycles and write on even cycles
+                if self.cycles_left & 1 == 1 {
+                    self.value = memory.load(self.address);
+                    self.address = self.address + W(1);
+                } else {
+                    memory.store(OAMDATA, self.value);
+                }
+            }
+            true
+        } else if let Some(page) = memory.get_oamdma() {
+            self.address = W16!(page) << 8;
+            // Additional cycle if on odd cycle
+            self.cycles_left = DMA_CYCLES + (cycles & 1) as u32;
+            true
+        } else {
+            false
+        }
     }
 }
 
 #[derive(Default, Debug)]
-struct Execution {
-    cycles_left     : u32,
-    operation       : Operation, 
+pub struct Execution {
+    pub address         : W<u16>,
+    pub cycles_left     : u32,
+    pub operation       : Operation,
 }
 
 impl Execution {
-    pub fn cycle(&mut self, memory: &mut Mem, regs: &mut Regs) {
-        if self.cycles_left == 0 {
-            // Get address and extra cycles from mode
-            let operand = self.operation.operand;
-            let addressing = &self.operation.inst.mode;
-            let (address, extra) = (addressing.function)(regs, memory, operand);
-            // Execute the instruction
-            (self.operation.inst.function)(regs, memory, address);
-            // Advance the PC
-            regs.PC = regs.PC + addressing.size; 
-            // Get next operation
-            self.operation = Operation::from_address(memory, regs.PC);
-            self.cycles_left = self.operation.inst.cycles; 
-            // Add the extra cycles if needed
-            if self.operation.inst.has_extra {
-                self.cycles_left += extra;
-            }
+
+    pub fn load_operation(&mut self, memory: &mut Mem, regs: &mut Regs) {
+        self.operation = Operation::from_address(memory, regs.PC);
+        // Get address and extra cycles from mode
+        let operand = self.operation.operand;
+        let mode = &self.operation.inst.mode;
+        let (address, extra) = (mode.function)(regs, memory, operand);
+        // Get next operation
+        self.address = address;
+        self.cycles_left = self.operation.inst.cycles - 1;
+        // Add the extra cycles if needed
+        if self.operation.inst.has_extra {
+            self.cycles_left += extra;
         }
-        self.cycles_left -= 1;
+    }
+
+    pub fn cycle(&mut self, memory: &mut Mem, regs: &mut Regs) -> bool {
+        if self.cycles_left == 0 {
+            // Advance the PC
+            regs.PC += self.operation.inst.mode.size;
+            // Execute the instruction
+            (self.operation.inst.function)(regs, memory, self.address);
+            self.load_operation(memory, regs);
+            true
+        } else {
+            self.cycles_left -= 1;
+            false
+        }
     }
 }
 
-pub struct Operation { 
+pub struct Operation {
     pub inst        : &'static Instruction,
     pub opcode      : u8,
     pub operand     : W<u16>,
+}
+
+impl Default for Operation {
+    fn default() -> Operation {
+        Operation {
+            inst    : &OPCODE_TABLE[0],
+            opcode  : 0,
+            operand : W(0),
+        }
+    }
 }
 
 impl Operation {
@@ -104,7 +179,7 @@ impl Operation {
         Operation {
             inst    : inst,
             opcode  : opcode,
-            operand : operand, 
+            operand : operand,
         }
     }
 }
@@ -116,18 +191,8 @@ impl fmt::Debug for Operation {
     }
 }
 
-impl Default for Operation {
-    fn default() -> Operation {
-        Operation {
-            inst    : &OPCODE_TABLE[OPCODE_NOP as usize],
-            opcode  : OPCODE_NOP,
-            operand : W(0),
-        }
-    }
-}
-
 pub struct Instruction {
-    pub mode        : Addressing, 
+    pub mode        : Addressing,
     pub function    : fn(&mut Regs, &mut Mem, W<u16>),
     pub cycles      : u32,
     pub has_extra   : bool,
@@ -157,7 +222,7 @@ impl Default for Regs {
             A   : W(0),
             X   : W(0),
             Y   : W(0),
-            P   : W(0x34), 
+            P   : W(0x24),
             SP  : W(0xFD),
             PC  : W(0),
         }
@@ -165,11 +230,11 @@ impl Default for Regs {
 }
 
 // Util functions
+
 impl Regs {
 
     pub fn reset(&mut self, memory: &mut Mem) {
-        self.PC = memory.load_word(ADDRESS_RESET); 
-        self.PC = W(0xC000);
+        self.PC = memory.load_word(ADDRESS_RESET);
     }
 
     fn pop(&mut self, memory: &mut Mem) -> W<u8> {
@@ -188,7 +253,7 @@ impl Regs {
     }
 
     fn pop_word(&mut self, memory: &mut Mem) -> W<u16> {
-        let low = W16!(self.pop(memory)); 
+        let low = W16!(self.pop(memory));
         (W16!(self.pop(memory)) << 8) | low
     }
 
@@ -196,12 +261,12 @@ impl Regs {
         let m = W16!(value);
         let a = W16!(self.A);
         let sum = a + m + W16!(self.P & FLAG_CARRY);
-        set_flag_cond!(self.P, FLAG_OVERFLOW, 
+        set_flag_cond!(self.P, FLAG_OVERFLOW,
                        (a ^ sum) & (m ^ sum) & W(0x80) > W(0));
         set_flag_cond!(self.P, FLAG_CARRY, sum > W(0xFF));
         self.A = W8!(sum);
         set_sign_zero!(self.P, self.A);
-    } 
+    }
 
     fn compare(&mut self, reg: W<u8>, value: W<u8>) {
         let comp = W16!(reg) - W16!(value);
@@ -252,7 +317,7 @@ impl Regs {
     }
 
     fn idx(&mut self, memory: &mut Mem, operand: W<u16>) -> (W<u16>, u32) {
-        (memory.load_word_page_wrap(operand + W16!(self.X)), 0)
+        (memory.load_word_page_wrap(W16!(W8!(operand) + self.X)), 0)
     }
 
     fn idy(&mut self, memory: &mut Mem, operand: W<u16>) -> (W<u16>, u32) {
@@ -296,17 +361,17 @@ impl Regs {
         } else {
             // Branch taken
             let branch = next_opcode + W(operand.0 as i8 as u16);
-            let crossed = (branch & PAGE_MASK) != (next_opcode & PAGE_MASK); 
+            let crossed = (branch & PAGE_MASK) != (next_opcode & PAGE_MASK);
             // Additional cycle if branch taken and page boundary crossed
-            (branch, 1 + crossed as u32) 
+            (branch, 1 + crossed as u32)
         }
     }
 }
 
 // Instructions
 
-impl Regs {   
-    
+impl Regs {
+
     // Jump
 
     fn jsr(&mut self, memory: &mut Mem, address: W<u16>) {
@@ -357,7 +422,7 @@ impl Regs {
     // Implied special
 
     fn brk(&mut self, memory: &mut Mem, _: W<u16>) {
-       // Two bits are set on memory when pushing flags 
+       // Two bits are set on memory when pushing flags
        let flags = self.P | FLAG_PUSHED | FLAG_BRK;
        let pc = self.PC + W(1);
        self.push_word(memory, pc);
@@ -379,7 +444,7 @@ impl Regs {
     // Implied
 
     fn php(&mut self, memory: &mut Mem, _: W<u16>) {
-        // Two bits are set on memory when pushing flags 
+        // Two bits are set on memory when pushing flags
         let flags = self.P | FLAG_PUSHED | FLAG_BRK;
         self.push(memory, flags);
     }
@@ -513,7 +578,7 @@ impl Regs {
     fn bit(&mut self, memory: &mut Mem, address: W<u16>) {
         let m = memory.load(address);
         copy_bits!(self.P, m, FLAG_OVERFLOW);
-        set_sign!(self.P, m); 
+        set_sign!(self.P, m);
         set_zero!(self.P, self.A & m);
     }
 
@@ -597,7 +662,7 @@ impl Regs {
     fn sbc(&mut self, memory: &mut Mem, address: W<u16>) {
         self.add_with_carry(!memory.load(address));
     }
-   
+
     fn inc(&mut self, memory: &mut Mem, address: W<u16>) {
         let m = memory.load(address) + W(1);
         set_sign_zero!(self.P, m);
@@ -638,7 +703,7 @@ impl Regs {
     }
 
     fn rla(&mut self, memory: &mut Mem, address: W<u16>) {
-        let rot = self.rotate_left(memory.load(address)); 
+        let rot = self.rotate_left(memory.load(address));
         memory.store(address, rot);
         self.A &= rot;
         set_sign_zero!(self.P, self.A);
@@ -652,7 +717,7 @@ impl Regs {
     }
 
     fn rra(&mut self, memory: &mut Mem, address: W<u16>) {
-        let rot = self.rotate_right(memory.load(address)); 
+        let rot = self.rotate_right(memory.load(address));
         memory.store(address, rot);
         self.add_with_carry(rot);
     }
@@ -683,7 +748,7 @@ macro_rules! instruction {
             cycles      : $cycles,
             has_extra   : $extra,
             name        : stringify!($oper),
-        }           
+        }
     )
 }
 
@@ -712,85 +777,85 @@ const ABX : Addressing = addressing!(abx, 3);
 const ABY : Addressing = addressing!(aby, 3);
 const ABS : Addressing = addressing!(abs, 3);
 
-static OPCODE_TABLE : &'static [Instruction; 256] = &[    
+static OPCODE_TABLE : &'static [Instruction; 256] = &[
     // 0x00
     iz!(IMP, brk, 7), iz!(IDX, ora, 6), iz!(IMP, nop, 2), iz!(IDX, slo, 8),
-    iz!(ZPG, nop, 3), iz!(ZPG, ora, 3), iz!(ZPG, asl, 5), iz!(ZPG, slo, 5), 
-    iz!(IMP, php, 3), iz!(IMM, ora, 2), iz!(IMP, sal, 2), iz!(IMP, nop, 2), 
+    iz!(ZPG, nop, 3), iz!(ZPG, ora, 3), iz!(ZPG, asl, 5), iz!(ZPG, slo, 5),
+    iz!(IMP, php, 3), iz!(IMM, ora, 2), iz!(IMP, sal, 2), iz!(IMP, nop, 2),
     iz!(ABS, nop, 4), iz!(ABS, ora, 4), iz!(ABS, asl, 6), iz!(ABS, slo, 6),
-    // 0x10                                                                
+    // 0x10
     ix!(REL, bpl, 2), ix!(IDY, ora, 5), iz!(IMP, nop, 2), iz!(IDY, slo, 8),
     iz!(ZPX, nop, 4), iz!(ZPX, ora, 4), iz!(ZPX, asl, 6), iz!(ZPX, slo, 6),
     iz!(IMP, clc, 2), ix!(ABY, ora, 4), iz!(IMP, nop, 2), iz!(ABY, slo, 7),
     ix!(ABX, nop, 4), ix!(ABX, ora, 4), iz!(ABX, asl, 7), iz!(ABX, slo, 7),
-    // 0x20                                                                
+    // 0x20
     iz!(ABS, jsr, 6), iz!(IDX, and, 6), iz!(IMP, nop, 2), iz!(IDX, rla, 8),
     iz!(ZPG, bit, 3), iz!(ZPG, and, 3), iz!(ZPG, rol, 5), iz!(ZPG, rla, 5),
     iz!(IMP, plp, 4), iz!(IMM, and, 2), iz!(IMP, ral, 2), iz!(IMP, nop, 2),
     iz!(ABS, bit, 4), iz!(ABS, and, 4), iz!(ABS, rol, 6), iz!(ABS, rla, 6),
-    // 0x30                                                                
+    // 0x30
     ix!(REL, bmi, 2), ix!(IDY, and, 5), iz!(IMP, nop, 2), iz!(IDY, rla, 8),
     iz!(ZPX, nop, 4), iz!(ZPX, and, 4), iz!(ZPX, rol, 6), iz!(ZPX, rla, 6),
     iz!(IMP, sec, 2), ix!(ABY, and, 4), iz!(IMP, nop, 2), iz!(ABY, rla, 7),
     ix!(ABX, nop, 4), ix!(ABX, and, 4), iz!(ABX, rol, 7), iz!(ABX, rla, 7),
-    // 0x40                                                                
+    // 0x40
     iz!(IMP, rti, 6), iz!(IDX, eor, 6), iz!(IMP, nop, 2), iz!(IDX, sre, 8),
     iz!(ZPG, nop, 3), iz!(ZPG, eor, 3), iz!(ZPG, lsr, 5), iz!(ZPG, sre, 5),
     iz!(IMP, pha, 3), iz!(IMM, eor, 2), iz!(IMP, sar, 2), iz!(IMP, nop, 2),
     iz!(ABS, jmp, 3), iz!(ABS, eor, 4), iz!(ABS, lsr, 6), iz!(ABS, sre, 6),
-    // 0x50                                                                
+    // 0x50
     ix!(REL, bvc, 2), ix!(IDY, eor, 5), iz!(IMP, nop, 2), iz!(IDY, sre, 8),
     iz!(ZPX, nop, 4), iz!(ZPX, eor, 4), iz!(ZPX, lsr, 6), iz!(ZPX, sre, 6),
-    iz!(IMP, cli, 2), ix!(ABY, eor, 4), iz!(IMP, nop, 2), iz!(ABY, sre, 7), 
+    iz!(IMP, cli, 2), ix!(ABY, eor, 4), iz!(IMP, nop, 2), iz!(ABY, sre, 7),
     ix!(ABX, nop, 4), ix!(ABX, eor, 4), iz!(ABX, lsr, 7), iz!(ABX, sre, 7),
-    // 0x60                                                                
+    // 0x60
     iz!(IMP, rts, 6), iz!(IDX, adc, 6), iz!(IMP, nop, 2), iz!(IDX, rra, 8),
     iz!(ZPG, nop, 3), iz!(ZPG, adc, 3), iz!(ZPG, ror, 5), iz!(ZPG, rra, 5),
     iz!(IMP, pla, 4), iz!(IMM, adc, 2), iz!(IMP, rar, 2), iz!(IMP, nop, 2),
     iz!(IND, jmp, 5), iz!(ABS, adc, 4), iz!(ABS, ror, 6), iz!(ABS, rra, 6),
-    // 0x70                                                                
+    // 0x70
     ix!(REL, bvs, 2), ix!(IDY, adc, 5), iz!(IMP, nop, 2), iz!(IDY, rra, 8),
     iz!(ZPX, nop, 4), iz!(ZPX, adc, 4), iz!(ZPX, ror, 6), iz!(ZPX, rra, 6),
-    iz!(IMP, sei, 2), ix!(ABY, adc, 4), iz!(IMP, nop, 2), iz!(ABY, rra, 7), 
+    iz!(IMP, sei, 2), ix!(ABY, adc, 4), iz!(IMP, nop, 2), iz!(ABY, rra, 7),
     ix!(ABX, nop, 4), ix!(ABX, adc, 4), iz!(ABX, ror, 7), iz!(ABX, rra, 7),
-    // 0x80                                                                
+    // 0x80
     iz!(IMM, nop, 2), iz!(IDX, sta, 6), iz!(IMM, nop, 2), iz!(IDX, sax, 6),
     iz!(ZPG, sty, 3), iz!(ZPG, sta, 3), iz!(ZPG, stx, 3), iz!(ZPG, sax, 3),
     iz!(IMP, dey, 2), iz!(IMM, nop, 2), iz!(IMP, txa, 2), iz!(IMP, nop, 2),
     iz!(ABS, sty, 4), iz!(ABS, sta, 4), iz!(ABS, stx, 4), iz!(ABS, sax, 4),
-    // 0x90                                                                
-    ix!(REL, bcc, 2), iz!(IDY, sta, 6), iz!(IMP, nop, 2), iz!(IMP, nop, 2), 
+    // 0x90
+    ix!(REL, bcc, 2), iz!(IDY, sta, 6), iz!(IMP, nop, 2), iz!(IMP, nop, 2),
     iz!(ZPX, sty, 4), iz!(ZPX, sta, 4), iz!(ZPY, stx, 4), iz!(ZPY, sax, 4),
-    iz!(IMP, tya, 2), iz!(ABY, sta, 5), iz!(IMP, txs, 2), iz!(IMP, nop, 2), 
+    iz!(IMP, tya, 2), iz!(ABY, sta, 5), iz!(IMP, txs, 2), iz!(IMP, nop, 2),
     iz!(IMP, nop, 2), iz!(ABX, sta, 5), iz!(IMP, nop, 2), iz!(IMP, nop, 2),
-    // 0xA0                                                                
+    // 0xA0
     iz!(IMM, ldy, 2), iz!(IDX, lda, 6), iz!(IMM, ldx, 2), iz!(IDX, lax, 6),
     iz!(ZPG, ldy, 3), iz!(ZPG, lda, 3), iz!(ZPG, ldx, 3), iz!(ZPG, lax, 3),
     iz!(IMP, tay, 2), iz!(IMM, lda, 2), iz!(IMP, tax, 2), iz!(IMM, lax, 2),
     iz!(ABS, ldy, 4), iz!(ABS, lda, 4), iz!(ABS, ldx, 4), iz!(ABS, lax, 4),
-    // 0xB0                                                                
+    // 0xB0
     ix!(REL, bcs, 2), ix!(IDY, lda, 5), iz!(IMP, nop, 2), ix!(IDY, lax, 5),
     iz!(ZPX, ldy, 4), iz!(ZPX, lda, 4), iz!(ZPY, ldx, 4), iz!(ZPY, lax, 4),
     iz!(IMP, clv, 2), ix!(ABY, lda, 4), iz!(IMP, tsx, 2), iz!(IMP, nop, 2),
     ix!(ABX, ldy, 4), ix!(ABX, lda, 4), ix!(ABY, ldx, 4), ix!(ABY, lax, 4),
-    // 0xC0                                                                
-    iz!(IMM, cpy, 2), iz!(IDX, cmp, 6), iz!(IMM, nop, 2), iz!(IDX, dcp, 8), 
+    // 0xC0
+    iz!(IMM, cpy, 2), iz!(IDX, cmp, 6), iz!(IMM, nop, 2), iz!(IDX, dcp, 8),
     iz!(ZPG, cpy, 3), iz!(ZPG, cmp, 3), iz!(ZPG, dec, 5), iz!(ZPG, dcp, 5),
     iz!(IMP, iny, 2), iz!(IMM, cmp, 2), iz!(IMP, dex, 2), iz!(IMP, nop, 2),
     iz!(ABS, cpy, 4), iz!(ABS, cmp, 4), iz!(ABS, dec, 6), iz!(ABS, dcp, 6),
-    // 0xD0                                                                
+    // 0xD0
     ix!(REL, bne, 2), ix!(IDY, cmp, 5), iz!(IMP, nop, 2), iz!(IDY, dcp, 8),
     iz!(ZPX, nop, 4), iz!(ZPX, cmp, 4), iz!(ZPX, dec, 6), iz!(ZPX, dcp, 6),
     iz!(IMP, cld, 2), ix!(ABY, cmp, 4), iz!(IMP, nop, 2), iz!(ABY, dcp, 7),
     ix!(ABX, nop, 4), ix!(ABX, cmp, 4), iz!(ABX, dec, 7), iz!(ABX, dcp, 7),
-    // 0xE0                                                                
+    // 0xE0
     iz!(IMM, cpx, 2), iz!(IDX, sbc, 6), iz!(IMM, nop, 2), iz!(IDX, isc, 8),
     iz!(ZPG, cpx, 3), iz!(ZPG, sbc, 3), iz!(ZPG, inc, 5), iz!(ZPG, isc, 5),
     iz!(IMP, inx, 2), iz!(IMM, sbc, 2), iz!(IMP, nop, 2), iz!(IMM, sbc, 2),
     iz!(ABS, cpx, 4), iz!(ABS, sbc, 4), iz!(ABS, inc, 6), iz!(ABS, isc, 6),
-    // 0xF0                                                                
+    // 0xF0
     ix!(REL, beq, 2), ix!(IDY, sbc, 5), iz!(IMP, nop, 2), iz!(IDY, isc, 8),
     iz!(ZPX, nop, 4), iz!(ZPX, sbc, 4), iz!(ZPX, inc, 6), iz!(ZPX, isc, 6),
-    iz!(IMP, sed, 2), ix!(ABY, sbc, 4), iz!(IMP, nop, 2), iz!(ABY, isc, 7), 
+    iz!(IMP, sed, 2), ix!(ABY, sbc, 4), iz!(IMP, nop, 2), iz!(ABY, isc, 7),
     ix!(ABX, nop, 4), ix!(ABX, sbc, 4), iz!(ABX, inc, 7), iz!(ABX, isc, 7),
 ];

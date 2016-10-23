@@ -55,5 +55,3 @@ impl Mapper for Nrom {
 
     }
 }
-
-

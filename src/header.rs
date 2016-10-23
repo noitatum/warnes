@@ -39,18 +39,18 @@ impl Header {
         try!(rom.read_exact(&mut file_header));
         if &file_header[0..4] != &INES_SIGNATURE[..] {
             return Err(Error::new(ErrorKind::Other, "Invalid iNES Header"));
-        } 
+        }
         let mapper = ((file_header[6] >> 4) | (file_header[7] & 0xF0)) as u16;
         let flags = (file_header[6] & 0xF) | (file_header[7] << 4);
         let prg_rom_size = file_header[4] as usize * INES_PRG_ROM_CHUNK;
         let mut prg_ram_size = file_header[8] as usize * INES_PRG_RAM_CHUNK;
         let mut prg_bat_size = 0;
-        let chr_rom_size = file_header[5] as usize * INES_CHR_ROM_CHUNK; 
+        let chr_rom_size = file_header[5] as usize * INES_CHR_ROM_CHUNK;
         let mut chr_ram_size = 0;
         // Only one game is known to have battery backed chr ram
         let chr_bat_size = 0;
         if is_flag_set!(flags, FLAGS_BATTERY) {
-            prg_bat_size = INES_BAT_RAM_SIZE; 
+            prg_bat_size = INES_BAT_RAM_SIZE;
         }
         // PRG RAM size was later added on iNES, it was 8KiB by default
         if prg_ram_size == 0 {
@@ -68,15 +68,15 @@ impl Header {
                 rom_file     : rom,
                 mapper       : mapper,
                 flags        : flags,
-                prg_rom_size : prg_rom_size, 
+                prg_rom_size : prg_rom_size,
                 prg_ram_size : prg_ram_size,
                 prg_bat_size : prg_bat_size,
-                chr_rom_size : chr_rom_size, 
-                chr_ram_size : chr_ram_size, 
-                chr_bat_size : chr_bat_size, 
+                chr_rom_size : chr_rom_size,
+                chr_ram_size : chr_ram_size,
+                chr_bat_size : chr_bat_size,
             }
         )
-    } 
+    }
 
     pub fn get_mapper(&mut self) -> Result<Box<Mapper>, Error> {
         let mem = try!(self.get_game_memory());
@@ -84,13 +84,13 @@ impl Header {
             0 => Ok(Nrom::new_boxed(mem)),
             _ => Err(Error::new(ErrorKind::Other, "Unrecognized Mapper"))
         }
-    } 
+    }
 
     pub fn get_game_memory(&mut self) -> Result<GameMemory, Error> {
         let mut prg_rom = vec![0u8; self.prg_rom_size].into_boxed_slice();
         let mut chr_rom = vec![0u8; self.chr_rom_size].into_boxed_slice();
         let mut offset = INES_HEADER_SIZE;
-        if is_flag_set!(self.flags, FLAGS_TRAINER) { 
+        if is_flag_set!(self.flags, FLAGS_TRAINER) {
             offset += INES_TRAINER_SIZE;
         }
         try!(self.rom_file.seek(SeekFrom::Start(offset as u64)));
@@ -98,10 +98,10 @@ impl Header {
         try!(self.rom_file.read_exact(&mut *chr_rom));
         Ok(
             GameMemory {
-                prg_rom : prg_rom, 
+                prg_rom : prg_rom,
                 prg_ram : vec![0; self.prg_ram_size].into_boxed_slice(),
                 prg_bat : vec![0; self.prg_bat_size].into_boxed_slice(),
-                chr_rom : chr_rom, 
+                chr_rom : chr_rom,
                 chr_ram : vec![0; self.chr_ram_size].into_boxed_slice(),
                 chr_bat : vec![0; self.chr_bat_size].into_boxed_slice(),
             }

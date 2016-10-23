@@ -5,7 +5,7 @@ const ATTRIBUTE_OFFSET : W<u16> = W(0x03C0);
 const NAMETABLE_OFFSET : W<u16> = W(0x2000);
 const NAMETABLE_X_BIT  : W<u16> = W(0x0400);
 const NAMETABLE_Y_BIT  : W<u16> = W(0x0800);
-const NAMETABLE_MASK   : W<u16> = W(0x0C00); 
+const NAMETABLE_MASK   : W<u16> = W(0x0C00);
 const COARSE_X_MASK    : W<u16> = W(0x001F);
 const COARSE_Y_MASK    : W<u16> = W(0x03E0);
 const FINE_Y_MASK      : W<u16> = W(0x7000);
@@ -14,7 +14,7 @@ const VERTICAL_MASK    : W<u16> = W(0x7BE0);
 const BG_OFFSET_FLAG   : W<u8>  = W(0x10);
 const INCREMENT_FLAG   : W<u8>  = W(0x40);
 
-/* Coarse is 5 upper bits of a scroll (Byte selection) 
+/* Coarse is 5 upper bits of a scroll (Byte selection)
  * Fine is 3 lower bits of a scroll (Pixel selection inside byte)
  * Nametable selection is represented by 2 bits
  * Address and temporal are 15 bit wide and composed by:
@@ -22,7 +22,7 @@ const INCREMENT_FLAG   : W<u8>  = W(0x40);
  * fine_x has its own separate register
  */
 
-pub struct Scroll { 
+pub struct Scroll {
     address     : W<u16>,
     temporal    : W<u16>,
     fine_x      : W<u8>,
@@ -44,7 +44,7 @@ impl Default for Scroll {
     }
 }
 
-impl Scroll { 
+impl Scroll {
     pub fn reset(&mut self) {
         self.write_flag = false;
     }
@@ -85,7 +85,7 @@ impl Scroll {
         self.temporal = self.temporal & !NAMETABLE_MASK |
                         W16!(value & W(0x3)) << 10;
         // bg_offset will be either 0x1000 or 0x0000 depending on the flag
-        self.bg_offset = W16!(value & BG_OFFSET_FLAG) << 8; 
+        self.bg_offset = W16!(value & BG_OFFSET_FLAG) << 8;
         self.increment = if value & INCREMENT_FLAG > W(0) {W(1)} else {W(32)};
     }
 
@@ -110,8 +110,8 @@ impl Scroll {
 
     pub fn set_scroll_x(&mut self, value: W<u8>) {
         self.fine_x = value & W(0x7);
-        let coarse_x = W16!(value) >> 3;    
-        self.temporal = self.temporal & !COARSE_X_MASK | coarse_x; 
+        let coarse_x = W16!(value) >> 3;
+        self.temporal = self.temporal & !COARSE_X_MASK | coarse_x;
     }
 
     pub fn get_scroll_x(&mut self) -> u8 {
@@ -119,14 +119,14 @@ impl Scroll {
     }
 
     pub fn set_scroll_y(&mut self, value: W<u8>) {
-        let fine_y = W16!(value & W(0x07)) << 12; 
-        let coarse_y = W16!(value & W(0xF8)) << 2; 
-        self.temporal = self.temporal & !(COARSE_Y_MASK | FINE_Y_MASK) | 
-                        fine_y | coarse_y; 
+        let fine_y = W16!(value & W(0x07)) << 12;
+        let coarse_y = W16!(value & W(0xF8)) << 2;
+        self.temporal = self.temporal & !(COARSE_Y_MASK | FINE_Y_MASK) |
+                        fine_y | coarse_y;
     }
 
     pub fn get_scroll_y(&mut self) -> W<u8> {
-        W8!((self.address & COARSE_Y_MASK) >> 2 | 
+        W8!((self.address & COARSE_Y_MASK) >> 2 |
             (self.address & FINE_Y_MASK) >> 12)
     }
 
@@ -138,17 +138,17 @@ impl Scroll {
             self.address = self.address ^ NAMETABLE_X_BIT;
         } else {
             self.address = self.address + W(1);
-        } 
+        }
     }
-    
+
     pub fn increment_y(&mut self) {
         let mut scroll_y = self.get_scroll_y() + W(1);
         // If coarse_y overflowed into the attribute table
-        if scroll_y == W(0xF0) { 
+        if scroll_y == W(0xF0) {
             // Wrap coarse_y to 0 and go to next nametable
             scroll_y = W(0);
             self.address = self.address ^ NAMETABLE_Y_BIT;
-        } 
+        }
         self.set_scroll_y(scroll_y);
     }
 
@@ -165,8 +165,8 @@ impl fmt::Debug for Scroll {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "address: {:#X}, temporal: {:#X}, \
                    fine_x: {:#X}, write_flag: {:?}, \
-                   bg_offset: {:#X}, increment: {:?}", 
-               self.address.0, self.temporal.0, self.fine_x.0, 
+                   bg_offset: {:#X}, increment: {:?}",
+               self.address.0, self.temporal.0, self.fine_x.0,
                self.write_flag, self.bg_offset.0, self.increment.0)
     }
 }

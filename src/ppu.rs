@@ -2,7 +2,6 @@ extern crate sdl2;
 
 // NES
 use utils::print_mem;
-use loadstore::LoadStore;
 use mem::{Memory as Mem};
 use enums::{MemState};
 use scroll::Scroll;
@@ -10,14 +9,7 @@ use scroll::Scroll;
 // std
 use std::fmt;
 use std::num::Wrapping as W;
-
-// sdl2
-use sdl2::pixels::Color;
-use sdl2::rect::Point;
-
-macro_rules! in_render_range {
-    ($scanline:expr) => ($scanline < 257 && $scanline >= 1)
-}
+use std::ops::{Index, IndexMut};
 
 macro_rules! render_on {
     ($selfie:expr) => (($selfie.show_sprites() || $selfie.show_background()))
@@ -38,9 +30,8 @@ macro_rules! tile_bit {
 
 macro_rules! join_bits {
     ($b1:expr, $b2:expr, $b3:expr, $b4:expr) =>
-        (((($b1 as u16) << 3) | (($b2 as u16) << 2) | (($b3 as u16) << 1) | ($b4 as u16)) & 0x00FF)  
+        (((($b1 as u16) << 3) | (($b2 as u16) << 2) | (($b3 as u16) << 1) | ($b4 as u16)) as u8)
 }
-
 /*
 // ppuctrl
 // Const values to access the controller register bits.
@@ -62,9 +53,9 @@ const COORDINATE_Y              : u8 = 0x02;
 //ppu mask
 const MASK_GRAYSCALE            : u8 = 0x01;
 // set = show bacgrkound in leftmost 8 pixels of screen
-const MASK_SHOW_BACKGROUND_LEFT : u8 = 0x02; 
+const MASK_SHOW_BACKGROUND_LEFT : u8 = 0x02;
 // set = show sprites in leftmost 8 pixels of screens
-const MASK_SHOW_SPRITES_LEFT    : u8 = 0x04; 
+const MASK_SHOW_SPRITES_LEFT    : u8 = 0x04;
 const MASK_SHOW_BACKGROUND      : u8 = 0x08;
 const MASK_SHOW_SPRITES         : u8 = 0x10;
 const MASK_EMPHASIZE_RED        : u8 = 0x20;
@@ -87,13 +78,45 @@ const PALETTE_SIZE          : usize = 0x20;
 const PALETTE_ADDRESS       : usize = 0x3f00;
 
 const PPU_ADDRESS_SPACE     : usize = 0x4000;
-const VBLANK_END            : u32 = 88740; 
+const VBLANK_END            : u32 = 88740;
 const VBLANK_END_NO_RENDER  : u32 = 27902;
 
+// The tiles are fetched from chr ram
 const ATTR_BIT              : u8 = 0x80;
 const TILE_BIT              : u16 = 0x8000;
-// The tiles are fetched from
-// chr ram
+
+// TODO: Wait for arbitrary size array default impls to remove Scanline
+// Resolution
+pub const SCANLINE_WIDTH        : usize = 256;
+pub const SCANLINE_COUNT        : usize = 240;
+
+pub struct Scanline(pub [u8; SCANLINE_WIDTH]);
+
+impl Scanline {
+    fn new() -> Scanline {
+        Scanline([0u8; SCANLINE_WIDTH])
+    }
+}
+
+impl Clone for Scanline {
+    fn clone(&self) -> Scanline {
+        Scanline(self.0)
+    }
+}
+
+impl Index<usize> for Scanline {
+    type Output = u8;
+
+    fn index(&self, index: usize) -> &u8 {
+        &self.0[index]
+    }
+}
+
+impl IndexMut<usize> for Scanline {
+    fn index_mut(&mut self, index: usize) -> &mut u8 {
+        &mut self.0[index]
+    }
+}
 
 pub struct Ppu {
     palette         : [u8; PALETTE_SIZE],
@@ -104,24 +127,18 @@ pub struct Ppu {
     ctrl            : u8,
     mask            : u8,
     status          : u8,
-    
+
     // Scanline should count up until the total numbers of scanlines
     // which is 262
     scanline        : usize,
     // while scanline width goes up to 340 and visible pixels
     // ie drawn pixels start at 0 and go up to 256 width (240 scanlines)
     scycle          : usize,
-    
     cycles          : u32,
-    fps             : u32,
 
     // oam index for rendering
-
     oam_index       : W<u16>,
-
-    // even/odd frame?
-    frame_parity    : bool,
-    
+    // for sprite rendering
     sprite_unit     : [SpriteInfo; 0x08],
 
     ltile_sreg      : u16, // 2 byte shift register
@@ -133,14 +150,17 @@ pub struct Ppu {
     next_htile      : W<u8>,
     next_attr       : W<u8>,
     next_name       : W<u8>,
+
+    frames          : u64,
+    frame_data      : Box<[Scanline]>,
 }
 
 
 impl Ppu {
     pub fn new () -> Ppu {
         Ppu {
-            palette         : [0; PALETTE_SIZE], 
-            oam             : Oam::default(), 
+            palette         : [0; PALETTE_SIZE],
+            oam             : Oam::default(),
             address         : Scroll::default(),
 
             ctrl            : 0,
@@ -149,15 +169,9 @@ impl Ppu {
 
             scanline        : 0,
             scycle          : 0,
-
             cycles          : 0,
-            fps             : 0,
 
             oam_index       : W(0),
-
-            frame_parity    : true,
-
-            // for sprite rendering
             sprite_unit     : [SpriteInfo::default(); 0x08],
 
             ltile_sreg      : 0,
@@ -169,28 +183,32 @@ impl Ppu {
             next_htile      : W(0),
             next_attr       : W(0),
             next_name       : W(0),
+
+            frames          : 0,
+            frame_data      : vec![Scanline::new(); SCANLINE_COUNT]
+                                  .into_boxed_slice(),
         }
     }
 
-    pub fn cycle(&mut self, memory: &mut Mem, 
-                 renderer: &mut sdl2::render::Renderer) {
+    pub fn cycle(&mut self, memory: &mut Mem) {
         self.ls_latches(memory);
 
         // we let the oam prepare the next sprites
         self.oam.cycle(self.cycles, self.scanline, &mut self.sprite_unit);
 
-        // if on a visible scanline 
+        // if on a visible scanline
         // and width % 8 = 1 then we fetch nametable
         // if width % 8 = 3 we fetch attr
         // width % 5 fetch tile high (chr ram)
         // width % 7 fetch tile low (chr ram)
-        if render_on!(self) && in_render_range!(self.scycle) {
+        if render_on!(self) && self.scycle < 257 && self.scycle > 0 &&
+                               self.scanline < 240 {
             // if rendering is off we only execute VBLANK_END cycles
-            self.draw(renderer); 
+            self.draw();
             self.evaluate_next_byte(memory);
         }
 
-        self.scycle +=1;
+        self.scycle += 1;
         self.cycles += 1;
 
         // if we finished the current scanline we pass to the next one
@@ -201,13 +219,11 @@ impl Ppu {
 
         if (!render_on!(self) && self.cycles == VBLANK_END_NO_RENDER) ||
             scanline_end!(self) {
-           // reset scanline values and qty of cycles
+            // reset scanline values and qty of cycles
             self.scycle = 0;
             self.scanline = 0;
             self.cycles = 0;
-            self.fps += 1;
-            self.frame_parity = !self.frame_parity;
-            renderer.present();
+            self.frames += 1;
         }
 
         // we enable the vertical blank flag on ppuctrl
@@ -221,11 +237,11 @@ impl Ppu {
         // First cycle is idle FIXME: Turbio workaround
         let scycle = self.scycle - 1;
         match scycle & 0x7 {
-            1 => { let address = self.address.get_nametable_address(); 
+            1 => { let address = self.address.get_nametable_address();
                    self.next_name = memory.chr_load(address);
             },
             3 => { let address = self.address.get_attribute_address();
-                   self.next_attr = memory.chr_load(address); 
+                   self.next_attr = memory.chr_load(address);
             },
             5 => { let index = self.next_name;
                    let address = self.address.get_tile_address(index);
@@ -237,7 +253,7 @@ impl Ppu {
                    // load the next shift registers.
                    self.set_shift_regs();
             },
-            _ => {}, 
+            _ => {},
         }
     }
 
@@ -249,19 +265,21 @@ impl Ppu {
     }
 
     /* for now we dont use mem, remove warning, memory: &mut Mem*/
-    fn draw(&mut self, renderer: &mut sdl2::render::Renderer) {
+    fn draw(&mut self) {
         let fine_x = self.address.get_scroll_x();
         let color_idx = join_bits!(attr_bit!(self.attr1_sreg, fine_x),
                                    attr_bit!(self.attr2_sreg, fine_x),
                                    tile_bit!(self.ltile_sreg, fine_x),
                                    tile_bit!(self.htile_sreg, fine_x));
-        renderer.set_draw_color(PALETTE[color_idx as usize]);
-        renderer.draw_point(Point::new((self.scycle - 1) as i32, 
-                                        self.scanline as i32)).unwrap();
+        self.frame_data[self.scanline][self.scycle - 1] = color_idx;
         self.ltile_sreg <<= 1;
         self.htile_sreg <<= 1;
         self.attr1_sreg <<= 1;
         self.attr2_sreg <<= 1;
+    }
+
+    pub fn frame_data(&self) -> (u64, &[Scanline]) {
+        (self.frames, &self.frame_data)
     }
 
     #[allow(dead_code)]
@@ -310,27 +328,21 @@ impl Ppu {
         return (self.mask & MASK_EMPHASIZE_GREEN) > 0;
     }
 
-    #[inline(always)]
-    pub fn print_fps(&mut self) {
-        println!("fps: {}", self.fps);
-        self.fps = 0;
-    }
-
     /* load store latches */
     fn ls_latches(&mut self, memory: &mut Mem){
         let (latch, status) = memory.get_latch();
         match status {
-            MemState::PpuCtrl   => { 
-                self.ctrl = latch.0; 
+            MemState::PpuCtrl   => {
+                self.ctrl = latch.0;
                 self.address.set_ppuctrl(latch);
-            }, 
+            },
             MemState::PpuMask   => { self.mask = latch.0; },
             MemState::OamAddr   => { self.oam.set_address(latch); },
             MemState::OamData   => { self.oam.store_data(latch); },
             MemState::PpuScroll => { self.address.set_scroll(latch); },
             MemState::PpuAddr   => { self.address.set_address(latch); },
-            MemState::PpuData   => { self.store(memory, latch);}, 
-            _                   => (), 
+            MemState::PpuData   => { self.store(memory, latch);},
+            _                   => (),
         }
 
         let read_status = memory.get_mem_load_status();
@@ -340,8 +352,8 @@ impl Ppu {
                 self.address.reset();
                 self.status &= 0x60;
             },
-            MemState::PpuData   => { 
-                let value = self.load(memory); 
+            MemState::PpuData   => {
+                let value = self.load(memory);
                 memory.set_latch(value);
             },
             _                   => {},
@@ -391,7 +403,7 @@ impl Default for Ppu {
 impl fmt::Debug for Ppu {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "PPU: \n OAM: {:?}, ctrl: {:?}, mask: {:?}, status: {:?}, \
-                   address: {:?}", 
+                   address: {:?}",
                self.oam, self.ctrl, self.mask, self.status, self.address)
     }
 }
@@ -409,7 +421,7 @@ impl Default for Oam {
     fn default() -> Oam {
         Oam {
             mem                 : [0; 0x100],
-            secondary_mem       : [0; 0x40],    
+            secondary_mem       : [0; 0x40],
             address             : W(0),
             mem_idx             : 0,
             secondary_idx       : 0,
@@ -537,29 +549,3 @@ impl SpriteInfo {
         }
     }
 }
-
-macro_rules! to_RGB {
-    ($r:expr, $g:expr, $b:expr) => { 
-        Color::RGB($r, $g, $b) 
-    }
-}
-
-const PALETTE : [Color; 0x40] = [
-    to_RGB!(3,3,3), to_RGB!(0,1,4), to_RGB!(0,0,6), to_RGB!(3,2,6), 
-    to_RGB!(4,0,3), to_RGB!(5,0,3), to_RGB!(5,1,0), to_RGB!(4,2,0), 
-    to_RGB!(3,2,0), to_RGB!(1,2,0), to_RGB!(0,3,1), to_RGB!(0,4,0), 
-    to_RGB!(0,2,2), to_RGB!(0,0,0), to_RGB!(0,0,0), to_RGB!(0,0,0), 
-    to_RGB!(5,5,5), to_RGB!(0,3,6), to_RGB!(0,2,7), to_RGB!(4,0,7), 
-    to_RGB!(5,0,7), to_RGB!(7,0,4), to_RGB!(7,0,0), to_RGB!(6,3,0), 
-    to_RGB!(4,3,0), to_RGB!(1,4,0), to_RGB!(0,4,0), to_RGB!(0,5,3), 
-    to_RGB!(0,4,4), to_RGB!(0,0,0), to_RGB!(0,0,0), to_RGB!(0,0,0), 
-    to_RGB!(7,7,7), to_RGB!(3,5,7), to_RGB!(4,4,7), to_RGB!(6,3,7), 
-    to_RGB!(7,0,7), to_RGB!(7,3,7), to_RGB!(7,4,0), to_RGB!(7,5,0), 
-    to_RGB!(6,6,0), to_RGB!(3,6,0), to_RGB!(0,7,0), to_RGB!(2,7,6), 
-    to_RGB!(0,7,7), to_RGB!(0,0,0), to_RGB!(0,0,0), to_RGB!(0,0,0), 
-    to_RGB!(7,7,7), to_RGB!(5,6,7), to_RGB!(6,5,7), to_RGB!(7,5,7), 
-    to_RGB!(7,4,7), to_RGB!(7,5,5), to_RGB!(7,6,4), to_RGB!(7,7,2), 
-    to_RGB!(7,7,3), to_RGB!(5,7,2), to_RGB!(4,7,3), to_RGB!(2,7,6), 
-    to_RGB!(4,6,7), to_RGB!(0,0,0), to_RGB!(0,0,0), to_RGB!(0,0,0),
-];
-

@@ -7,7 +7,7 @@ macro_rules! unset_flag {
 }
 
 macro_rules! copy_bits {
-    ($dest:expr, $src:expr, $mask:expr) => 
+    ($dest:expr, $src:expr, $mask:expr) =>
         ($dest = $dest & !$mask | $src & $mask)
 }
 
@@ -20,17 +20,17 @@ macro_rules! is_flag_set {
 }
 
 macro_rules! set_flag_cond {
-    ($flags:expr, $val:expr, $cond:expr) => 
+    ($flags:expr, $val:expr, $cond:expr) =>
         (if $cond {set_flag!($flags, $val)} else {unset_flag!($flags, $val)})
 }
 
 macro_rules! set_sign {
-    ($flags:expr, $val:expr) => 
+    ($flags:expr, $val:expr) =>
         (copy_bits!($flags, $val, FLAG_SIGN))
 }
 
 macro_rules! set_zero {
-    ($flags:expr, $val:expr) => 
+    ($flags:expr, $val:expr) =>
         (set_flag_cond!($flags, FLAG_ZERO, $val == W(0)))
 }
 

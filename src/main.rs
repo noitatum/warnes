@@ -13,19 +13,22 @@ mod header;
 mod loadstore;
 mod utils;
 mod mapper;
-mod dma;
 mod debug;
 mod enums;
-
-// Nes
-use nes::Nes;
-use debug::Debug;
+mod render;
+mod input;
+mod test;
 
 // std
 use std::env;
-
-// sdl2
-use sdl2::render::Renderer;
+// Nes
+use nes::Nes;
+// input
+use input::get_keys;
+// Time
+use time::PreciseTime;
+// Render
+use render::render_frame;
 
 const WIDTH  : u32 = 256;
 const HEIGHT : u32 = 240;
@@ -33,35 +36,47 @@ const HEIGHT : u32 = 240;
 fn main() {
     let args: Vec<String> = env::args().collect();
     if args.len() > 3 {
-       println!("Usage: rnes rom_file or rnes rom_file dbgi/dbgc"); 
-    } else {
-        let sdl_context = sdl2::init().ok().expect("Sdl context init_sdl()");
-        let video_subsystem = sdl_context.video().unwrap();
-        let window = video_subsystem.window("RNES -----", WIDTH, HEIGHT)
-                                    .position_centered()
-                                    //.resizable() fullscreen lol
-                                    .opengl()
-                                    .build()
-                                    .unwrap();
-
-        let mut renderer : Renderer = window.renderer().build().unwrap();
-        let mut event_pump = sdl_context.event_pump().unwrap(); 
-        // get rom name
-        let rom_file = &args[1];
-
-        if args.len() == 3 {
-            if args[2] == "dbgi" || args[2] == "dbg" || args[2] == "debug" {
-                let mut debug = Debug::load_rom(rom_file, false).expect("RNES main() [dbg]");
-                debug.run(&mut renderer, &mut event_pump);
-            } else if args[2] == "dbgc" { // debug cycle per cycle
-                let mut debug = Debug::load_rom(rom_file, true).expect("RNES main() [dbg cpc]");
-                debug.run(&mut renderer, &mut event_pump);
-            } else {
-                panic!("dude");
-            }
+       println!("Usage: rnes ROM_FILE [debug]");
+       return;
+    }
+    let sdl_context = sdl2::init().ok().expect("Sdl context init_sdl()");
+    let video_subsystem = sdl_context.video().unwrap();
+    let window = video_subsystem.window("RNES -----", WIDTH, HEIGHT)
+                                .position_centered().opengl()
+                                .build().unwrap();
+    let mut renderer = window.renderer().build().unwrap();
+    let mut event_pump = sdl_context.event_pump().unwrap();
+    let mut nes = Nes::new(&args[1]).expect("RNES main()");
+    if args.len() == 3 {
+        if args[2] == "debug" {
+            debug::run(&mut nes);
         } else {
-            let mut nes = Nes::load_rom(rom_file).expect("RNES main() [nodbg]");
-            nes.run(&mut renderer, &mut event_pump);
+            panic!("Invalid parameter {}", args[2]);
+        }
+    } else {
+        let mut keys = [[0u8; 8]; 2];
+        let (mut frame, mut last_frame) = (0u64, 0u64);
+        let mut time = PreciseTime::now();
+        nes.reset();
+        'nes: loop {
+            if time.to(PreciseTime::now()) > time::Duration::seconds(1) {
+                time = PreciseTime::now();
+                println!("FPS: {}", frame - last_frame);
+                last_frame = frame;
+            }
+            {
+                let (number, data) = nes.ppu().frame_data();
+                if frame != number {
+                    frame = number;
+                    render_frame(&mut renderer, data);
+                    if get_keys(&mut event_pump, &mut keys) {
+                        break 'nes;
+                    }
+                }
+            }
+            nes.set_keys(&keys);
+            // Does a full cpu cycle (includes 3 ppu cycles)
+            nes.cycle();
         }
     }
     println!("Exiting RNES.")

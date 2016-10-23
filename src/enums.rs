@@ -15,14 +15,14 @@ pub enum MemState {
     NoState,
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, PartialEq)]
 pub enum IoState {
     GamePad1,
     GamePad2,
     NoState,
 }
 
-impl fmt::Display for MemState{
+impl fmt::Display for MemState {
     fn fmt (&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{}",
             match *self {
