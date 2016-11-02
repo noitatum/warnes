@@ -1,5 +1,5 @@
 use std::io::prelude::*;
-use std::io::{Error, ErrorKind, SeekFrom};
+use std::io::{SeekFrom, Error};
 use std::fs::File;
 use std::path::Path;
 
@@ -33,12 +33,12 @@ pub struct Header {
 }
 
 impl Header {
-    pub fn load_rom<P: AsRef<Path>>(path: P) -> Result<Header, Error> {
-        let mut rom = try!(File::open(path));
+    pub fn load_rom<P: AsRef<Path>>(path: P) -> Result<Header, String> {
+        let mut rom = try_err!(File::open(path), "Couldn't open ROM file");
         let mut file_header : [u8; INES_HEADER_SIZE] = [0; INES_HEADER_SIZE];
-        try!(rom.read_exact(&mut file_header));
+        try_err!(rom.read_exact(&mut file_header), "Couldn't read ROM header");
         if &file_header[0..4] != &INES_SIGNATURE[..] {
-            return Err(Error::new(ErrorKind::Other, "Invalid iNES Header"));
+            return err!("Invalid iNES Header");
         }
         let mapper = ((file_header[6] >> 4) | (file_header[7] & 0xF0)) as u16;
         let flags = (file_header[6] & 0xF) | (file_header[7] << 4);
@@ -78,11 +78,11 @@ impl Header {
         )
     }
 
-    pub fn get_mapper(&mut self) -> Result<Box<Mapper>, Error> {
-        let mem = try!(self.get_game_memory());
+    pub fn get_mapper(&mut self) -> Result<Box<Mapper>, String> {
+        let mem = try_err!(self.get_game_memory(), "Couldn't read ROM data");
         match self.mapper {
             0 => Ok(Nrom::new_boxed(mem)),
-            _ => Err(Error::new(ErrorKind::Other, "Unrecognized Mapper"))
+            _ => err!("Unrecognized Mapper")
         }
     }
 

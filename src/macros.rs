@@ -1,3 +1,12 @@
+macro_rules! err {
+    ($($f:expr),*) => (Err(format!($($f),*)))
+}
+
+macro_rules! try_err {
+    ($e:expr, $($f:expr),*) =>
+        (match $e {Ok(a) => a, Err(_) => return err!($($f),*)})
+}
+
 macro_rules! set_flag {
     ($flags:expr, $val:expr) => ($flags = $flags | $val)
 }

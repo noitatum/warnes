@@ -27,7 +27,7 @@ pub fn render_frame(renderer: &mut Renderer, frame: &[Scanline]) {
     for (y, scanline) in frame.iter().enumerate() {
         for x in 0..SCANLINE_WIDTH {
             renderer.set_draw_color(PALETTE[scanline[x] as usize]);
-            renderer.draw_point(Point::new(x as i32, y as i32));
+            renderer.draw_point(Point::new(x as i32, y as i32)).unwrap();
         }
     }
 }

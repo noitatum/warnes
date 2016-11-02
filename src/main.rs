@@ -33,25 +33,23 @@ use render::render_frame;
 const WIDTH  : u32 = 256;
 const HEIGHT : u32 = 240;
 
-fn main() {
+fn rnes() -> Result<(), String> {
     let args: Vec<String> = env::args().collect();
-    if args.len() > 3 {
-       println!("Usage: rnes ROM_FILE [debug]");
-       return;
+    if args.len() < 2 || args.len() > 3 {
+       return err!("Invalid parameter count");
     }
-    let sdl_context = sdl2::init().ok().expect("Sdl context init_sdl()");
+    let sdl_context = sdl2::init().expect("Sdl context init_sdl()");
     let video_subsystem = sdl_context.video().unwrap();
     let window = video_subsystem.window("RNES -----", WIDTH, HEIGHT)
-                                .position_centered().opengl()
-                                .build().unwrap();
+                                .position_centered().opengl().build().unwrap();
     let mut renderer = window.renderer().build().unwrap();
     let mut event_pump = sdl_context.event_pump().unwrap();
-    let mut nes = Nes::new(&args[1]).expect("RNES main()");
+    let mut nes = try!(Nes::new(&args[1]));
     if args.len() == 3 {
         if args[2] == "debug" {
             debug::run(&mut nes);
         } else {
-            panic!("Invalid parameter {}", args[2]);
+            return err!("Invalid parameter {}", args[2]);
         }
     } else {
         let mut keys = [[0u8; 8]; 2];
@@ -79,7 +77,19 @@ fn main() {
             nes.cycle();
         }
     }
-    println!("Exiting RNES.")
+    Ok(())
 }
 
-
+fn main() {
+    match rnes() {
+        Ok(()) => {
+            println!("Exiting RNES.");
+            std::process::exit(0);
+        },
+        Err(err) => {
+            println!("Error: {}", err);
+            println!("Usage: rnes ROM_FILE [debug]");
+            std::process::exit(1);
+        },
+    };
+}

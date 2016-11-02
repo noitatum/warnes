@@ -2,7 +2,6 @@ extern crate sdl2;
 extern crate time;
 
 // STD
-use std::io::Error;
 use std::path::Path;
 
 // Custom stuff
@@ -21,7 +20,7 @@ pub struct Nes {
 }
 
 impl Nes {
-    pub fn new<P: AsRef<Path>> (rom_path: P) -> Result<Nes, Error> {
+    pub fn new<P: AsRef<Path>> (rom_path: P) -> Result<Nes, String> {
         let mapper = try!(try!(Header::load_rom(rom_path)).get_mapper());
         Ok (
             Nes {
