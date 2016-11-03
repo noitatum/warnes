@@ -30,4 +30,5 @@ pub fn render_frame(renderer: &mut Renderer, frame: &[Scanline]) {
             renderer.draw_point(Point::new(x as i32, y as i32)).unwrap();
         }
     }
+    renderer.present();
 }
