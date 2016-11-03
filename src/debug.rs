@@ -3,7 +3,6 @@ use nes::Nes;
 use cpu::Operation;
 // std
 use std::io;
-use std::io::prelude::*;
 
 macro_rules! rdbg {
     () => { "(rdbg)" }
@@ -29,7 +28,6 @@ pub fn run(nes: &mut Nes) {
     let stdin = io::stdin();
     'debug: loop {
         print!("{} ", rdbg!());
-        io::stdout().flush().ok().expect("io flush");
         input = String::new();
         stdin.read_line(&mut input).unwrap();
         let words : Vec<&str> = input.split(" ").collect();

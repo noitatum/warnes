@@ -35,7 +35,7 @@ pub struct Header {
 impl Header {
     pub fn load_rom<P: AsRef<Path>>(path: P) -> Result<Header, String> {
         let mut rom = try_err!(File::open(path), "Couldn't open ROM file");
-        let mut file_header : [u8; INES_HEADER_SIZE] = [0; INES_HEADER_SIZE];
+        let mut file_header = [0u8; INES_HEADER_SIZE];
         try_err!(rom.read_exact(&mut file_header), "Couldn't read ROM header");
         if &file_header[0..4] != &INES_SIGNATURE[..] {
             return err!("Invalid iNES Header");
@@ -82,7 +82,7 @@ impl Header {
         let mem = try_err!(self.get_game_memory(), "Couldn't read ROM data");
         match self.mapper {
             0 => Ok(Nrom::new_boxed(mem)),
-            _ => err!("Unrecognized Mapper")
+            _ => err!("Unrecognized Mapper {}", self.mapper)
         }
     }
 

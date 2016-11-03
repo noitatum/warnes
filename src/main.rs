@@ -21,6 +21,7 @@ mod test;
 
 // std
 use std::env;
+use std::error::Error;
 // Nes
 use nes::Nes;
 // input
@@ -29,21 +30,26 @@ use input::get_keys;
 use time::PreciseTime;
 // Render
 use render::render_frame;
+// SDL2
+use sdl2::render::Renderer;
+use sdl2::EventPump;
 
 const WIDTH  : u32 = 256;
 const HEIGHT : u32 = 240;
+
+fn sdl() -> Result<(Renderer<'static>, EventPump), Box<Error>> {
+    let context = try!(sdl2::init());
+    let window = try!(try!(context.video()).window("RNES -----", WIDTH, HEIGHT)
+                                           .position_centered().build());
+    Ok((try!(window.renderer().build()), try!(context.event_pump())))
+}
 
 fn rnes() -> Result<(), String> {
     let args: Vec<String> = env::args().collect();
     if args.len() < 2 || args.len() > 3 {
        return err!("Invalid parameter count");
     }
-    let sdl_context = sdl2::init().expect("Sdl context init_sdl()");
-    let video_subsystem = sdl_context.video().unwrap();
-    let window = video_subsystem.window("RNES -----", WIDTH, HEIGHT)
-                                .position_centered().opengl().build().unwrap();
-    let mut renderer = window.renderer().build().unwrap();
-    let mut event_pump = sdl_context.event_pump().unwrap();
+    let (mut renderer, mut event_pump) = try_err!(sdl(), "Couldn't init SDL");
     let mut nes = try!(Nes::new(&args[1]));
     if args.len() == 3 {
         if args[2] == "debug" {
