@@ -53,14 +53,24 @@ impl Scroll {
         // The lower 14 bits compose a full address
         let ret = self.address & W(0x3FFF);
         // FIXME: While rendering if increment_y or increment_coarse_x
-        //        are called it should increment address normally
+        // were called in the same dot we shouldn't increment them here again
         if rendering {
             self.increment_coarse_x();
             self.increment_y();
         } else {
-            self.address = self.address + self.increment;
+            self.address += self.increment;
         }
         ret
+    }
+
+    pub fn set_address(&mut self, value: W<u8>) {
+        if self.write_flag {
+            set_low_byte!(self.temporal, value);
+            self.address = self.temporal;
+        } else {
+            set_high_byte!(self.temporal, value & W(0x3F));
+        }
+        self.write_flag = !self.write_flag;
     }
 
     pub fn get_nametable_address(&self) -> W<u16> {
@@ -82,21 +92,11 @@ impl Scroll {
 
     pub fn set_ppuctrl(&mut self, value: W<u8>) {
         // Set one of the four nametables from ppuctrl
-        self.temporal = self.temporal & !NAMETABLE_MASK |
-                        W16!(value & W(0x3)) << 10;
+        self.temporal &= !NAMETABLE_MASK;
+        self.temporal |= W16!(value & W(0x3)) << 10;
         // bg_offset will be either 0x1000 or 0x0000 depending on the flag
         self.bg_offset = W16!(value & BG_OFFSET_FLAG) << 8;
         self.increment = if value & INCREMENT_FLAG > W(0) {W(1)} else {W(32)};
-    }
-
-    pub fn set_address(&mut self, value: W<u8>) {
-        if self.write_flag {
-            set_low_byte!(self.temporal, value);
-            self.address = self.temporal;
-        } else {
-            set_high_byte!(self.temporal, value & W(0x3F));
-        }
-        self.write_flag = !self.write_flag;
     }
 
     pub fn set_scroll(&mut self, value: W<u8>) {
@@ -110,19 +110,18 @@ impl Scroll {
 
     pub fn set_scroll_x(&mut self, value: W<u8>) {
         self.fine_x = value & W(0x7);
-        let coarse_x = W16!(value) >> 3;
-        self.temporal = self.temporal & !COARSE_X_MASK | coarse_x;
+        self.temporal = self.temporal & !COARSE_X_MASK | (W16!(value) >> 3);
     }
 
-    pub fn get_scroll_x(&mut self) -> u8 {
-        return self.fine_x.0;
+    pub fn get_fine_x(&mut self) -> u8 {
+        self.fine_x.0
     }
 
     pub fn set_scroll_y(&mut self, value: W<u8>) {
         let fine_y = W16!(value & W(0x07)) << 12;
         let coarse_y = W16!(value & W(0xF8)) << 2;
-        self.temporal = self.temporal & !(COARSE_Y_MASK | FINE_Y_MASK) |
-                        fine_y | coarse_y;
+        self.temporal &= !(COARSE_Y_MASK | FINE_Y_MASK);
+        self.temporal |= fine_y | coarse_y;
     }
 
     pub fn get_scroll_y(&mut self) -> W<u8> {
@@ -134,10 +133,10 @@ impl Scroll {
         // If coarse_x is about to overflow
         if self.address & COARSE_X_MASK == COARSE_X_MASK {
             // Wrap coarse_x to 0 and go to next nametable
-            self.address = self.address & !COARSE_X_MASK;
-            self.address = self.address ^ NAMETABLE_X_BIT;
+            self.address &= !COARSE_X_MASK;
+            self.address ^= NAMETABLE_X_BIT;
         } else {
-            self.address = self.address + W(1);
+            self.address += W(1);
         }
     }
 
@@ -147,7 +146,7 @@ impl Scroll {
         if scroll_y == W(0xF0) {
             // Wrap coarse_y to 0 and go to next nametable
             scroll_y = W(0);
-            self.address = self.address ^ NAMETABLE_Y_BIT;
+            self.address ^= NAMETABLE_Y_BIT;
         }
         self.set_scroll_y(scroll_y);
     }

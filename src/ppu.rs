@@ -266,7 +266,7 @@ impl Ppu {
 
     /* for now we dont use mem, remove warning, memory: &mut Mem*/
     fn draw(&mut self) {
-        let fine_x = self.address.get_scroll_x();
+        let fine_x = self.address.get_fine_x();
         let color_idx = join_bits!(attr_bit!(self.attr1_sreg, fine_x),
                                    attr_bit!(self.attr2_sreg, fine_x),
                                    tile_bit!(self.ltile_sreg, fine_x),
