@@ -3,6 +3,7 @@ use mapper::Mapper;
 use loadstore::LoadStore;
 use utils::print_mem;
 use enums::{MemState, IoState};
+use ppu::PpuReadRegs;
 // std
 use std::num::Wrapping as W;
 use std::fmt;
@@ -20,6 +21,7 @@ pub struct Memory {
     mem_store_status    : MemState,
     io_load_status      : IoState,
     io_store_status     : IoState,
+    ppu_read_regs       : PpuReadRegs,
     latch               : W<u8>,
     oamdma              : Option<W<u8>>,
     joy1                : u8,
@@ -40,6 +42,7 @@ impl Memory {
             io_load_status      : IoState::NoState,
             io_store_status     : IoState::NoState,
 
+            ppu_read_regs       : Default::default(),
             latch               : W(0),
             oamdma              : None,
 
@@ -54,20 +57,20 @@ impl Memory {
         return status;
     }
 
-    pub fn set_latch(&mut self, value: W<u8>) {
-        self.latch = value;
+    pub fn get_oamdma(&mut self) -> Option<W<u8>> {
+        let status = self.oamdma;
+        self.oamdma = None;
+        return status;
     }
 
-    pub fn get_mem_load_status(&mut self) -> MemState {
+    pub fn ppu_load_status(&mut self) -> MemState {
         let status = self.mem_load_status;
         self.mem_load_status = MemState::NoState;
         return status;
     }
 
-    pub fn get_oamdma(&mut self) -> Option<W<u8>> {
-        let status = self.oamdma;
-        self.oamdma = None;
-        return status;
+    pub fn set_ppu_read_regs(&mut self, regs: PpuReadRegs) {
+        self.ppu_read_regs = regs;
     }
 
     pub fn chr_load(&mut self, address: W<u16>) -> W<u8> {
@@ -116,14 +119,18 @@ impl LoadStore for Memory {
             self.ram[(addr & 0x7FF) as usize]
         } else if addr < 0x4000 {
             // FIXME: This is broken now for status and oamdata
-            self.mem_load_status = match addr & 0x7 {
+            let (stat, data) = match addr & 0x7 {
                 // Other registers are read only
-                2 => MemState::PpuStatus,
-                4 => MemState::OamData,
-                7 => MemState::PpuData,
-                _ => MemState::NoState,
+                2 => (MemState::PpuStatus, self.ppu_read_regs.status),
+                4 => (MemState::OamData, self.ppu_read_regs.oam),
+                7 => (MemState::PpuData, self.ppu_read_regs.data),
+                _ => (MemState::NoState, 0),
             };
-            self.latch.0
+            self.mem_load_status = stat;
+            if stat != MemState::NoState {
+                self.latch.0 = data;
+            }
+            data
         } else if addr < 0x4020 {
             /* Apu AND IO TODO*/
             //self.mem_load_status = MemState::Io;

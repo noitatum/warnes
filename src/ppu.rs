@@ -12,7 +12,21 @@ use std::num::Wrapping as W;
 use std::ops::{Index, IndexMut};
 
 macro_rules! render_on {
-    ($selfie:expr) => ($selfie.show_sprites() || $selfie.show_background())
+    ($ppu:expr) => ($ppu.show_sprites() || $ppu.show_background())
+}
+
+macro_rules! rendering {
+    ($ppu:expr) => ((render_on!($ppu)) &&
+                    ($ppu.scanline < 240 || $ppu.scanline == 261))
+}
+
+macro_rules! attr_bit {
+    ($attr:expr, $fine_x:expr) => (($attr & (ATTR_BIT - $fine_x)) >> 7)
+}
+
+macro_rules! tile_bit {
+    ($tile:expr, $fine_x:expr) =>
+        (($tile & (TILE_BIT >> $fine_x)) >> (15 - $fine_x))
 }
 
 /*
@@ -45,11 +59,10 @@ const MASK_EMPHASIZE_RED        : u8 = 0x20;
 const MASK_EMPHASIZE_GREEN      : u8 = 0x40;
 const MASK_EMPHASIZE_BLUE       : u8 = 0x80;
 
-
 // ppu status
 const STATUS_SPRITE_OVERFLOW    : u8 = 0x20;
 const STATUS_SPRITE_0_HIT       : u8 = 0x40;
-const STATUS_VERTICAL_BLANK     : u8 = 0x80; // set = in vertical blank
+const STATUS_VERTICAL_BLANK     : u8 = 0x80;
 
 const SPRITE_INFO_CLEAN_UNIMPLEMENTED_BITS  : u8 = 0xE3;
 const SPRITE_INFO_PRIORITY                  : u8 = 0x20;
@@ -67,15 +80,6 @@ const VBLANK_END_NO_RENDER  : u32 = 27902;
 // The tiles are fetched from chr ram
 const ATTR_BIT              : u8 = 0x80;
 const TILE_BIT              : u16 = 0x8000;
-
-macro_rules! attr_bit {
-    ($attr:expr, $fine_x:expr) => (($attr & (ATTR_BIT - $fine_x)) >> 7)
-}
-
-macro_rules! tile_bit {
-    ($tile:expr, $fine_x:expr) =>
-        (($tile & (TILE_BIT >> $fine_x)) >> (15 - $fine_x))
-}
 
 // TODO: Wait for arbitrary size array default impls to remove Scanline
 // Resolution
@@ -110,6 +114,13 @@ impl IndexMut<usize> for Scanline {
     }
 }
 
+#[derive(Copy, Clone, Default)]
+pub struct PpuReadRegs {
+    pub data    : u8,
+    pub oam     : u8,
+    pub status  : u8,
+}
+
 pub struct Ppu {
     palette         : [u8; PALETTE_SIZE],
     oam             : Oam,
@@ -119,6 +130,7 @@ pub struct Ppu {
     ctrl            : u8,
     mask            : u8,
     status          : u8,
+    data_buffer     : u8,
 
     // Scanline should count up until the total numbers of scanlines
     // which is 262
@@ -133,8 +145,9 @@ pub struct Ppu {
     // for sprite rendering
     sprite_unit     : [SpriteInfo; 0x08],
 
-    ltile_sreg      : u16, // 2 byte shift register
-    htile_sreg      : u16, // " "
+    // Shift registers
+    ltile_sreg      : u16,
+    htile_sreg      : u16,
     attr1_sreg      : u8,
     attr2_sreg      : u8,
 
@@ -156,8 +169,9 @@ impl Ppu {
             address         : Scroll::default(),
 
             ctrl            : 0,
-            mask            : 0x8,//0,
+            mask            : 0,
             status          : 0,
+            data_buffer     : 0,
 
             scanline        : 0,
             scycle          : 0,
@@ -207,30 +221,37 @@ impl Ppu {
             }
         }
 
+        // we enable the vertical blank flag on ppuctrl
+        if self.scycle == 1 && self.scanline == 241 {
+            set_flag!(self.status, STATUS_VERTICAL_BLANK);
+        }
+        if !render_on!(self) && self.cycles == VBLANK_END_NO_RENDER {
+
+        }
         // When render is not activated the loop is shorter
-        if (!render_on!(self) && self.cycles == VBLANK_END_NO_RENDER) ||
-            render_on!(self) && (self.scycle == 340 && self.scanline == 261) {
+        if self.scycle == 340 && self.scanline == 261 {
             // reset scanline values and qty of cycles
             // TODO: Skip a cycle on odd frames and background on
             self.scycle = 0;
             self.scanline = 0;
             self.cycles = 0;
             self.frames += 1;
-        }
-
-        // we enable the vertical blank flag on ppuctrl
-        if self.scycle == 1 && self.scanline == 240 {
-            set_flag!(self.ctrl, STATUS_VERTICAL_BLANK);
-        }
-
-        self.scycle += 1;
-        self.cycles += 1;
-
-        // if we finished the current scanline we pass to the next one
-        if self.scycle == 340 && self.scanline < 261 {
+        } else if self.scycle == 340 {
+            println!("scanline: {}", self.scanline);
+            // if we finished the current scanline we pass to the next one
             self.scanline += 1;
             self.scycle = 0;
+        } else {
+            self.scycle += 1;
+            self.cycles += 1;
         }
+
+        let read_regs = PpuReadRegs {
+                data    : self.data_buffer,
+                oam     : self.oam.load_data(),
+                status  : self.status,
+        };
+        memory.set_ppu_read_regs(read_regs);
     }
     // gets the value for the next line of 8 pixels
     // ie bytes into tile and attr registers
@@ -269,11 +290,10 @@ impl Ppu {
 
     /* for now we dont use mem, remove warning, memory: &mut Mem*/
     fn draw(&mut self) {
-        let fine_x = self.address.get_scroll_x();
-        println!("ADDRESS: {:?}", self.address);
+        let fine_x = self.address.get_fine_x();
         let palette_idx = tile_bit!(self.ltile_sreg, fine_x) |
                           tile_bit!(self.htile_sreg, fine_x) << 1;
-        let color_idx = self.palette[0] >> palette_idx;
+        let color_idx = self.palette[0] >> (palette_idx * 2);
         self.frame_data[self.scanline][self.scycle - 1] = color_idx;
         self.ltile_sreg <<= 1;
         self.htile_sreg <<= 1;
@@ -332,7 +352,7 @@ impl Ppu {
     }
 
     /* load store latches */
-    fn ls_latches(&mut self, memory: &mut Mem){
+    fn ls_latches(&mut self, memory: &mut Mem) {
         let (latch, status) = memory.get_latch();
         match status {
             MemState::PpuCtrl   => {
@@ -348,17 +368,16 @@ impl Ppu {
             _                   => (),
         }
 
-        let read_status = memory.get_mem_load_status();
+        let read_status = memory.ppu_load_status();
 
         match read_status {
             MemState::PpuStatus => {
                 self.address.reset();
-                self.status &= 0x60;
+                unset_flag!(self.status, STATUS_VERTICAL_BLANK);
             },
-            MemState::PpuData   => {
-                let value = self.load(memory);
-                memory.set_latch(value);
-            },
+            MemState::PpuData => {
+                self.data_buffer = self.load(memory).0;
+            }
             _                   => {},
         }
     }
@@ -374,8 +393,8 @@ impl Ppu {
     }
 
     fn load(&mut self, memory: &mut Mem) -> W<u8> {
-        // FIXME: Add rendering boolean to call
-        let address = self.address.get_address(false);
+        let rendering = rendering!(self);
+        let address = self.address.get_address(rendering);
         let addr = address.0 as usize;
         if addr < PALETTE_ADDRESS {
             memory.chr_load(address)
@@ -385,8 +404,8 @@ impl Ppu {
     }
 
     fn store(&mut self, memory: &mut Mem, value: W<u8>) {
-        // FIXME: Add rendering boolean to call
-        let address = self.address.get_address(false);
+        let rendering = rendering!(self);
+        let address = self.address.get_address(rendering);
         let addr = address.0 as usize;
         if addr < PALETTE_ADDRESS {
             memory.chr_store(address, value);
@@ -442,6 +461,10 @@ impl fmt::Debug for Oam {
 }
 
 impl Oam {
+
+    fn load_data(&mut self) -> u8 {
+        self.mem[self.address.0 as usize]
+    }
 
     fn store_data(&mut self, value: W<u8>) {
         self.mem[self.address.0 as usize] = value.0;

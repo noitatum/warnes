@@ -140,6 +140,8 @@ impl Execution {
         if self.cycles_left == 0 {
             // Advance the PC
             regs.PC += self.operation.inst.mode.size;
+            println!("{:04X}", regs.PC);
+            // C2E9?
             // Execute the instruction
             (self.operation.inst.function)(regs, memory, self.address);
             self.load_operation(memory, regs);
