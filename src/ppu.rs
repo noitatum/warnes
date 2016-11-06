@@ -12,26 +12,9 @@ use std::num::Wrapping as W;
 use std::ops::{Index, IndexMut};
 
 macro_rules! render_on {
-    ($selfie:expr) => (($selfie.show_sprites() || $selfie.show_background()))
+    ($selfie:expr) => ($selfie.show_sprites() || $selfie.show_background())
 }
 
-macro_rules! scanline_end {
-    ($selfie:expr) =>
-        (($selfie.scycle == 340 && $selfie.scanline == 261))
-}
-
-macro_rules! attr_bit {
-    ($attr:expr, $bit:expr) => (($attr & (ATTR_BIT - $bit)) >> 7)
-}
-
-macro_rules! tile_bit {
-    ($tile:expr, $bit:expr) => (($tile & (TILE_BIT - (($bit as u16) << 7)) >> 15))
-}
-
-macro_rules! join_bits {
-    ($b1:expr, $b2:expr, $b3:expr, $b4:expr) =>
-        (((($b1 as u16) << 3) | (($b2 as u16) << 2) | (($b3 as u16) << 1) | ($b4 as u16)) as u8)
-}
 /*
 // ppuctrl
 // Const values to access the controller register bits.
@@ -84,6 +67,15 @@ const VBLANK_END_NO_RENDER  : u32 = 27902;
 // The tiles are fetched from chr ram
 const ATTR_BIT              : u8 = 0x80;
 const TILE_BIT              : u16 = 0x8000;
+
+macro_rules! attr_bit {
+    ($attr:expr, $fine_x:expr) => (($attr & (ATTR_BIT - $fine_x)) >> 7)
+}
+
+macro_rules! tile_bit {
+    ($tile:expr, $fine_x:expr) =>
+        (($tile & (TILE_BIT >> $fine_x)) >> (15 - $fine_x))
+}
 
 // TODO: Wait for arbitrary size array default impls to remove Scanline
 // Resolution
@@ -196,30 +188,30 @@ impl Ppu {
         // we let the oam prepare the next sprites
         self.oam.cycle(self.cycles, self.scanline, &mut self.sprite_unit);
 
-        // if on a visible scanline
-        // and width % 8 = 1 then we fetch nametable
-        // if width % 8 = 3 we fetch attr
-        // width % 5 fetch tile high (chr ram)
-        // width % 7 fetch tile low (chr ram)
-        if render_on!(self) && self.scycle < 257 && self.scycle > 0 &&
-                               self.scanline < 240 {
-            // if rendering is off we only execute VBLANK_END cycles
-            self.draw();
-            self.evaluate_next_byte(memory);
+        if render_on!(self) {
+            if self.scanline < 240 {
+                if self.scycle < 257 && self.scycle > 0 {
+                    // if rendering is off we only execute VBLANK_END cycles
+                    self.draw();
+                    self.evaluate_next_byte(memory);
+                    if self.scycle == 256 {
+                        self.address.increment_y();
+                    }
+                } else if self.scycle == 257 {
+                    self.address.copy_horizontal();
+                }
+            } else if self.scanline == 261 {
+                if self.scycle > 279 && self.scycle < 305 {
+                    self.address.copy_vertical();
+                }
+            }
         }
 
-        self.scycle += 1;
-        self.cycles += 1;
-
-        // if we finished the current scanline we pass to the next one
-        if self.scycle == 340 && self.scanline < 261 {
-            self.scanline += 1;
-            self.scycle = 0;
-        }
-
+        // When render is not activated the loop is shorter
         if (!render_on!(self) && self.cycles == VBLANK_END_NO_RENDER) ||
-            scanline_end!(self) {
+            render_on!(self) && (self.scycle == 340 && self.scanline == 261) {
             // reset scanline values and qty of cycles
+            // TODO: Skip a cycle on odd frames and background on
             self.scycle = 0;
             self.scanline = 0;
             self.cycles = 0;
@@ -230,13 +222,22 @@ impl Ppu {
         if self.scycle == 1 && self.scanline == 240 {
             set_flag!(self.ctrl, STATUS_VERTICAL_BLANK);
         }
+
+        self.scycle += 1;
+        self.cycles += 1;
+
+        // if we finished the current scanline we pass to the next one
+        if self.scycle == 340 && self.scanline < 261 {
+            self.scanline += 1;
+            self.scycle = 0;
+        }
     }
     // gets the value for the next line of 8 pixels
     // ie bytes into tile and attr registers
     fn evaluate_next_byte(&mut self, memory: &mut Mem) {
-        // First cycle is idle FIXME: Turbio workaround
-        let scycle = self.scycle - 1;
-        match scycle & 0x7 {
+        // First cycle is idle
+        match (self.scycle - 1) & 0x7 {
+            // if on a visible scanline
             1 => { let address = self.address.get_nametable_address();
                    self.next_name = memory.chr_load(address);
             },
@@ -252,6 +253,8 @@ impl Ppu {
                    self.next_htile = memory.chr_load(address + W(8));
                    // load the next shift registers.
                    self.set_shift_regs();
+                   // Increment horizontal scroll
+                   self.address.increment_coarse_x();
             },
             _ => {},
         }
@@ -266,11 +269,11 @@ impl Ppu {
 
     /* for now we dont use mem, remove warning, memory: &mut Mem*/
     fn draw(&mut self) {
-        let fine_x = self.address.get_fine_x();
-        let color_idx = join_bits!(attr_bit!(self.attr1_sreg, fine_x),
-                                   attr_bit!(self.attr2_sreg, fine_x),
-                                   tile_bit!(self.ltile_sreg, fine_x),
-                                   tile_bit!(self.htile_sreg, fine_x));
+        let fine_x = self.address.get_scroll_x();
+        println!("ADDRESS: {:?}", self.address);
+        let palette_idx = tile_bit!(self.ltile_sreg, fine_x) |
+                          tile_bit!(self.htile_sreg, fine_x) << 1;
+        let color_idx = self.palette[0] >> palette_idx;
         self.frame_data[self.scanline][self.scycle - 1] = color_idx;
         self.ltile_sreg <<= 1;
         self.htile_sreg <<= 1;
