@@ -11,8 +11,9 @@ const BRANCH_FLAG_TABLE : [W<u8>; 4] =
 // Memory
 const STACK_PAGE        : W<u16> = W(0x0100 as u16);
 const PAGE_MASK         : W<u16> = W(0xFF00 as u16);
-const ADDRESS_INTERRUPT : W<u16> = W(0xFFFE as u16);
+const ADDRESS_NMI       : W<u16> = W(0xFFFA as u16);
 const ADDRESS_RESET     : W<u16> = W(0xFFFC as u16);
+const ADDRESS_INTERRUPT : W<u16> = W(0xFFFE as u16);
 
 // Flag bits
 const FLAG_CARRY        : W<u8> = W(0x01);
@@ -237,6 +238,13 @@ impl Regs {
         self.PC = memory.load_word(ADDRESS_RESET);
     }
 
+    pub fn nmi(&mut self, memory: &mut Mem) {
+        let pc = self.PC;
+        self.push_word(memory, pc);
+        self.push_flags(memory);
+        self.PC = memory.load_word(ADDRESS_NMI);
+    }
+
     fn pop(&mut self, memory: &mut Mem) -> W<u8> {
         self.SP = self.SP + W(1);
         memory.load(STACK_PAGE | W16!(self.SP))
@@ -255,6 +263,17 @@ impl Regs {
     fn pop_word(&mut self, memory: &mut Mem) -> W<u16> {
         let low = W16!(self.pop(memory));
         (W16!(self.pop(memory)) << 8) | low
+    }
+
+    fn push_flags(&mut self, memory: &mut Mem) {
+        // Two bits are set on memory when pushing flags
+        let flags = self.P | FLAG_PUSHED | FLAG_BRK;
+        self.push(memory, flags);
+    }
+
+    fn pop_flags(&mut self, memory: &mut Mem) {
+        // Ignore the two bits not present
+        self.P = self.pop(memory) & !(FLAG_PUSHED | FLAG_BRK);
     }
 
     fn add_with_carry(&mut self, value: W<u8>) {
@@ -422,18 +441,15 @@ impl Regs {
     // Implied special
 
     fn brk(&mut self, memory: &mut Mem, _: W<u16>) {
-       // Two bits are set on memory when pushing flags
-       let flags = self.P | FLAG_PUSHED | FLAG_BRK;
        let pc = self.PC + W(1);
        self.push_word(memory, pc);
-       self.push(memory, flags);
+       self.push_flags(memory);
        set_flag!(self.P, FLAG_INTERRUPT);
        self.PC = memory.load_word(ADDRESS_INTERRUPT);
     }
 
     fn rti(&mut self, memory: &mut Mem, _: W<u16>) {
-        // Ignore the two bits not present
-        self.P = self.pop(memory) & !(FLAG_PUSHED | FLAG_BRK);
+        self.pop_flags(memory);
         self.PC = self.pop_word(memory);
     }
 
@@ -444,9 +460,7 @@ impl Regs {
     // Implied
 
     fn php(&mut self, memory: &mut Mem, _: W<u16>) {
-        // Two bits are set on memory when pushing flags
-        let flags = self.P | FLAG_PUSHED | FLAG_BRK;
-        self.push(memory, flags);
+        self.push_flags(memory);
     }
 
     fn sal(&mut self, _: &mut Mem, _: W<u16>) {
@@ -459,8 +473,7 @@ impl Regs {
     }
 
     fn plp(&mut self, memory: &mut Mem, _: W<u16>) {
-        // Ignore the two bits not present
-        self.P = self.pop(memory) & !(FLAG_PUSHED | FLAG_BRK);
+        self.pop_flags(memory);
     }
 
     fn ral(&mut self, _: &mut Mem, _: W<u16>) {
