@@ -238,11 +238,11 @@ impl Regs {
         self.PC = memory.load_word(ADDRESS_RESET);
     }
 
-    pub fn nmi(&mut self, memory: &mut Mem) {
+    pub fn int(&mut self, memory: &mut Mem, address: W<u16>) {
         let pc = self.PC;
         self.push_word(memory, pc);
         self.push_flags(memory);
-        self.PC = memory.load_word(ADDRESS_NMI);
+        self.PC = memory.load_word(address);
     }
 
     fn pop(&mut self, memory: &mut Mem) -> W<u8> {
@@ -790,6 +790,7 @@ const ABX : Addressing = addressing!(abx, 3);
 const ABY : Addressing = addressing!(aby, 3);
 const ABS : Addressing = addressing!(abs, 3);
 
+static INT : &'static Instruction = &iz!(IMP, int, 7);
 static OPCODE_TABLE : &'static [Instruction; 256] = &[
     // 0x00
     iz!(IMP, brk, 7), iz!(IDX, ora, 6), iz!(IMP, nop, 2), iz!(IDX, slo, 8),
