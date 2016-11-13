@@ -21,7 +21,7 @@ pub struct Nes {
 
 impl Nes {
     pub fn new<P: AsRef<Path>> (rom_path: P) -> Result<Nes, String> {
-        let mapper = try!(try!(Header::load_rom(rom_path)).get_mapper());
+        let mapper = Header::load_rom(rom_path)?.get_mapper()?;
         Ok (
             Nes {
                 cpu : Default::default(),

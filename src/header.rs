@@ -93,9 +93,9 @@ impl Header {
         if is_flag_set!(self.flags, FLAGS_TRAINER) {
             offset += INES_TRAINER_SIZE;
         }
-        try!(self.rom_file.seek(SeekFrom::Start(offset as u64)));
-        try!(self.rom_file.read_exact(&mut *prg_rom));
-        try!(self.rom_file.read_exact(&mut *chr_rom));
+        self.rom_file.seek(SeekFrom::Start(offset as u64))?;
+        self.rom_file.read_exact(&mut *prg_rom)?;
+        self.rom_file.read_exact(&mut *chr_rom)?;
         Ok(
             GameMemory {
                 prg_rom : prg_rom,

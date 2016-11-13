@@ -38,10 +38,10 @@ const WIDTH  : u32 = 256;
 const HEIGHT : u32 = 240;
 
 fn sdl() -> Result<(Renderer<'static>, EventPump), Box<Error>> {
-    let context = try!(sdl2::init());
-    let window = try!(try!(context.video()).window("RNES -----", WIDTH, HEIGHT)
-                                           .position_centered().build());
-    Ok((try!(window.renderer().build()), try!(context.event_pump())))
+    let context = sdl2::init()?;
+    let window = context.video()?.window("RNES -----", WIDTH, HEIGHT)
+                                 .position_centered().build()?;
+    Ok((window.renderer().build()?, context.event_pump()?))
 }
 
 fn rnes() -> Result<(), String> {
@@ -50,7 +50,7 @@ fn rnes() -> Result<(), String> {
        return err!("Invalid parameter count");
     }
     let (mut renderer, mut event_pump) = try_err!(sdl(), "Couldn't init SDL");
-    let mut nes = try!(Nes::new(&args[1]));
+    let mut nes = Nes::new(&args[1])?;
     if args.len() == 3 {
         if args[2] == "debug" {
             debug::run(&mut nes);
