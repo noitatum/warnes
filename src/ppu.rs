@@ -11,15 +11,6 @@ use std::fmt;
 use std::num::Wrapping as W;
 use std::ops::{Index, IndexMut};
 
-macro_rules! render_on {
-    ($ppu:expr) => ($ppu.show_sprites() || $ppu.show_background())
-}
-
-macro_rules! rendering {
-    ($ppu:expr) => ((render_on!($ppu)) &&
-                    ($ppu.scanline < 240 || $ppu.scanline == 261))
-}
-
 macro_rules! attr_bit {
     ($attr:expr, $fine_x:expr) => (($attr & (ATTR_BIT - $fine_x)) >> 7)
 }
@@ -202,7 +193,7 @@ impl Ppu {
         // we let the oam prepare the next sprites
         self.oam.cycle(self.cycles, self.scanline, &mut self.sprite_unit);
 
-        if render_on!(self) {
+        if self.render_on() {
             if self.scanline < 240 {
                 if self.scycle < 257 && self.scycle > 0 {
                     // if rendering is off we only execute VBLANK_END cycles
@@ -221,13 +212,14 @@ impl Ppu {
             }
         }
 
-        // we enable the vertical blank flag on ppuctrl
+        // VBLANK
         if self.scycle == 1 && self.scanline == 241 {
             set_flag!(self.status, STATUS_VERTICAL_BLANK);
+        } else if self.scycle == 1 && self.scanline == 261 {
+            unset_flag!(self.status, STATUS_VERTICAL_BLANK);
         }
-        if !render_on!(self) && self.cycles == VBLANK_END_NO_RENDER {
-
-        }
+        // TODO
+        if !self.render_on() && self.cycles == VBLANK_END_NO_RENDER {}
         // When render is not activated the loop is shorter
         if self.scycle == 340 && self.scanline == 261 {
             // reset scanline values and qty of cycles
@@ -237,7 +229,6 @@ impl Ppu {
             self.cycles = 0;
             self.frames += 1;
         } else if self.scycle == 340 {
-            println!("scanline: {}", self.scanline);
             // if we finished the current scanline we pass to the next one
             self.scanline += 1;
             self.scycle = 0;
@@ -305,20 +296,26 @@ impl Ppu {
         (self.frames, &self.frame_data)
     }
 
+    fn render_on(&self) -> bool {
+        self.show_sprites() || self.show_background()
+    }
+
+    fn rendering(&self) -> bool {
+        self.render_on() && (self.scanline < 240 || self.scanline == 261)
+    }
+
+    fn show_sprites(&self) -> bool {
+        self.mask & MASK_SHOW_SPRITES > 0
+    }
+
+    fn show_background(&self) -> bool {
+        self.mask & MASK_SHOW_BACKGROUND > 0
+    }
+
     #[allow(dead_code)]
     #[inline(always)]
     pub fn grayscale(&mut self) -> bool {
         return (self.mask & MASK_GRAYSCALE) > 0;
-    }
-
-    #[inline(always)]
-    pub fn show_sprites(&mut self) -> bool {
-        return (self.mask & MASK_SHOW_SPRITES) > 0;
-    }
-
-    #[inline(always)]
-    pub fn show_background(&mut self) -> bool {
-        return (self.mask & MASK_SHOW_BACKGROUND) > 0;
     }
 
     #[allow(dead_code)]
@@ -393,7 +390,7 @@ impl Ppu {
     }
 
     fn load(&mut self, memory: &mut Mem) -> W<u8> {
-        let rendering = rendering!(self);
+        let rendering = self.rendering();
         let address = self.address.get_address(rendering);
         let addr = address.0 as usize;
         if addr < PALETTE_ADDRESS {
@@ -404,7 +401,7 @@ impl Ppu {
     }
 
     fn store(&mut self, memory: &mut Mem, value: W<u8>) {
-        let rendering = rendering!(self);
+        let rendering = self.rendering();
         let address = self.address.get_address(rendering);
         let addr = address.0 as usize;
         if addr < PALETTE_ADDRESS {
