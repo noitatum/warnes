@@ -2,7 +2,7 @@
 use mapper::Mapper;
 use loadstore::LoadStore;
 use utils::print_mem;
-use enums::{MemState, IoState};
+use enums::{MemState, IoState, Interrupt};
 use ppu::PpuReadRegs;
 // std
 use std::num::Wrapping as W;
@@ -24,6 +24,7 @@ pub struct Memory {
     ppu_read_regs       : PpuReadRegs,
     latch               : W<u8>,
     oamdma              : Option<W<u8>>,
+    interrupt           : Option<Interrupt>,
     joy1                : u8,
     joy2                : u8,
 }
@@ -33,22 +34,28 @@ impl Memory {
         Memory {
             ram                 : [0; RAM_SIZE],
             vram                : [0; VRAM_SIZE],
-
             mapper              : mapper,
-
             mem_load_status     : MemState::NoState,
             mem_store_status    : MemState::NoState,
-
             io_load_status      : IoState::NoState,
             io_store_status     : IoState::NoState,
-
             ppu_read_regs       : Default::default(),
             latch               : W(0),
             oamdma              : None,
-
+            interrupt           : None,
             joy1                : 0,
             joy2                : 0,
         }
+    }
+
+    pub fn set_interrupt(&mut self, interrupt: Interrupt) {
+        self.interrupt = Some(interrupt);
+    }
+
+    pub fn get_interrupt(&mut self) -> Option<Interrupt> {
+        let interrupt = self.interrupt;
+        self.interrupt = None;
+        return interrupt;
     }
 
     pub fn get_latch(&mut self) -> (W<u8>, MemState) {
@@ -260,6 +267,8 @@ impl fmt::Debug for Memory {
         print_mem(&mut output, &self.ram[..]);
         output.push_str("VRAM:\n");
         print_mem(&mut output, &self.vram[..]);
-        write!(f, "{{ latch: {:#x}, oamdma: {:?}, mem_load_status: {}, mem_store_status: {}}}, \n {}", self.latch.0, self.oamdma, self.mem_load_status, self.mem_store_status, output)
+        write!(f, "{{ latch: {:#x}, oamdma: {:?}, mem_load_status: {:?}, mem_store_status: {:?}}}, \n {}",
+               self.latch.0, self.oamdma, self.mem_load_status,
+               self.mem_store_status, output)
     }
 }

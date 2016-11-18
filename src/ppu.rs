@@ -3,7 +3,7 @@ extern crate sdl2;
 // NES
 use utils::print_mem;
 use mem::{Memory as Mem};
-use enums::{MemState};
+use enums::{MemState, Interrupt};
 use scroll::Scroll;
 
 // std
@@ -32,7 +32,7 @@ const CTRL_BACKGROUND_PATTERN   : u8 = 0x10;
 const CTRL_SPRITE_SIZE          : u8 = 0x20;
 // trigger warning
 const CTRL_PPU_SLAVE_MASTER     : u8 = 0x40;
-const CTRL_GEN_NMI              : u8 = 0x80;
+const CTRL_NMI                  : u8 = 0x80;
 
 // ppu scroll coordinates
 const COORDINATE_X              : u8 = 0x01;
@@ -53,7 +53,7 @@ const MASK_EMPHASIZE_BLUE       : u8 = 0x80;
 // ppu status
 const STATUS_SPRITE_OVERFLOW    : u8 = 0x20;
 const STATUS_SPRITE_0_HIT       : u8 = 0x40;
-const STATUS_VERTICAL_BLANK     : u8 = 0x80;
+const STATUS_VBLANK     : u8 = 0x80;
 
 const SPRITE_INFO_CLEAN_UNIMPLEMENTED_BITS  : u8 = 0xE3;
 const SPRITE_INFO_PRIORITY                  : u8 = 0x20;
@@ -214,9 +214,12 @@ impl Ppu {
 
         // VBLANK
         if self.scycle == 1 && self.scanline == 241 {
-            set_flag!(self.status, STATUS_VERTICAL_BLANK);
+            set_flag!(self.status, STATUS_VBLANK);
+            if is_flag_set!(self.ctrl, CTRL_NMI) {
+                memory.set_interrupt(Interrupt::NMI);
+            }
         } else if self.scycle == 1 && self.scanline == 261 {
-            unset_flag!(self.status, STATUS_VERTICAL_BLANK);
+            unset_flag!(self.status, STATUS_VBLANK);
         }
         // TODO
         if !self.render_on() && self.cycles == VBLANK_END_NO_RENDER {}
@@ -353,6 +356,11 @@ impl Ppu {
         let (latch, status) = memory.get_latch();
         match status {
             MemState::PpuCtrl   => {
+                if !is_flag_set!(self.ctrl, CTRL_NMI) &&
+                    is_flag_set!(latch.0, CTRL_NMI) &&
+                    is_flag_set!(self.status, STATUS_VBLANK) {
+                    memory.set_interrupt(Interrupt::NMI);
+                }
                 self.ctrl = latch.0;
                 self.address.set_ppuctrl(latch);
             },
@@ -370,7 +378,7 @@ impl Ppu {
         match read_status {
             MemState::PpuStatus => {
                 self.address.reset();
-                unset_flag!(self.status, STATUS_VERTICAL_BLANK);
+                unset_flag!(self.status, STATUS_VBLANK);
             },
             MemState::PpuData => {
                 self.data_buffer = self.load(memory).0;

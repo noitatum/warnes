@@ -1,5 +1,6 @@
 use std::fmt;
 use mem::Memory as Mem;
+use enums::Interrupt;
 use loadstore::LoadStore;
 use std::num::Wrapping as W;
 
@@ -13,7 +14,7 @@ const STACK_PAGE        : W<u16> = W(0x0100 as u16);
 const PAGE_MASK         : W<u16> = W(0xFF00 as u16);
 const ADDRESS_NMI       : W<u16> = W(0xFFFA as u16);
 const ADDRESS_RESET     : W<u16> = W(0xFFFC as u16);
-const ADDRESS_INTERRUPT : W<u16> = W(0xFFFE as u16);
+const ADDRESS_IRQ       : W<u16> = W(0xFFFE as u16);
 
 // Flag bits
 const FLAG_CARRY        : W<u8> = W(0x01);
@@ -122,7 +123,11 @@ pub struct Execution {
 impl Execution {
 
     pub fn load_operation(&mut self, memory: &mut Mem, regs: &mut Regs) {
-        self.operation = Operation::from_address(memory, regs.PC);
+        self.operation = if let Some(interrupt) = memory.get_interrupt() {
+            Operation::from_interrupt(memory, interrupt)
+        } else {
+            Operation::from_address(memory, regs.PC)
+        };
         // Get address and extra cycles from mode
         let operand = self.operation.operand;
         let mode = &self.operation.inst.mode;
@@ -140,8 +145,6 @@ impl Execution {
         if self.cycles_left == 0 {
             // Advance the PC
             regs.PC += self.operation.inst.mode.size;
-            println!("{:04X}", regs.PC);
-            // C2E9?
             // Execute the instruction
             (self.operation.inst.function)(regs, memory, self.address);
             self.load_operation(memory, regs);
@@ -183,6 +186,18 @@ impl Operation {
             inst    : inst,
             opcode  : opcode,
             operand : operand,
+        }
+    }
+
+    pub fn from_interrupt(memory: &mut Mem, interrupt: Interrupt) -> Operation {
+        let address = match interrupt {
+            Interrupt::NMI => ADDRESS_NMI,
+            Interrupt::IRQ => ADDRESS_IRQ,
+        };
+        Operation {
+            inst : INT,
+            opcode : 0,
+            operand : address,
         }
     }
 }
@@ -447,7 +462,7 @@ impl Regs {
        self.push_word(memory, pc);
        self.push_flags(memory);
        set_flag!(self.P, FLAG_INTERRUPT);
-       self.PC = memory.load_word(ADDRESS_INTERRUPT);
+       self.PC = memory.load_word(ADDRESS_IRQ);
     }
 
     fn rti(&mut self, memory: &mut Mem, _: W<u16>) {
