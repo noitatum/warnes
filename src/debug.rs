@@ -48,6 +48,9 @@ pub fn run(nes: &mut Nes) {
                 // TODO: nes.run();
                 break 'debug;
             },
+            "u"|"until" => {
+                until(nes);
+            }
             "p" => {
                 if words.len() == 1 {
                     println!("No register or memory position given");
@@ -74,21 +77,30 @@ pub fn run(nes: &mut Nes) {
 }
 
 fn step_cycle(nes: &mut Nes) {
-    print_current_operation(nes);
     nes.cycle();
+    print_current_operation(nes);
 }
 
 pub fn step(nes: &mut Nes) {
-    print_current_operation(nes);
     let next = nes.cpu().instruction_count() + 1;
     while nes.cpu().instruction_count() != next {
         nes.cycle()
     }
+    print_current_operation(nes);
 }
 
 fn next(nes: &mut Nes) {
     // TODO
     step(nes);
+    print_current_operation(nes);
+}
+
+fn until(nes: &mut Nes) {
+    let pc = nes.cpu().registers().PC;
+    while nes.cpu().registers().PC <= pc {
+        nes.cycle();
+    }
+    print_current_operation(nes);
 }
 
 fn print_current_operation(nes: &Nes) {
