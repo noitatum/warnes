@@ -79,8 +79,15 @@ pub fn step(nes: &mut Nes) {
 }
 
 fn next(nes: &mut Nes) {
-    // TODO
-    nes.step();
+    let instruction = nes.cpu().execution().operation.inst;
+    if instruction.name == "jsr" {
+        let pc = nes.cpu().registers().PC + instruction.mode.size;
+        while nes.cpu().registers().PC != pc {
+            nes.step();
+        }
+    } else {
+        nes.step();
+    }
     print_current_operation(nes);
 }
 
