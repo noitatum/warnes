@@ -43,6 +43,14 @@ impl Nes {
         self.ppu.cycle(&mut self.mem);
     }
 
+    // This function steps a single cpu instruction
+    pub fn step(&mut self) {
+        let next = self.cpu.instruction_count() + 1;
+        while self.cpu.instruction_count() != next {
+            self.cycle();
+        }
+    }
+
     pub fn set_keys(&mut self, keys: &[[u8; 8]; 2]){
         self.keys = *keys;
     }

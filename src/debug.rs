@@ -74,23 +74,20 @@ fn step_cycle(nes: &mut Nes) {
 }
 
 pub fn step(nes: &mut Nes) {
-    let next = nes.cpu().instruction_count() + 1;
-    while nes.cpu().instruction_count() != next {
-        nes.cycle()
-    }
+    nes.step();
     print_current_operation(nes);
 }
 
 fn next(nes: &mut Nes) {
     // TODO
-    step(nes);
+    nes.step();
     print_current_operation(nes);
 }
 
 fn until(nes: &mut Nes) {
     let pc = nes.cpu().registers().PC;
     while nes.cpu().registers().PC <= pc {
-        nes.cycle();
+        nes.step();
     }
     print_current_operation(nes);
 }

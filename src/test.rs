@@ -1,6 +1,5 @@
 // nes
 use nes::Nes;
-use debug::step;
 
 // std
 use std::io::BufReader;
@@ -32,6 +31,6 @@ pub fn test_cpu() {
         assert_equal!(regs.SP.0, r[4], "SP {:02X} != {:02X}");
         assert_equal!((nes.cpu().cycle_count() * 3) % 341,
                       data[6].parse::<u64>().unwrap(), "Cycles {} != {}");
-        step(&mut nes);
+        nes.step();
     }
 }
