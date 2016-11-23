@@ -5,31 +5,22 @@ use cpu::Operation;
 use std::io;
 use std::io::Write;
 
-// Macro to print undefined commands. It removes the newline.
-macro_rules! undefinedc {
-    ($input:expr) => (
-        println!("Undefined command: {}. Try 'help'", $input.trim());
-    );
-}
-
-macro_rules! rnl {
-    ($input:expr) => ($input[0..$input.len()-1]);
-}
-
 const DEBUG_LIST_SIZE   : u32 = 5;
 
 pub fn run(nes: &mut Nes) {
+    let mut command : Vec<String> = vec![String::from("")];
     nes.reset();
     'debug: loop {
         let mut input = String::new();
         print!("(rdbg) ");
         io::stdout().flush().unwrap();
         io::stdin().read_line(&mut input).unwrap();
-        let words : Vec<&str> = input.split(" ").collect();
-        if words.len() == 0 {
-            continue;
+        let words : Vec<String> = input.split_whitespace()
+                                       .map(|s| s.to_string()).collect();
+        if words.len() > 0 {
+            command = words
         }
-        match words[0].trim() {
+        match command[0].as_ref() {
             // "l"|"list" => print_list(nes, DEBUG_LIST_SIZE),
             // Over function calls
             "n"|"next" => {
@@ -52,26 +43,27 @@ pub fn run(nes: &mut Nes) {
                 until(nes);
             }
             "p" => {
-                if words.len() == 1 {
+                if command.len() == 1 {
                     println!("No register or memory position given");
                 } else {
-                    print_reg(nes, words[1]);
+                    print_reg(nes, &command[1]);
                 }
             },
             "pb" => {
                 println!("print");
-                if words.len() == 1 {
+                if command.len() == 1 {
                     println!("No register or memory position given");
                 } else {
-                    print_reg_binary(nes, words[1]);
+                    print_reg_binary(nes, &command[1]);
                 }
             },
             "b" => println!("breakpoint"),
             "q"|"quit" => {
                 break 'debug;
             },
-            "help"  => help(),
-            _       => undefinedc!(words[0]),
+            "help" => help(),
+            "" => {},
+            _ => println!("Undefined command: {}. Try 'help'", command[0]),
         }
     }
 }
