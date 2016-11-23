@@ -96,7 +96,7 @@ impl Scroll {
         self.temporal |= W16!(value & W(0x3)) << 10;
         // bg_offset will be either 0x1000 or 0x0000 depending on the flag
         self.bg_offset = W16!(value & BG_OFFSET_FLAG) << 8;
-        self.increment = if value & INCREMENT_FLAG > W(0) {W(1)} else {W(32)};
+        self.increment = if value & INCREMENT_FLAG > W(0) {W(32)} else {W(1)};
     }
 
     pub fn set_scroll(&mut self, value: W<u8>) {
