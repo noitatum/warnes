@@ -56,11 +56,11 @@ macro_rules! get_bit {
 }
 
 macro_rules! set_low_byte {
-    ($val:expr, $byte:expr) => ($val & W(0xFF00) | W16!($byte))
+    ($val:expr, $byte:expr) => ($val = $val & W(0xFF00) | W16!(W8!($byte)))
 }
 
 macro_rules! set_high_byte {
-    ($val:expr, $byte:expr) => ($val & W(0xFF) | W16!($byte) << 8)
+    ($val:expr, $byte:expr) => ($val = $val & W(0xFF) | W16!($byte) << 8)
 }
 
 macro_rules! set_sign_zero {
