@@ -12,21 +12,14 @@ use std::num::Wrapping as W;
 use std::ops::{Index, IndexMut};
 
 macro_rules! attr_bit {
-    ($attr:expr, $fine_x:expr) => (($attr & (ATTR_BIT - $fine_x)) >> 7)
+    ($attr:expr, $fine_x:expr) => (($attr & (0x80 - $fine_x)) >> 7)
 }
 
 macro_rules! tile_bit {
     ($tile:expr, $fine_x:expr) =>
-        (($tile & (TILE_BIT >> $fine_x)) >> (15 - $fine_x))
+        (($tile & (0x8000 >> $fine_x)) >> (15 - $fine_x))
 }
 
-/*
-// ppuctrl
-// Const values to access the controller register bits.
-const CTRL_BASE_TABLE           : u8 = 0x03;
- 0 = 0x2000 e incrementa de a 0x400,
- 1 = 0x2400 etc. */
-const CTRL_INCREMENT            : u8 = 0x04;
 const CTRL_SPRITE_PATTERN       : u8 = 0x08;
 const CTRL_BACKGROUND_PATTERN   : u8 = 0x10;
 const CTRL_SPRITE_SIZE          : u8 = 0x20;
@@ -34,11 +27,6 @@ const CTRL_SPRITE_SIZE          : u8 = 0x20;
 const CTRL_PPU_SLAVE_MASTER     : u8 = 0x40;
 const CTRL_NMI                  : u8 = 0x80;
 
-// ppu scroll coordinates
-const COORDINATE_X              : u8 = 0x01;
-const COORDINATE_Y              : u8 = 0x02;
-
-//ppu mask
 const MASK_GRAYSCALE            : u8 = 0x01;
 // set = show bacgrkound in leftmost 8 pixels of screen
 const MASK_SHOW_BACKGROUND_LEFT : u8 = 0x02;
@@ -50,16 +38,14 @@ const MASK_EMPHASIZE_RED        : u8 = 0x20;
 const MASK_EMPHASIZE_GREEN      : u8 = 0x40;
 const MASK_EMPHASIZE_BLUE       : u8 = 0x80;
 
-// ppu status
 const STATUS_SPRITE_OVERFLOW    : u8 = 0x20;
 const STATUS_SPRITE_0_HIT       : u8 = 0x40;
-const STATUS_VBLANK     : u8 = 0x80;
+const STATUS_VBLANK             : u8 = 0x80;
 
-const SPRITE_INFO_CLEAN_UNIMPLEMENTED_BITS  : u8 = 0xE3;
-const SPRITE_INFO_PRIORITY                  : u8 = 0x20;
-const SPRITE_INFO_PALETTE                   : u8 = 0x3;
-const SPRITE_INFO_HORIZONTALLY              : u8 = 0x40;
-const SPRITE_INFO_VERTICALLY                : u8 = 0x80;
+const SPRITE_INFO_PRIORITY      : u8 = 0x20;
+const SPRITE_INFO_PALETTE       : u8 = 0x3;
+const SPRITE_INFO_HORIZONTALLY  : u8 = 0x40;
+const SPRITE_INFO_VERTICALLY    : u8 = 0x80;
 
 const PALETTE_SIZE          : usize = 0x20;
 const PALETTE_ADDRESS       : usize = 0x3f00;
@@ -68,15 +54,11 @@ const PPU_ADDRESS_SPACE     : usize = 0x4000;
 const VBLANK_END            : u32 = 88740;
 const VBLANK_END_NO_RENDER  : u32 = 27902;
 
-// The tiles are fetched from chr ram
-const ATTR_BIT              : u8 = 0x80;
-const TILE_BIT              : u16 = 0x8000;
-
-// TODO: Wait for arbitrary size array default impls to remove Scanline
 // Resolution
 pub const SCANLINE_WIDTH        : usize = 256;
 pub const SCANLINE_COUNT        : usize = 240;
 
+// TODO: Wait for arbitrary size array default impls to remove Scanline
 pub struct Scanline(pub [u8; SCANLINE_WIDTH]);
 
 impl Scanline {
