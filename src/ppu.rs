@@ -403,7 +403,7 @@ impl Ppu {
         if addr < PALETTE_ADDRESS {
             memory.chr_store(address, value);
         } else {
-            self.palette[self.palette_mirror(addr)] = value.0;
+            self.palette[self.palette_mirror(addr)] = value.0 & 0x3F;
         }
     }
 }
