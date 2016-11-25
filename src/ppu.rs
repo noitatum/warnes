@@ -176,20 +176,25 @@ impl Ppu {
         self.oam.cycle(self.cycles, self.scanline, &mut self.sprite_unit);
 
         if self.render_on() {
-            if self.scanline < 240 {
-                if self.scycle < 257 && self.scycle > 0 {
-                    // if rendering is off we only execute VBLANK_END cycles
-                    self.draw();
+            match (self.scycle, self.scanline) {
+                // Idle scanlines
+                (_, 240...260) => {},
+                (280...304, 261) => {
+                    self.address.copy_vertical();
+                },
+                (257, _) => {
+                    self.address.copy_horizontal();
+                }
+                // Idle cycles
+                (0, _) | (258...320, _) | (337...340, _) => {},
+                _ => {
+                    if self.scycle < 257 && self.scanline < 240 {
+                        self.draw();
+                    }
                     self.evaluate_next_byte(memory);
                     if self.scycle == 256 {
                         self.address.increment_y();
                     }
-                } else if self.scycle == 257 {
-                    self.address.copy_horizontal();
-                }
-            } else if self.scanline == 261 {
-                if self.scycle > 279 && self.scycle < 305 {
-                    self.address.copy_vertical();
                 }
             }
         }
