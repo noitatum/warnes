@@ -236,6 +236,9 @@ impl Ppu {
     // gets the value for the next line of 8 pixels
     // ie bytes into tile and attr registers
     fn evaluate_next_byte(&mut self, memory: &mut Mem) {
+        self.ltile_sreg <<= 1;
+        self.htile_sreg <<= 1;
+        self.attr_sreg <<= 2;
         // First cycle is idle
         match (self.scycle - 1) & 0x7 {
             // if on a visible scanline
@@ -278,9 +281,6 @@ impl Ppu {
         let palette_id = attr_bit!(self.attr_sreg, fine_x) as usize;
         let color_id = self.palette[palette_id * 4 + index];
         self.frame_data[self.scanline][self.scycle - 1] = color_id;
-        self.ltile_sreg <<= 1;
-        self.htile_sreg <<= 1;
-        self.attr_sreg <<= 2;
     }
 
     pub fn frame_data(&self) -> (u64, &[Scanline]) {
