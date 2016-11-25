@@ -97,6 +97,12 @@ impl Scroll {
         self.bg_offset | W16!(index) << 4 | (self.address & FINE_Y_MASK) >> 12
     }
 
+    pub fn get_tile_attribute(&self, attribute: W<u8>) -> W<u8> {
+        let index = (self.address & W(0x0100)) >> 8 |
+                    (self.address & W(0x0008)) >> 2;
+        attribute >> index.0 as usize & W(0x3)
+    }
+
     pub fn set_ppuctrl(&mut self, value: W<u8>) {
         // Set one of the four nametables from ppuctrl
         self.temporal &= !NAMETABLE_MASK;

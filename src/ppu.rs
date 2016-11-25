@@ -12,7 +12,8 @@ use std::num::Wrapping as W;
 use std::ops::{Index, IndexMut};
 
 macro_rules! attr_bit {
-    ($attr:expr, $fine_x:expr) => (($attr & (0x80 - $fine_x)) >> 7)
+    ($tile:expr, $fine_x:expr) =>
+        (($tile & (0xC0000000 >> ($fine_x * 2))) >> ((15 - $fine_x) * 2))
 }
 
 macro_rules! tile_bit {
@@ -121,8 +122,7 @@ pub struct Ppu {
     // Shift registers
     ltile_sreg      : u16,
     htile_sreg      : u16,
-    attr1_sreg      : u8,
-    attr2_sreg      : u8,
+    attr_sreg       : u32,
 
     next_ltile      : W<u8>,
     next_htile      : W<u8>,
@@ -155,8 +155,7 @@ impl Ppu {
 
             ltile_sreg      : 0,
             htile_sreg      : 0,
-            attr1_sreg      : 0,
-            attr2_sreg      : 0,
+            attr_sreg       : 0,
 
             next_ltile      : W(0),
             next_htile      : W(0),
@@ -263,23 +262,25 @@ impl Ppu {
     }
 
     fn set_shift_regs(&mut self) {
-        self.ltile_sreg = (self.ltile_sreg & 0xFF00) | self.next_ltile.0 as u16;
-        self.htile_sreg = (self.htile_sreg & 0xFF00) | self.next_htile.0 as u16;
-        self.attr1_sreg = self.next_attr.0;
-        self.attr2_sreg = self.next_attr.0;
+        self.ltile_sreg = self.ltile_sreg & 0xFF00 | self.next_ltile.0 as u16;
+        self.htile_sreg = self.htile_sreg & 0xFF00 | self.next_htile.0 as u16;
+        let next = self.next_attr;
+        let attr = self.address.get_tile_attribute(next).0 as u32;
+        // attr is a 2 bit palette index, broadcast that into 16 bits
+        self.attr_sreg = self.attr_sreg & 0xFFFF0000 | (attr * 0x5555);
     }
 
     /* for now we dont use mem, remove warning, memory: &mut Mem*/
     fn draw(&mut self) {
         let fine_x = self.address.get_fine_x();
-        let palette_idx = tile_bit!(self.ltile_sreg, fine_x) |
-                          tile_bit!(self.htile_sreg, fine_x) << 1;
-        let color_idx = self.palette[0] >> (palette_idx * 2);
-        self.frame_data[self.scanline][self.scycle - 1] = color_idx;
+        let index = (tile_bit!(self.ltile_sreg, fine_x) |
+                     tile_bit!(self.htile_sreg, fine_x) << 1) as usize;
+        let palette_id = attr_bit!(self.attr_sreg, fine_x) as usize;
+        let color_id = self.palette[palette_id * 4 + index];
+        self.frame_data[self.scanline][self.scycle - 1] = color_id;
         self.ltile_sreg <<= 1;
         self.htile_sreg <<= 1;
-        self.attr1_sreg <<= 1;
-        self.attr2_sreg <<= 1;
+        self.attr_sreg <<= 2;
     }
 
     pub fn frame_data(&self) -> (u64, &[Scanline]) {
