@@ -55,3 +55,46 @@ impl Mapper for Nrom {
 
     }
 }
+
+pub struct Cnrom {
+    mem: GameMemory,
+    bank: u8,
+}
+
+impl Cnrom {
+    pub fn new_boxed(mem: GameMemory) -> Box<Mapper> {
+        Box::new(Cnrom {mem: mem, bank: 0})
+    }
+}
+
+impl Mapper for Cnrom {
+    fn chr_load(&mut self, vram: &mut[u8], address: W<u16>) -> u8 {
+        let addr = address.0 as usize;
+        if addr >= 0x2000 {
+            vram[addr & (VRAM_SIZE - 1)]
+        } else {
+            let rom_addr = self.bank as usize * 0x2000 + addr;
+            self.mem.chr_rom[rom_addr & (self.mem.chr_rom.len() - 1)]
+        }
+    }
+
+    fn chr_store(&mut self, vram: &mut[u8], address: W<u16>, value: u8) {
+        let addr = address.0 as usize;
+        if addr >= 0x2000 {
+            vram[addr & (VRAM_SIZE - 1)] = value;
+        }
+    }
+
+    fn prg_load(&mut self, address: W<u16>) -> u8 {
+        let addr = address.0 as usize;
+        // Emulate Mirroring
+        let mask = self.mem.prg_rom.len() - 1;
+        self.mem.prg_rom[addr & mask]
+    }
+
+    fn prg_store(&mut self, address: W<u16>, value: u8) {
+        if address >= W(0x8000) {
+            self.bank = value & 0x3;
+        }
+    }
+}

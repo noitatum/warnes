@@ -82,6 +82,7 @@ impl Header {
         let mem = try_err!(self.get_game_memory(), "Couldn't read ROM data");
         match self.mapper {
             0 => Ok(Nrom::new_boxed(mem)),
+            3 => Ok(Cnrom::new_boxed(mem)),
             _ => err!("Unrecognized Mapper {}", self.mapper)
         }
     }
