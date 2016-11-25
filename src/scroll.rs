@@ -44,6 +44,13 @@ impl Default for Scroll {
     }
 }
 
+pub fn set_scroll_y(address: &mut W<u16>, value: W<u8>) {
+    let fine_y = W16!(value & W(0x07)) << 12;
+    let coarse_y = W16!(value & W(0xF8)) << 2;
+    *address &= !(COARSE_Y_MASK | FINE_Y_MASK);
+    *address |= fine_y | coarse_y;
+}
+
 impl Scroll {
     pub fn reset(&mut self) {
         self.write_flag = false;
@@ -101,7 +108,7 @@ impl Scroll {
 
     pub fn set_scroll(&mut self, value: W<u8>) {
         if self.write_flag {
-            self.set_scroll_y(value);
+            set_scroll_y(&mut self.temporal, value);
         } else {
             self.set_scroll_x(value);
         }
@@ -115,13 +122,6 @@ impl Scroll {
 
     pub fn get_fine_x(&mut self) -> u8 {
         self.fine_x.0
-    }
-
-    pub fn set_scroll_y(&mut self, value: W<u8>) {
-        let fine_y = W16!(value & W(0x07)) << 12;
-        let coarse_y = W16!(value & W(0xF8)) << 2;
-        self.temporal &= !(COARSE_Y_MASK | FINE_Y_MASK);
-        self.temporal |= fine_y | coarse_y;
     }
 
     pub fn get_scroll_y(&mut self) -> W<u8> {
@@ -148,7 +148,7 @@ impl Scroll {
             scroll_y = W(0);
             self.address ^= NAMETABLE_Y_BIT;
         }
-        self.set_scroll_y(scroll_y);
+        set_scroll_y(&mut self.address, scroll_y);
     }
 
     pub fn copy_horizontal(&mut self) {
