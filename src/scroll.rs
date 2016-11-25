@@ -98,8 +98,8 @@ impl Scroll {
     }
 
     pub fn get_tile_attribute(&self, attribute: W<u8>) -> W<u8> {
-        let index = (self.address & W(0x0100)) >> 6 |
-                    (self.address & W(0x0008)) >> 2;
+        let index = (self.address & W(0x0040)) >> 4 |
+                    (self.address & W(0x0002));
         attribute >> index.0 as usize & W(0x3)
     }
 
