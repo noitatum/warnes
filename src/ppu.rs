@@ -303,42 +303,6 @@ impl Ppu {
         self.mask & MASK_SHOW_BACKGROUND > 0
     }
 
-    #[allow(dead_code)]
-    #[inline(always)]
-    pub fn grayscale(&mut self) -> bool {
-        return (self.mask & MASK_GRAYSCALE) > 0;
-    }
-
-    #[allow(dead_code)]
-    #[inline(always)]
-    pub fn show_sprites_left(&mut self) -> bool {
-        return (self.mask & MASK_SHOW_SPRITES_LEFT) > 0;
-    }
-
-    #[allow(dead_code)]
-    #[inline(always)]
-    pub fn show_background_left(&mut self) -> bool {
-        return (self.mask & MASK_SHOW_BACKGROUND_LEFT) > 0;
-    }
-
-    #[allow(dead_code)]
-    #[inline(always)]
-    pub fn emphasize_red(&mut self) -> bool {
-        return (self.mask & MASK_EMPHASIZE_RED) > 0;
-    }
-
-    #[allow(dead_code)]
-    #[inline(always)]
-    pub fn emphasize_blue(&mut self) -> bool {
-        return (self.mask & MASK_EMPHASIZE_BLUE) > 0;
-    }
-
-    #[allow(dead_code)]
-    #[inline(always)]
-    pub fn emphasize_green(&mut self) -> bool {
-        return (self.mask & MASK_EMPHASIZE_GREEN) > 0;
-    }
-
     /* load store latches */
     fn ls_latches(&mut self, memory: &mut Mem) {
         let (latch, status) = memory.get_latch();
