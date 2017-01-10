@@ -784,13 +784,13 @@ macro_rules! instruction {
 
 // Has zero cycle penalty
 macro_rules! iz {
-    ($addr:ident, $oper:ident, $cycles:expr) =>
+    ($addr:expr, $oper:ident, $cycles:expr) =>
         (instruction!($addr, $oper, $cycles, false))
 }
 
 // Has extra cycle penalty
 macro_rules! ix {
-    ($addr:ident, $oper:ident, $cycles:expr) =>
+    ($addr:expr, $oper:ident, $cycles:expr) =>
         (instruction!($addr, $oper, $cycles, true))
 }
 
@@ -807,8 +807,7 @@ const ABX : Addressing = addressing!(abx, 3);
 const ABY : Addressing = addressing!(aby, 3);
 const ABS : Addressing = addressing!(abs, 3);
 
-const ABN : Addressing = addressing!(abs, 0);
-static INT : &'static Instruction = &iz!(ABN, int, 7);
+static INT : &'static Instruction = &iz!(addressing!(abs, 0), int, 7);
 static OPCODE_TABLE : &'static [Instruction; 256] = &[
     // 0x00
     iz!(IMP, brk, 7), iz!(IDX, ora, 6), iz!(IMP, nop, 2), iz!(IDX, slo, 8),
