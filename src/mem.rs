@@ -20,13 +20,12 @@ pub struct Memory {
     mem_load_status     : MemState,
     mem_store_status    : MemState,
     io_load_status      : IoState,
-    io_store_status     : IoState,
     ppu_read_regs       : PpuReadRegs,
     latch               : W<u8>,
     oamdma              : Option<W<u8>>,
     interrupt           : Option<Interrupt>,
-    joy1                : u8,
-    joy2                : u8,
+    io_strobe           : u8,
+    joy_key             : [u8; 2],
 }
 
 impl Memory {
@@ -38,13 +37,12 @@ impl Memory {
             mem_load_status     : MemState::NoState,
             mem_store_status    : MemState::NoState,
             io_load_status      : IoState::NoState,
-            io_store_status     : IoState::NoState,
             ppu_read_regs       : Default::default(),
             latch               : W(0),
             oamdma              : None,
             interrupt           : None,
-            joy1                : 0,
-            joy2                : 0,
+            io_strobe           : 0,
+            joy_key             : [0; 2],
         }
     }
 
@@ -88,31 +86,30 @@ impl Memory {
         self.mapper.chr_store(&mut self.vram[..], address, value.0);
     }
 
-    pub fn get_io_load_status(&mut self, gp : W<u16>) -> bool {
-        gp == GAMEPAD1 && self.io_load_status == IoState::GamePad1 ||
-        gp == GAMEPAD2 && self.io_load_status == IoState::GamePad2
+    pub fn get_io_load_status(&mut self) -> IoState {
+        let status = self.io_load_status;
+        self.io_load_status = IoState::NoState;
+        status
     }
 
-    pub fn set_io_store(&mut self, state: IoState) {
-        self.io_store_status = state;
+    pub fn get_strobe(&self) -> bool {
+        self.io_strobe & 1 > 0
     }
 
-    pub fn get_strobe(&self) -> u8 {
-        self.joy1
+    pub fn set_joy_key(&mut self, index: usize, key: u8) {
+        self.joy_key[index] = key;
     }
 
     pub fn load_no_side_effect(&mut self, address: W<u16>) -> W<u8> {
         let mem_load_status  = self.mem_load_status;
         let mem_store_status = self.mem_store_status;
         let io_load_status   = self.io_load_status;
-        let io_store_status  = self.io_store_status;
 
         let value = self.load(address);
 
         self.mem_load_status  = mem_load_status;
         self.mem_store_status = mem_store_status;
         self.io_load_status   = io_load_status;
-        self.io_store_status  = io_store_status;
 
         return value;
     }
@@ -146,12 +143,12 @@ impl LoadStore for Memory {
                 0x4016 => {
                     self.io_load_status = IoState::GamePad1;
                     self.mem_load_status = MemState::Io;
-                    self.joy1
+                    self.joy_key[0]
                 },
                 0x4017 => {
                     self.io_load_status = IoState::GamePad2;
                     self.mem_load_status = MemState::Io;
-                    self.joy2
+                    self.joy_key[1]
                 },
                 _      => 0,
             }
@@ -190,12 +187,7 @@ impl LoadStore for Memory {
                     self.oamdma = Some(value);
                 },
                 0x4016 => {
-                    self.joy1 = val;
-                    self.io_store_status = IoState::GamePad1;
-                },
-                0x4017 => {
-                    self.joy2 = val;
-                    self.mem_store_status = MemState::Io;
+                    self.io_strobe = val;
                 },
                 _      => (),
             }

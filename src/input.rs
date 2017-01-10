@@ -3,7 +3,7 @@ use sdl2::keyboard::{Scancode as S, KeyboardState};
 
 // A, B, Select, Start, Up, Down, Left, Right
 const PLAYER_KEYS : [[S; 8]; 2] = [
-    [S::Num1, S::Num2, S::Num3, S::Num0, S::Up, S::Down, S::Left, S::Right],
+    [S::Kp1, S::Kp2, S::Kp3, S::Kp0, S::Up, S::Down, S::Left, S::Right],
     [S::J, S::K, S::L, S::Return, S::W, S::S, S::A, S::D],
 ];
 
