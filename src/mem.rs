@@ -53,25 +53,25 @@ impl Memory {
     pub fn get_interrupt(&mut self) -> Option<Interrupt> {
         let interrupt = self.interrupt;
         self.interrupt = None;
-        return interrupt;
+        interrupt
     }
 
     pub fn get_latch(&mut self) -> (W<u8>, MemState) {
         let status = (self.latch, self.mem_store_status);
         self.mem_store_status = MemState::NoState;
-        return status;
+        status
     }
 
     pub fn get_oamdma(&mut self) -> Option<W<u8>> {
         let status = self.oamdma;
         self.oamdma = None;
-        return status;
+        status
     }
 
     pub fn ppu_load_status(&mut self) -> MemState {
         let status = self.mem_load_status;
         self.mem_load_status = MemState::NoState;
-        return status;
+        status
     }
 
     pub fn set_ppu_read_regs(&mut self, regs: PpuReadRegs) {
@@ -104,14 +104,11 @@ impl Memory {
         let mem_load_status  = self.mem_load_status;
         let mem_store_status = self.mem_store_status;
         let io_load_status   = self.io_load_status;
-
         let value = self.load(address);
-
         self.mem_load_status  = mem_load_status;
         self.mem_store_status = mem_store_status;
         self.io_load_status   = io_load_status;
-
-        return value;
+        value
     }
 }
 
@@ -158,7 +155,7 @@ impl LoadStore for Memory {
         W(value)
     }
 
-    fn store (&mut self, address: W<u16>, value: W<u8>) {
+    fn store(&mut self, address: W<u16>, value: W<u8>) {
         let addr = address.0;
         let val = value.0;
         if addr < 0x2000 {
