@@ -140,46 +140,19 @@ impl LoadStore for Memory {
             data
         } else if addr < 0x4020 {
             /* Apu AND IO TODO*/
-            //self.mem_load_status = MemState::Io;
             match addr {
-                0x4000 => 0,
-                0x4001 => 0,
-                0x4002 => 0,
-                0x4003 => 0,
-                0x4004 => 0,
-                0x4005 => 0,
-                0x4006 => 0,
-                0x4007 => 0,
-                0x4008 => 0,
-                0x4009 => 0,
-                0x400A => 0,
-                0x400B => 0,
-                0x400C => 0,
-                0x400D => 0,
-                0x400E => 0,
-                0x400F => 0,
-                0x4010 => 0,
-                0x4011 => 0,
-                0x4012 => 0,
-                0x4013 => 0,
-                0x4014 => 0, // OAMDMA is Write only, TODO: Check what happens
-                0x4015 => 0,
-                0x4016 => { self.io_load_status = IoState::GamePad1;
-                            self.mem_load_status = MemState::Io;
-                            self.joy1
-                          }
-                0x4017 => { self.io_load_status = IoState::GamePad2;
-                            self.mem_load_status = MemState::Io;
-                            self.joy2
-                          }
-                0x4018 => 0,
-                0x4019 => 0,
-                0x401A => 0,
-                0x401B => 0,
-                0x401C => 0,
-                0x401D => 0,
-                0x401E => 0,
-                0x401F => 0,
+                // OAMDMA is Write only, TODO: Check what happens
+                0x4014 => 0,
+                0x4016 => {
+                    self.io_load_status = IoState::GamePad1;
+                    self.mem_load_status = MemState::Io;
+                    self.joy1
+                },
+                0x4017 => {
+                    self.io_load_status = IoState::GamePad2;
+                    self.mem_load_status = MemState::Io;
+                    self.joy2
+                },
                 _      => 0,
             }
         } else {
@@ -196,9 +169,9 @@ impl LoadStore for Memory {
             self.ram[(addr & 0x7FF) as usize] = val
         } else if addr < 0x4000 {
             self.mem_store_status = match addr & 0x7 {
+                // PpuStatus is read only
                 0 => MemState::PpuCtrl,
                 1 => MemState::PpuMask,
-             // 2 => MemState::PpuStatus Read Only Register
                 3 => MemState::OamAddr,
                 4 => MemState::OamData,
                 5 => MemState::PpuScroll,
@@ -211,47 +184,19 @@ impl LoadStore for Memory {
             /* Apu AND IO TODO*/
             self.mem_store_status = MemState::Io;
             match addr {
-                0x4000 => (),
-                0x4001 => (),
-                0x4002 => (),
-                0x4003 => (),
-                0x4004 => (),
-                0x4005 => (),
-                0x4006 => (),
-                0x4007 => (),
-                0x4008 => (),
-                0x4009 => (),
-                0x400A => (),
-                0x400B => (),
-                0x400C => (),
-                0x400D => (),
-                0x400E => (),
-                0x400F => (),
-                0x4010 => (),
-                0x4011 => (),
-                0x4012 => (),
-                0x4013 => (),
-                // When oamdma is written to
-                // the cpu locks down and fills the
-                // the oam memory with the selected page.
+                // When OAMDMA is written to the cpu locks down and fills
+                // the OAM memory with the selected page.
                 0x4014 => {
                     self.oamdma = Some(value);
                 },
-                0x4015 => (),
-                0x4016 => { self.joy1 = val;
-                            self.io_store_status = IoState::GamePad1;
-                          },
-                0x4017 => { self.joy2 = val;
-                            self.mem_store_status = MemState::Io;
-                          },
-                0x4018 => (),
-                0x4019 => (),
-                0x401A => (),
-                0x401B => (),
-                0x401C => (),
-                0x401D => (),
-                0x401E => (),
-                0x401F => (),
+                0x4016 => {
+                    self.joy1 = val;
+                    self.io_store_status = IoState::GamePad1;
+                },
+                0x4017 => {
+                    self.joy2 = val;
+                    self.mem_store_status = MemState::Io;
+                },
                 _      => (),
             }
         } else {

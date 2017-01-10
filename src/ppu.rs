@@ -172,7 +172,7 @@ impl Ppu {
         self.ls_latches(memory);
 
         // we let the oam prepare the next sprites
-        self.oam.cycle(self.cycles, self.scanline, &mut self.sprite_unit);
+        // self.oam.cycle(self.cycles, self.scanline, &mut self.sprite_unit);
 
         if self.render_on() {
             match (self.scycle, self.scanline) {
