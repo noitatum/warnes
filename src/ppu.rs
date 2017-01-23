@@ -1,7 +1,7 @@
 extern crate sdl2;
 
 // NES
-use utils::print_mem;
+use utils::*;
 use mem::{Memory as Mem};
 use enums::{MemState, Interrupt};
 use scroll::Scroll;
@@ -23,8 +23,6 @@ macro_rules! tile_bit {
 
 const CTRL_SPRITE_PATTERN       : u8 = 0x08;
 const CTRL_BACKGROUND_PATTERN   : u8 = 0x10;
-const CTRL_SPRITE_SIZE          : u8 = 0x20;
-// trigger warning
 const CTRL_PPU_SLAVE_MASTER     : u8 = 0x40;
 const CTRL_NMI                  : u8 = 0x80;
 
@@ -33,20 +31,10 @@ const MASK_GRAYSCALE            : u8 = 0x01;
 const MASK_SHOW_BACKGROUND_LEFT : u8 = 0x02;
 // set = show sprites in leftmost 8 pixels of screens
 const MASK_SHOW_SPRITES_LEFT    : u8 = 0x04;
-const MASK_SHOW_BACKGROUND      : u8 = 0x08;
-const MASK_SHOW_SPRITES         : u8 = 0x10;
-const MASK_EMPHASIZE_RED        : u8 = 0x20;
-const MASK_EMPHASIZE_GREEN      : u8 = 0x40;
-const MASK_EMPHASIZE_BLUE       : u8 = 0x80;
 
 const STATUS_SPRITE_OVERFLOW    : u8 = 0x20;
 const STATUS_SPRITE_0_HIT       : u8 = 0x40;
 const STATUS_VBLANK             : u8 = 0x80;
-
-const SPRITE_INFO_PRIORITY      : u8 = 0x20;
-const SPRITE_INFO_PALETTE       : u8 = 0x3;
-const SPRITE_INFO_HORIZONTALLY  : u8 = 0x40;
-const SPRITE_INFO_VERTICALLY    : u8 = 0x80;
 
 const PALETTE_SIZE          : usize = 0x20;
 const PALETTE_ADDRESS       : usize = 0x3f00;
@@ -106,8 +94,7 @@ pub struct Ppu {
     status          : u8,
     data_buffer     : u8,
 
-    // Scanline should count up until the total numbers of scanlines
-    // which is 262
+    // Scanline should count up until the total numbers of scanlines (262)
     scanline        : usize,
     // while scanline width goes up to 340 and visible pixels
     // ie drawn pixels start at 0 and go up to 256 width (240 scanlines)
@@ -117,7 +104,7 @@ pub struct Ppu {
     // oam index for rendering
     oam_index       : W<u16>,
     // for sprite rendering
-    sprite_unit     : [SpriteInfo; 0x08],
+    sprites         : [Sprite; 0x08],
 
     // Shift registers
     ltile_sreg      : u16,
@@ -151,7 +138,7 @@ impl Ppu {
             cycles          : 0,
 
             oam_index       : W(0),
-            sprite_unit     : [SpriteInfo::default(); 0x08],
+            sprites         : [Sprite::default(); 8],
 
             ltile_sreg      : 0,
             htile_sreg      : 0,
@@ -169,32 +156,48 @@ impl Ppu {
     }
 
     pub fn cycle(&mut self, memory: &mut Mem) {
+        // Update PPU with what the CPU hay have sent to memory latch
         self.ls_latches(memory);
-
-        // we let the oam prepare the next sprites
-        // self.oam.cycle(self.cycles, self.scanline, &mut self.sprite_unit);
-
         if self.render_on() {
             match (self.scycle, self.scanline) {
                 // Idle scanlines
                 (_, 240...260) => {},
+                // Last scanline, updates vertical scroll
                 (280...304, 261) => {
                     self.address.copy_vertical();
                 },
+                // Dot 257 updates horizontal scroll
                 (257, _) => {
                     self.address.copy_horizontal();
                 }
+                // Overlaps with above but nothing really happens in 257
+                (257...320, _) => {
+                    // This syncs with sprite evaluation in oam
+                    self.fetch_sprite(memory);
+                }
+                // At prerender scanline we have to reset the sprite 0 hit
+                (1, 261) => {
+                    self.status &= !(STATUS_SPRITE_0_HIT |
+                                     STATUS_SPRITE_OVERFLOW);
+                    println!("{:?}", self.oam);
+                }
                 // Idle cycles
-                (0, _) | (258...320, _) | (337...340, _) => {},
+                (0, _) | (337...340, _) => {},
                 _ => {
-                    if self.scycle < 257 && self.scanline < 240 {
-                        self.draw();
+                    // (1...256 + 321..336, 0...239 + 261)
+                    if self.scycle < 257 && self.scanline != 261 {
+                        self.draw_dot();
                     }
-                    self.evaluate_next_byte(memory);
+                    self.fetch_background(memory);
                     if self.scycle == 256 {
                         self.address.increment_y();
                     }
                 }
+            }
+            if self.scanline < 240 && self.scanline > 0 &&
+               self.oam.cycle(self.scycle, self.scanline as u8,
+                              &mut self.sprites) {
+                set_flag!(self.status, STATUS_SPRITE_OVERFLOW);
             }
         }
 
@@ -231,34 +234,70 @@ impl Ppu {
                 oam     : self.oam.load_data(),
                 status  : self.status,
         };
+        // Update memory PPU registers copy
         memory.set_ppu_read_regs(read_regs);
     }
-    // gets the value for the next line of 8 pixels
-    // ie bytes into tile and attr registers
-    fn evaluate_next_byte(&mut self, memory: &mut Mem) {
+
+    fn fetch_background(&mut self, memory: &mut Mem) {
         self.ltile_sreg <<= 1;
         self.htile_sreg <<= 1;
         self.attr_sreg <<= 2;
         // First cycle is idle
         match (self.scycle - 1) & 0x7 {
             // if on a visible scanline
-            1 => { let address = self.address.get_nametable_address();
-                   self.next_name = memory.chr_load(address);
+            1 => {
+                let address = self.address.get_nametable_address();
+                self.next_name = memory.chr_load(address);
             },
-            3 => { let address = self.address.get_attribute_address();
-                   self.next_attr = memory.chr_load(address);
+            3 => {
+                let address = self.address.get_attribute_address();
+                self.next_attr = memory.chr_load(address);
             },
-            5 => { let index = self.next_name;
-                   let address = self.address.get_tile_address(index);
-                   self.next_ltile = memory.chr_load(address);
+            5 => {
+                let index = self.next_name;
+                let address = self.address.get_tile_address(index);
+                self.next_ltile = memory.chr_load(address);
             },
-            7 => { let index = self.next_name;
-                   let address = self.address.get_tile_address(index);
-                   self.next_htile = memory.chr_load(address + W(8));
-                   // load the next shift registers.
-                   self.set_shift_regs();
-                   // Increment horizontal scroll
-                   self.address.increment_coarse_x();
+            7 => {
+                let index = self.next_name;
+                let address = self.address.get_tile_address(index);
+                self.next_htile = memory.chr_load(address + W(8));
+                // load the next shift registers.
+                self.set_shift_regs();
+                // Increment horizontal scroll
+                self.address.increment_coarse_x();
+            },
+            _ => {},
+        }
+    }
+
+    fn fetch_sprite(&mut self, memory: &mut Mem) {
+        let big_sprites = self.sprite_big();
+        let table = self.sprite_table();
+        let sprite = &mut self.sprites[((self.scycle - 1) / 8) % 8];
+        // Get fine Y position
+        let y_offset = W16!(W(self.scanline as u8) - sprite.y_pos);
+        // Compose the table, and the tile address with the fine Y position
+        let address = if big_sprites {
+            (W16!(W(sprite.tile.0.rotate_right(1))) << 4) | y_offset
+        } else {
+            table | (W16!(sprite.tile) << 4) | y_offset
+        };
+        //let address = W(0x300) | fine_y;
+        match (self.scycle - 1) % 8 {
+            3 => sprite.latch = sprite.attributes.0,
+            4 => sprite.counter = sprite.x_pos.0,
+            5 => {
+                sprite.lshift = memory.chr_load(address).0;
+                if !sprite.flip_horizontally() {
+                    sprite.lshift = reverse_byte(sprite.lshift);
+                }
+            },
+            7 => {
+                sprite.hshift = memory.chr_load(address + W(8)).0;
+                if !sprite.flip_horizontally() {
+                    sprite.hshift = reverse_byte(sprite.hshift);
+                }
             },
             _ => {},
         }
@@ -273,18 +312,58 @@ impl Ppu {
         self.attr_sreg = self.attr_sreg & 0xFFFF0000 | (attr * 0x5555);
     }
 
-    /* for now we dont use mem, remove warning, memory: &mut Mem*/
-    fn draw(&mut self) {
+    fn draw_dot(&mut self) {
         let fine_x = self.address.get_fine_x();
-        let index = (tile_bit!(self.ltile_sreg, fine_x) |
-                     tile_bit!(self.htile_sreg, fine_x) << 1) as usize;
-        let palette_id = attr_bit!(self.attr_sreg, fine_x) as usize;
-        let color_id = self.palette[palette_id * 4 + index];
+        let back_index = (tile_bit!(self.ltile_sreg, fine_x) |
+                          tile_bit!(self.htile_sreg, fine_x) << 1) as usize;
+        let back_palette = attr_bit!(self.attr_sreg, fine_x) as usize;
+        let mut color_id = self.palette[back_palette * 4 + back_index];
+        let mut sprite_index = 0;
+        let mut sprite_palette = 0;
+        let mut sprite_front = false;
+        // Amount of sprites in this scanline
+        let count = self.oam.count();
+        // Look for the first sprite that has a pixel to draw
+        let index = self.sprites[..count].iter().position(Sprite::has_pixel);
+        if let Some(index) = index {
+            // TODO: Use Latch
+            let sprite = &self.sprites[index];
+            sprite_index = (sprite.lshift & 1) | ((sprite.hshift & 1) << 1);
+            sprite_palette = sprite.get_palette() + 4;
+            sprite_front = !sprite.get_priority();
+        }
+        // Choose which pixel to prioritize
+        if back_index == 0 && sprite_index == 0 {
+            color_id = self.palette[0];
+        } else if sprite_index != 0 && (back_index == 0 || sprite_front) {
+            let full_index = sprite_palette * 4 + sprite_index as usize;
+            color_id = self.palette[full_index];
+            if back_index != 0 && sprite_front && index == Some(0) {
+                self.status |= STATUS_SPRITE_0_HIT;
+            }
+        }
         self.frame_data[self.scanline][self.scycle - 1] = color_id;
+        // Decrement the sprite counters or shift their tile data
+        for sprite in self.sprites.iter_mut() {
+            if sprite.counter > 0 {
+                sprite.counter -= 1;
+            } else {
+                sprite.lshift >>= 1;
+                sprite.hshift >>= 1;
+            }
+        }
     }
 
-    pub fn frame_data(&self) -> (u64, &[Scanline]) {
-        (self.frames, &self.frame_data)
+    fn sprite_big(&self) -> bool {
+        is_flag_set!(self.ctrl, 0x20)
+    }
+
+    fn sprite_table(&self) -> W<u16> {
+        if is_flag_set!(self.ctrl, CTRL_SPRITE_PATTERN) {
+            W(0x1000)
+        } else {
+            W(0)
+        }
     }
 
     fn render_on(&self) -> bool {
@@ -296,11 +375,11 @@ impl Ppu {
     }
 
     fn show_sprites(&self) -> bool {
-        self.mask & MASK_SHOW_SPRITES > 0
+        is_flag_set!(self.mask, 0x10)
     }
 
     fn show_background(&self) -> bool {
-        self.mask & MASK_SHOW_BACKGROUND > 0
+        is_flag_set!(self.mask, 0x08)
     }
 
     /* load store latches */
@@ -370,6 +449,10 @@ impl Ppu {
             self.palette[self.palette_mirror(addr)] = value.0 & 0x3F;
         }
     }
+
+    pub fn frame_data(&self) -> (u64, &[Scanline]) {
+        (self.frames, &self.frame_data)
+    }
 }
 
 impl Default for Ppu {
@@ -387,24 +470,73 @@ impl fmt::Debug for Ppu {
     }
 }
 
+#[derive(Copy, Clone, Default)]
+struct Sprite {
+    pub y_pos       : W<u8>,
+    pub tile        : W<u8>,
+    pub attributes  : W<u8>,
+    pub x_pos       : W<u8>,
+    pub counter     : u8,
+    pub latch       : u8,
+    pub lshift      : u8,
+    pub hshift      : u8,
+}
+
+impl Sprite {
+
+    pub fn set_sprite_info(&mut self, index: usize, value: W<u8>) {
+        match index {
+            0 => self.y_pos = value,
+            1 => self.tile = value,
+            2 => self.attributes = value,
+            3 => self.x_pos = value,
+            _ => unreachable!(),
+        }
+    }
+
+    pub fn get_priority(&self) -> bool {
+        is_flag_set!(self.attributes.0, 0x20)
+    }
+
+    pub fn get_palette(&self) -> usize {
+        (self.attributes.0 & 3) as usize
+    }
+
+    pub fn flip_horizontally(&self) -> bool {
+        is_flag_set!(self.attributes.0, 0x40)
+    }
+
+    pub fn flip_vertically(&self) -> bool {
+        is_flag_set!(self.attributes.0, 0x80)
+    }
+
+    pub fn has_pixel(&self) -> bool {
+        self.counter == 0 && (self.lshift & 1 != 0 || self.hshift & 1 != 0)
+    }
+}
+
 struct Oam {
-    mem                 : [u8; 0x100],
-    secondary_mem       : [u8; 0x40],
-    address             : W<u8>,
-    mem_idx             : usize,
-    secondary_idx       : usize,
-    copy_leftover_bytes : bool,
+    mem         : [u8; 0x100],
+    smem        : [u8; 0x20],
+    sprite      : usize,
+    ssprite     : usize,
+    count       : usize,
+    address     : W<u8>,
+    read        : u8,
+    next_sprite : bool,
 }
 
 impl Default for Oam {
     fn default() -> Oam {
         Oam {
-            mem                 : [0; 0x100],
-            secondary_mem       : [0; 0x40],
-            address             : W(0),
-            mem_idx             : 0,
-            secondary_idx       : 0,
-            copy_leftover_bytes : false,
+            mem         : [0; 0x100],
+            smem        : [0; 0x20],
+            sprite      : 0,
+            ssprite     : 0,
+            count       : 0,
+            address     : W(0),
+            read        : 0,
+            next_sprite : false,
         }
     }
 }
@@ -432,103 +564,81 @@ impl Oam {
         self.address = addr;
     }
 
-    fn reset_sec_oam(&mut self, idx: usize) {
-        self.secondary_mem[idx] = 0xFF;
-        self.secondary_idx = 0;
-        self.mem_idx = 0;
+    // The amount of sprites we found
+    fn count(&self) -> usize {
+        self.count
     }
 
-    fn reset_sec_oam_tot(&mut self) {
-        for idx in 0..64 {
-            self.secondary_mem[idx as usize] = 0xFF;
-            self.secondary_idx = 0;
-            self.mem_idx = 0;
+    pub fn cycle(&mut self, cycles: usize, scanline: u8,
+                 spr_units: &mut [Sprite]) -> bool {
+        if cycles == 0 {
+            self.sprite = 0;
+            self.ssprite = 0;
+            return false;
         }
-    }
-
-    pub fn cycle(&mut self, cycles: u32, scanline: usize, spr_units: &mut [SpriteInfo]) {
-        if cycles <= 64 && cycles != 0 {
-            self.reset_sec_oam((cycles - 1) as usize);
-        } else if cycles < 257 {
-            // odd cycles
-            if cycles % 2 == 1 {
-                // TODO: Ignore odd cycles and do everything on even cycles? (reads).
-            // even cycles
+        let cycles = cycles - 1;
+        if cycles < 64 {
+            // Fill OAM
+            if cycles % 2 == 0 {
+                self.read = 0xFF;
             } else {
-                if self.secondary_idx < 64 && self.mem_idx != 256 {
-                    // If we're on a y-pos byte and it fits with the scanline
-                    // copy it to the current position of secondary oam memory
-                    // else just add to the memory idx
-                    if self.mem[self.mem_idx] as usize == scanline && (self.mem[self.mem_idx] % 4 == 0) {
-                        self.secondary_mem[self.secondary_idx] = self.mem[self.mem_idx];
-                        self.secondary_idx  += 1;
-                    } else if self.copy_leftover_bytes {
-                        self.secondary_mem[self.secondary_idx] = self.mem[self.mem_idx];
-                        self.secondary_idx  += 1;
-                        // If we copied the 4th byte we reset the copyleftover flags
-                        // so we can evaluate the y-pos byte again.
-                        if self.mem_idx % 4 == 3 {
-                            self.copy_leftover_bytes = false;
-                        }
-                    }
-                    self.mem_idx += 1;
-                } else if self.secondary_idx < 64 {
-                    self.reset_sec_oam_tot();
+                self.smem[cycles >> 1] = self.read;
+            }
+        } else if cycles < 256 {
+            // Read on even cycles
+            if cycles % 2 == 0 {
+                self.read = self.mem[self.sprite];
+                return false;
+            }
+            if self.ssprite % 4 != 0 {
+                // Copy the rest of the sprite data when previous was in range
+                self.smem[self.ssprite] = self.read;
+                self.ssprite += 1;
+                self.sprite = (self.sprite + 1) & 0x3F;
+            } else if self.ssprite < 0x20 {
+                // Copy the Y coordinate and test if in range
+                self.smem[self.ssprite] = self.read;
+                // If sprite is in range copy the rest, else go to the next one
+                if self.in_range(scanline) {
+                    self.ssprite += 1;
+                    self.sprite += 1;
+                } else {
+                    self.sprite = (self.sprite + 4) & 0x3F;
+                }
+            } else {
+                // 8 sprite limit reached, look for sprite overflow
+                if self.sprite % 4 != 0 && !self.next_sprite {
+                    self.sprite += 1;
+                } else if self.in_range(scanline) {
+                    self.sprite += 1;
+                    self.next_sprite = false;
+                    // Sprite overflow
+                    return true;
+                } else {
+                    // Emulate hardware bug, add 5 instead of 4
+                    // FIXME: I think there shouldn't be a carry from bit 1 to 2
+                    self.sprite = (self.sprite + 5) & 0x3F;
+                    self.next_sprite = true;
                 }
             }
         } else if cycles < 320 {
-            // set index to 0 so we can copy to the sprite units.
-            if cycles == 257 { self.secondary_idx = 0; }
-            // cycle 257, 265, 273
-            let idx = self.secondary_idx;
-            match cycles % 0x7 {
-                1 => { spr_units[idx / 8].
-                        set_sprite_info(0 , self.secondary_mem[idx]); },
-                3 => { spr_units[idx / 8].
-                        set_sprite_info(1 , self.secondary_mem[idx]); },
-                5 => { spr_units[idx / 8].
-                        set_sprite_info(2 , self.secondary_mem[idx]); },
-                7 => { spr_units[idx / 8].
-                        set_sprite_info(3 , self.secondary_mem[idx]); },
-                _ => {},
+            // Set index to 0 at start so we can copy to the sprite units.
+            // Set also the count to the amount of sprites we have found
+            if cycles == 256 {
+                self.sprite = 0;
+                self.count = self.ssprite / 4;
             }
-            self.secondary_idx += 1;
+            // Fill up to eight sprite units with data
+            if cycles & 4 == 0 && self.sprite < self.ssprite {
+                let data = W(self.smem[self.sprite]);
+                spr_units[self.sprite / 4].set_sprite_info(cycles % 4, data);
+                self.sprite += 1;
+            }
         }
+        return false;
     }
-}
 
-macro_rules! get_sprite_priority {
-    ($attr:expr) => (($attr & SPRITE_INFO_PRIORITY) != 0)
-}
-
-macro_rules! get_palette {
-    ($attr:expr) => ($attr & SPRITE_INFO_PALETTE)
-}
-
-macro_rules! flip_horizontally {
-    ($attr:expr) => (($attr & SPRITE_INFO_HORIZONTALLY) > 1)
-}
-
-macro_rules! flip_vertically {
-    ($attr:expr) => (($attr & SPRITE_INFO_VERTICALLY) > 1)
-}
-
-#[derive(Copy, Clone, Default)]
-struct SpriteInfo {
-    pub y_pos       : u8,
-    pub tile_idx    : u8,
-    pub attributes  : u8,
-    pub x_pos       : u8,
-}
-
-impl SpriteInfo {
-    pub fn set_sprite_info(&mut self, idx: usize, value: u8) {
-        match idx {
-            0 => { self.y_pos = value; },
-            1 => { self.tile_idx = value; },
-            2 => { self.attributes = value; },
-            3 => { self.x_pos = value; },
-            _ => { panic!("wrong sprite unit index!"); }
-        }
+    fn in_range(&self, scanline: u8) -> bool {
+        self.read < 0xF0 && self.read + 8 > scanline && self.read <= scanline
     }
 }

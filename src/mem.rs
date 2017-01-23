@@ -121,7 +121,7 @@ impl LoadStore for Memory {
         } else if addr < 0x4000 {
             // FIXME: This is broken now for status and oamdata
             let (stat, data) = match addr & 0x7 {
-                // Other registers are read only
+                // Other registers are write only
                 2 => (MemState::PpuStatus, self.ppu_read_regs.status),
                 4 => (MemState::OamData, self.ppu_read_regs.oam),
                 7 => (MemState::PpuData, self.ppu_read_regs.data),

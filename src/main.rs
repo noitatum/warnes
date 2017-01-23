@@ -65,7 +65,7 @@ fn rnes() -> Result<(), String> {
         'nes: loop {
             if time.to(PreciseTime::now()) > time::Duration::seconds(1) {
                 time = PreciseTime::now();
-                println!("FPS: {}", frame - last_frame);
+                // println!("FPS: {}", frame - last_frame);
                 last_frame = frame;
             }
             {
