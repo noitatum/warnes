@@ -3,8 +3,8 @@ use sdl2::keyboard::{Scancode as S, KeyboardState};
 
 // A, B, Select, Start, Up, Down, Left, Right
 const PLAYER_KEYS : [[S; 8]; 2] = [
-    [S::Kp1, S::Kp2, S::Kp3, S::Kp0, S::Up, S::Down, S::Left, S::Right],
-    [S::J, S::K, S::L, S::Return, S::W, S::S, S::A, S::D],
+    [S::Kp2, S::Kp1, S::Kp3, S::Kp0, S::Up, S::Down, S::Left, S::Right],
+    [S::K, S::J, S::L, S::Return, S::W, S::S, S::A, S::D],
 ];
 
 // Returns true if user wants to exit, sets controller keys accordingly

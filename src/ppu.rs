@@ -179,7 +179,6 @@ impl Ppu {
                 (1, 261) => {
                     self.status &= !(STATUS_SPRITE_0_HIT |
                                      STATUS_SPRITE_OVERFLOW);
-                    println!("{:?}", self.oam);
                 }
                 // Idle cycles
                 (0, _) | (337...340, _) => {},
