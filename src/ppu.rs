@@ -275,7 +275,10 @@ impl Ppu {
         let table = self.sprite_table();
         let sprite = &mut self.sprites[((self.scycle - 1) / 8) % 8];
         // Get fine Y position
-        let y_offset = W16!(W(self.scanline as u8) - sprite.y_pos);
+        let mut y_offset = W16!(W(self.scanline as u8) - sprite.y_pos);
+        if sprite.flip_vertically() {
+            y_offset = W(7) - y_offset;
+        }
         // Compose the table, and the tile address with the fine Y position
         let address = if big_sprites {
             (W16!(W(sprite.tile.0.rotate_right(1))) << 4) | y_offset
