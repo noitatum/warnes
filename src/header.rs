@@ -83,6 +83,7 @@ impl Header {
         match self.mapper {
             0 => Ok(Nrom::new_boxed(mem)),
             3 => Ok(Cnrom::new_boxed(mem)),
+            225 => Ok(Pirate225::new_boxed(mem)),
             _ => err!("Unrecognized Mapper {}", self.mapper)
         }
     }
