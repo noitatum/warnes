@@ -41,7 +41,7 @@ fn sdl() -> Result<(Renderer<'static>, EventPump), Box<Error>> {
     let context = sdl2::init()?;
     let window = context.video()?.window("RNES -----", WIDTH, HEIGHT)
                                  .position_centered().build()?;
-    Ok((window.renderer().build()?, context.event_pump()?))
+    Ok((window.renderer().present_vsync().build()?, context.event_pump()?))
 }
 
 fn rnes() -> Result<(), String> {
