@@ -518,7 +518,7 @@ impl Sprite {
 struct Oam {
     mem         : [u8; 0x100],
     smem        : [u8; 0x20],
-    sprite      : usize,
+    sprite      : W<u8>,
     ssprite     : usize,
     count       : usize,
     address     : W<u8>,
@@ -531,7 +531,7 @@ impl Default for Oam {
         Oam {
             mem         : [0; 0x100],
             smem        : [0; 0x20],
-            sprite      : 0,
+            sprite      : W(0),
             ssprite     : 0,
             count       : 0,
             address     : W(0),
@@ -572,7 +572,7 @@ impl Oam {
     pub fn cycle(&mut self, cycles: usize, scanline: u8,
                  spr_units: &mut [Sprite]) -> bool {
         if cycles == 0 {
-            self.sprite = 0;
+            self.sprite = W(0);
             self.ssprite = 0;
             return false;
         }
@@ -587,37 +587,37 @@ impl Oam {
         } else if cycles < 256 {
             // Read on even cycles
             if cycles % 2 == 0 {
-                self.read = self.mem[self.sprite];
+                self.read = self.mem[self.sprite.0 as usize];
                 return false;
             }
             if self.ssprite % 4 != 0 {
                 // Copy the rest of the sprite data when previous was in range
                 self.smem[self.ssprite] = self.read;
                 self.ssprite += 1;
-                self.sprite = (self.sprite + 1) & 0x3F;
+                self.sprite += W(1);
             } else if self.ssprite < 0x20 {
                 // Copy the Y coordinate and test if in range
                 self.smem[self.ssprite] = self.read;
                 // If sprite is in range copy the rest, else go to the next one
                 if self.in_range(scanline) {
                     self.ssprite += 1;
-                    self.sprite += 1;
+                    self.sprite += W(1);
                 } else {
-                    self.sprite = (self.sprite + 4) & 0x3F;
+                    self.sprite += W(4);
                 }
             } else {
                 // 8 sprite limit reached, look for sprite overflow
-                if self.sprite % 4 != 0 && !self.next_sprite {
-                    self.sprite += 1;
+                if self.sprite.0 % 4 != 0 && !self.next_sprite {
+                    self.sprite += W(1);
                 } else if self.in_range(scanline) {
-                    self.sprite += 1;
+                    self.sprite += W(1);
                     self.next_sprite = false;
                     // Sprite overflow
                     return true;
                 } else {
                     // Emulate hardware bug, add 5 instead of 4
                     // FIXME: I think there shouldn't be a carry from bit 1 to 2
-                    self.sprite = (self.sprite + 5) & 0x3F;
+                    self.sprite += W(5);
                     self.next_sprite = true;
                 }
             }
@@ -625,14 +625,15 @@ impl Oam {
             // Set index to 0 at start so we can copy to the sprite units.
             // Set also the count to the amount of sprites we have found
             if cycles == 256 {
-                self.sprite = 0;
+                self.sprite = W(0);
                 self.count = self.ssprite / 4;
             }
             // Fill up to eight sprite units with data
-            if cycles & 4 == 0 && self.sprite < self.ssprite {
-                let data = W(self.smem[self.sprite]);
-                spr_units[self.sprite / 4].set_sprite_info(cycles % 4, data);
-                self.sprite += 1;
+            if cycles & 4 == 0 && (self.sprite.0 as usize) < self.ssprite {
+                let data = W(self.smem[self.sprite.0 as usize]);
+                let sprite = &mut spr_units[(self.sprite.0 / 4) as usize];
+                sprite.set_sprite_info(cycles % 4, data);
+                self.sprite += W(1);
             }
         }
         return false;
