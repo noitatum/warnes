@@ -103,16 +103,7 @@ pub struct Ppu {
     oam_index       : W<u16>,
     // for sprite rendering
     sprites         : [Sprite; 0x08],
-
-    // Shift registers
-    ltile_sreg      : u16,
-    htile_sreg      : u16,
-    attr_sreg       : u32,
-
-    next_ltile      : W<u8>,
-    next_htile      : W<u8>,
-    next_attr       : W<u8>,
-    next_name       : W<u8>,
+    background      : Background,
 
     frames          : u64,
     frame_data      : Box<[Scanline]>,
@@ -137,15 +128,7 @@ impl Ppu {
 
             oam_index       : W(0),
             sprites         : [Sprite::default(); 8],
-
-            ltile_sreg      : 0,
-            htile_sreg      : 0,
-            attr_sreg       : 0,
-
-            next_ltile      : W(0),
-            next_htile      : W(0),
-            next_attr       : W(0),
-            next_name       : W(0),
+            background      : Background::default(),
 
             frames          : 0,
             frame_data      : vec![Scanline::new(); SCANLINE_COUNT]
@@ -184,10 +167,18 @@ impl Ppu {
                     // (1...256 + 321..336, 0...239 + 261)
                     if self.scycle < 257 && self.scanline != 261 {
                         self.draw_dot();
+                        // Decrement sprite counters or shift their tile data
+                        for s in self.sprites.iter_mut() {
+                            s.decrement_or_shift()
+                        }
                     }
-                    self.fetch_background(memory);
-                    if self.scycle == 256 {
-                        self.address.increment_y();
+                    self.background.fetch(memory, &self.address, self.scycle);
+                    if self.scycle % 8 == 0 {
+                        // Increment horizontal scroll after each full fetch
+                        self.address.increment_coarse_x();
+                        if self.scycle == 256 {
+                            self.address.increment_y();
+                        }
                     }
                 }
             }
@@ -234,39 +225,6 @@ impl Ppu {
         memory.set_ppu_read_regs(read_regs);
     }
 
-    fn fetch_background(&mut self, memory: &mut Mem) {
-        self.ltile_sreg <<= 1;
-        self.htile_sreg <<= 1;
-        self.attr_sreg <<= 2;
-        // First cycle is idle
-        match (self.scycle - 1) & 0x7 {
-            // if on a visible scanline
-            1 => {
-                let address = self.address.get_nametable_address();
-                self.next_name = memory.chr_load(address);
-            },
-            3 => {
-                let address = self.address.get_attribute_address();
-                self.next_attr = memory.chr_load(address);
-            },
-            5 => {
-                let index = self.next_name;
-                let address = self.address.get_tile_address(index);
-                self.next_ltile = memory.chr_load(address);
-            },
-            7 => {
-                let index = self.next_name;
-                let address = self.address.get_tile_address(index);
-                self.next_htile = memory.chr_load(address + W(8));
-                // load the next shift registers.
-                self.set_shift_regs();
-                // Increment horizontal scroll
-                self.address.increment_coarse_x();
-            },
-            _ => {},
-        }
-    }
-
     fn fetch_sprite(&mut self, memory: &mut Mem) {
         let big_sprites = self.sprite_big();
         let table = self.sprite_table();
@@ -301,57 +259,30 @@ impl Ppu {
         }
     }
 
-    fn set_shift_regs(&mut self) {
-        self.ltile_sreg = self.ltile_sreg & 0xFF00 | self.next_ltile.0 as u16;
-        self.htile_sreg = self.htile_sreg & 0xFF00 | self.next_htile.0 as u16;
-        let next = self.next_attr;
-        let attr = self.address.get_tile_attribute(next).0 as u32;
-        // attr is a 2 bit palette index, broadcast that into 16 bits
-        self.attr_sreg = self.attr_sreg & 0xFFFF0000 | (attr * 0x5555);
-    }
-
     fn draw_dot(&mut self) {
         let fine_x = self.address.get_fine_x();
-        let back_index = (tile_bit!(self.ltile_sreg, fine_x) |
-                          tile_bit!(self.htile_sreg, fine_x) << 1) as usize;
-        let back_palette = attr_bit!(self.attr_sreg, fine_x) as usize;
-        let mut color_id = self.palette[back_palette * 4 + back_index];
-        let mut sprite_index = 0;
-        let mut sprite_palette = 0;
-        let mut sprite_front = false;
-        // Amount of sprites in this scanline
-        let count = self.oam.count();
-        // Look for the first sprite that has a pixel to draw
-        let index = self.sprites[..count].iter().position(Sprite::has_pixel);
-        if let Some(index) = index {
-            // TODO: Use Latch
-            let sprite = &self.sprites[index];
-            sprite_index = (sprite.lshift & 1) | ((sprite.hshift & 1) << 1);
-            sprite_palette = sprite.get_palette() + 4;
-            sprite_front = !sprite.get_priority();
-        }
-        // Choose which pixel to prioritize
-        if back_index == 0 && sprite_index == 0 {
-            color_id = self.palette[0];
-        } else if sprite_index != 0 && (back_index == 0 || sprite_front) {
-            let full_index = sprite_palette * 4 + sprite_index as usize;
-            color_id = self.palette[full_index];
-            // We have a sprite pixel, we should check for sprite 0 hit
-            if self.oam.sprite_zero_hit() && index == Some(0) &&
-               back_index != 0 && sprite_front && self.scycle != 256 {
-                self.status |= STATUS_SPRITE_0_HIT;
+        // Assume we are going to draw the background or the back color
+        let mut back_index = self.background.get_palette_index(fine_x);
+        let mut color_index = self.palette[back_index];
+        if self.show_sprites() {
+            // Amount of sprites in this scanline
+            let cnt = self.oam.count();
+            // Look for the first sprite that has a pixel to draw
+            let index = self.sprites[..cnt].iter().position(Sprite::has_pixel);
+            if let Some(index) = index {
+                let sprite = &self.sprites[index];
+                let sprite_front = sprite.get_priority();
+                if sprite_front || back_index == 0 {
+                    color_index = self.palette[sprite.get_palette_index()];
+                    // We have a sprite pixel, we should check for sprite 0 hit
+                    if self.oam.sprite_zero_hit() && index == 0 &&
+                       back_index != 0 && sprite_front && self.scycle != 256 {
+                        self.status |= STATUS_SPRITE_0_HIT;
+                    }
+                }
             }
         }
-        self.frame_data[self.scanline][self.scycle - 1] = color_id;
-        // Decrement the sprite counters or shift their tile data
-        for sprite in self.sprites.iter_mut() {
-            if sprite.counter > 0 {
-                sprite.counter -= 1;
-            } else {
-                sprite.lshift >>= 1;
-                sprite.hshift >>= 1;
-            }
-        }
+        self.frame_data[self.scanline][self.scycle - 1] = color_index;
     }
 
     fn sprite_big(&self) -> bool {
@@ -471,6 +402,72 @@ impl fmt::Debug for Ppu {
 }
 
 #[derive(Copy, Clone, Default)]
+struct Background {
+    ltile_shift      : u16,
+    htile_shift     : u16,
+    attr_shift      : u32,
+    next_ltile      : W<u8>,
+    next_htile      : W<u8>,
+    next_attr       : W<u8>,
+    next_name       : W<u8>,
+}
+
+impl Background {
+
+    fn fetch(&mut self, memory: &mut Mem, scroll: &Scroll, scycle: usize) {
+        self.ltile_shift <<= 1;
+        self.htile_shift <<= 1;
+        self.attr_shift <<= 2;
+        // First cycle is idle
+        match (scycle - 1) & 0x7 {
+            // if on a visible scanline
+            1 => {
+                let address = scroll.get_nametable_address();
+                self.next_name = memory.chr_load(address);
+            },
+            3 => {
+                let address = scroll.get_attribute_address();
+                self.next_attr = memory.chr_load(address);
+            },
+            5 => {
+                let index = self.next_name;
+                let address = scroll.get_tile_address(index);
+                self.next_ltile = memory.chr_load(address);
+            },
+            7 => {
+                let index = self.next_name;
+                let address = scroll.get_tile_address(index);
+                self.next_htile = memory.chr_load(address + W(8));
+                self.set_shift_regs(scroll);
+            },
+            _ => {},
+        }
+    }
+
+    fn set_shift_regs(&mut self, scroll: &Scroll) {
+        self.ltile_shift = self.ltile_shift & 0xFF00 | self.next_ltile.0 as u16;
+        self.htile_shift = self.htile_shift & 0xFF00 | self.next_htile.0 as u16;
+        let attr = scroll.get_tile_attribute(self.next_attr).0 as u32;
+        // attr is a 2 bit palette index, broadcast that into 16 bits
+        self.attr_shift = self.attr_shift & 0xFFFF0000 | (attr * 0x5555);
+    }
+
+    fn get_color_index(&self, fine_x: u8) -> usize {
+        (tile_bit!(self.ltile_shift, fine_x) |
+         tile_bit!(self.htile_shift, fine_x) << 1) as usize
+    }
+
+    fn get_palette_index(&self, fine_x: u8) -> usize {
+        let back_index = self.get_color_index(fine_x);
+        if back_index > 0 {
+            (attr_bit!(self.attr_shift, fine_x) as usize) * 4 + back_index
+        } else {
+            0
+        }
+    }
+}
+
+#[derive(Copy, Clone, Default)]
 struct Sprite {
     pub y_pos       : W<u8>,
     pub tile        : W<u8>,
@@ -494,8 +491,22 @@ impl Sprite {
         }
     }
 
+    pub fn get_palette_index(&self) -> usize {
+        let sprite_index = (self.lshift & 1) | ((self.hshift & 1) << 1);
+        (self.get_palette() + 4) * 4 + sprite_index as usize
+    }
+
+    pub fn decrement_or_shift(&mut self) {
+        if self.counter > 0 {
+            self.counter -= 1;
+        } else {
+            self.lshift >>= 1;
+            self.hshift >>= 1;
+        }
+    }
+
     pub fn get_priority(&self) -> bool {
-        is_flag_set!(self.attributes.0, 0x20)
+        !is_flag_set!(self.attributes.0, 0x20)
     }
 
     pub fn get_palette(&self) -> usize {
