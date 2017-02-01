@@ -172,6 +172,7 @@ impl Ppu {
                             s.decrement_or_shift()
                         }
                     }
+                    self.background.shift();
                     self.background.fetch(memory, &self.address, self.scycle);
                     if self.scycle % 8 == 0 {
                         // Increment horizontal scroll after each full fetch
@@ -415,9 +416,6 @@ struct Background {
 impl Background {
 
     fn fetch(&mut self, memory: &mut Mem, scroll: &Scroll, scycle: usize) {
-        self.ltile_shift <<= 1;
-        self.htile_shift <<= 1;
-        self.attr_shift <<= 2;
         // First cycle is idle
         match (scycle - 1) & 0x7 {
             // if on a visible scanline
@@ -442,6 +440,12 @@ impl Background {
             },
             _ => {},
         }
+    }
+
+    fn shift(&mut self) {
+        self.ltile_shift <<= 1;
+        self.htile_shift <<= 1;
+        self.attr_shift <<= 2;
     }
 
     fn set_shift_regs(&mut self, scroll: &Scroll) {
