@@ -183,9 +183,10 @@ impl Ppu {
                     }
                 }
             }
+            let big_sprites = self.sprite_big();
             if self.scanline < 240 && self.scanline > 0 &&
                self.oam.cycle(self.scycle, self.scanline as u8,
-                              &mut self.sprites) {
+                              &mut self.sprites, big_sprites) {
                 set_flag!(self.status, STATUS_SPRITE_OVERFLOW);
             }
         }
@@ -233,7 +234,11 @@ impl Ppu {
         // Get fine Y position
         let mut y_offset = W16!(W(self.scanline as u8) - sprite.y_pos);
         if sprite.flip_vertically() {
-            y_offset = W(7) - y_offset;
+            y_offset = W(if big_sprites {15} else {7}) - y_offset;
+        }
+        // With big sprites we need to jump to the next tile
+        if y_offset >= W(8) {
+            y_offset += W(8)
         }
         // Compose the table and the tile address with the fine Y position
         let address = if big_sprites {
@@ -594,7 +599,7 @@ impl Oam {
     }
 
     pub fn cycle(&mut self, cycles: usize, scanline: u8,
-                 spr_units: &mut [Sprite]) -> bool {
+                 spr_units: &mut [Sprite], big_sprites: bool) -> bool {
         if cycles == 0 {
             // Sprite zero hit for the current scanline was in the previous one
             self.zero_hit_now = self.zero_hit_next;
@@ -626,7 +631,7 @@ impl Oam {
                 // Copy the Y coordinate and test if in range
                 self.smem[self.ssprite] = self.read;
                 // If sprite is in range copy the rest, else go to the next one
-                if self.in_range(scanline) {
+                if self.in_range(scanline, big_sprites) {
                     // Sprite Zero Hit
                     if self.ssprite == 0 {
                         self.zero_hit_next = true;
@@ -640,7 +645,7 @@ impl Oam {
                 // 8 sprite limit reached, look for sprite overflow
                 if self.sprite.0 % 4 != 0 && !self.next_sprite {
                     self.sprite += W(1);
-                } else if self.in_range(scanline) {
+                } else if self.in_range(scanline, big_sprites) {
                     self.sprite += W(1);
                     self.next_sprite = false;
                     // Sprite overflow
@@ -670,7 +675,8 @@ impl Oam {
         return false;
     }
 
-    fn in_range(&self, scanline: u8) -> bool {
-        self.read < 0xF0 && self.read + 8 > scanline && self.read <= scanline
+    fn in_range(&self, scanline: u8, big_sprites: bool) -> bool {
+        let size = if big_sprites {16} else {8};
+        self.read < 0xF0 && self.read + size > scanline && self.read <= scanline
     }
 }
