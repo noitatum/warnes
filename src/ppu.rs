@@ -36,12 +36,10 @@ const STATUS_SPRITE_OVERFLOW    : u8 = 0x20;
 const STATUS_SPRITE_0_HIT       : u8 = 0x40;
 const STATUS_VBLANK             : u8 = 0x80;
 
-const PALETTE_SIZE          : usize = 0x20;
-const PALETTE_ADDRESS       : usize = 0x3f00;
+const PALETTE_SIZE              : usize = 0x20;
+const PALETTE_ADDRESS           : usize = 0x3f00;
 
-const PPU_ADDRESS_SPACE     : usize = 0x4000;
-const VBLANK_END            : u32 = 88740;
-const VBLANK_END_NO_RENDER  : u32 = 27902;
+const PPU_ADDRESS_SPACE         : usize = 0x4000;
 
 // Resolution
 pub const SCANLINE_WIDTH        : usize = 256;
@@ -199,7 +197,6 @@ impl Ppu {
                 set_flag!(self.status, STATUS_SPRITE_OVERFLOW);
             }
         }
-
         // VBLANK
         if self.scycle == 1 && self.scanline == 241 {
             set_flag!(self.status, STATUS_VBLANK);
@@ -210,24 +207,24 @@ impl Ppu {
             unset_flag!(self.status, STATUS_VBLANK);
         }
         // TODO
-        if !self.render_on() && self.cycles == VBLANK_END_NO_RENDER {}
         // When render is not activated the loop is shorter
+        // if !self.render_on() && self.cycles == VBLANK_END_NO_RENDER {}
+
+        // Reset values at the end of scanlines
         if self.scycle == 340 && self.scanline == 261 {
-            // reset scanline values and qty of cycles
             // TODO: Skip a cycle on odd frames and background on
             self.scycle = 0;
             self.scanline = 0;
             self.cycles = 0;
             self.frames += 1;
         } else if self.scycle == 340 {
-            // if we finished the current scanline we pass to the next one
+            // If we finished the current scanline we pass to the next one
             self.scanline += 1;
             self.scycle = 0;
         } else {
             self.scycle += 1;
             self.cycles += 1;
         }
-
         let read_regs = PpuReadRegs {
                 data    : self.data_buffer,
                 oam     : self.oam.load_data(),
@@ -285,7 +282,6 @@ impl Ppu {
         } else {
             table | (W16!(sprite.tile) << 4) | y_offset
         };
-        //let address = W(0x300) | fine_y;
         match (self.scycle - 1) % 8 {
             3 => sprite.latch = sprite.attributes.0,
             4 => sprite.counter = sprite.x_pos.0,
@@ -340,7 +336,9 @@ impl Ppu {
         } else if sprite_index != 0 && (back_index == 0 || sprite_front) {
             let full_index = sprite_palette * 4 + sprite_index as usize;
             color_id = self.palette[full_index];
-            if back_index != 0 && sprite_front && index == Some(0) {
+            // We have a sprite pixel, we should check for sprite 0 hit
+            if self.oam.sprite_zero_hit() && index == Some(0) &&
+               back_index != 0 && sprite_front && self.scycle != 256 {
                 self.status |= STATUS_SPRITE_0_HIT;
             }
         }
@@ -518,27 +516,31 @@ impl Sprite {
 }
 
 struct Oam {
-    mem         : [u8; 0x100],
-    smem        : [u8; 0x20],
-    sprite      : W<u8>,
-    ssprite     : usize,
-    count       : usize,
-    address     : W<u8>,
-    read        : u8,
-    next_sprite : bool,
+    mem             : [u8; 0x100],
+    smem            : [u8; 0x20],
+    sprite          : W<u8>,
+    ssprite         : usize,
+    count           : usize,
+    address         : W<u8>,
+    read            : u8,
+    next_sprite     : bool,
+    zero_hit_now    : bool,
+    zero_hit_next   : bool,
 }
 
 impl Default for Oam {
     fn default() -> Oam {
         Oam {
-            mem         : [0; 0x100],
-            smem        : [0; 0x20],
-            sprite      : W(0),
-            ssprite     : 0,
-            count       : 0,
-            address     : W(0),
-            read        : 0,
-            next_sprite : false,
+            mem             : [0; 0x100],
+            smem            : [0; 0x20],
+            sprite          : W(0),
+            ssprite         : 0,
+            count           : 0,
+            address         : W(0),
+            read            : 0,
+            next_sprite     : false,
+            zero_hit_now    : false,
+            zero_hit_next   : false,
         }
     }
 }
@@ -571,9 +573,17 @@ impl Oam {
         self.count
     }
 
+    // If Sprite Zero did hit
+    fn sprite_zero_hit(&self) -> bool {
+        self.zero_hit_now
+    }
+
     pub fn cycle(&mut self, cycles: usize, scanline: u8,
                  spr_units: &mut [Sprite]) -> bool {
         if cycles == 0 {
+            // Sprite zero hit for the current scanline was in the previous one
+            self.zero_hit_now = self.zero_hit_next;
+            self.zero_hit_next = false;
             self.sprite = W(0);
             self.ssprite = 0;
             return false;
@@ -602,6 +612,10 @@ impl Oam {
                 self.smem[self.ssprite] = self.read;
                 // If sprite is in range copy the rest, else go to the next one
                 if self.in_range(scanline) {
+                    // Sprite Zero Hit
+                    if self.ssprite == 0 {
+                        self.zero_hit_next = true;
+                    }
                     self.ssprite += 1;
                     self.sprite += W(1);
                 } else {
