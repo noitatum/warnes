@@ -538,10 +538,10 @@ impl Sprite {
 struct Oam {
     mem             : [u8; 0x100],
     smem            : [u8; 0x20],
-    sprite          : W<u8>,
-    ssprite         : usize,
-    count           : usize,
+    mem_index       : W<u8>,
+    smem_index      : usize,
     address         : W<u8>,
+    count           : usize,
     read            : u8,
     next_sprite     : bool,
     zero_hit_now    : bool,
@@ -553,10 +553,10 @@ impl Default for Oam {
         Oam {
             mem             : [0; 0x100],
             smem            : [0; 0x20],
-            sprite          : W(0),
-            ssprite         : 0,
-            count           : 0,
+            mem_index       : W(0),
+            smem_index      : 0,
             address         : W(0),
+            count           : 0,
             read            : 0,
             next_sprite     : false,
             zero_hit_now    : false,
@@ -604,8 +604,8 @@ impl Oam {
             // Sprite zero hit for the current scanline was in the previous one
             self.zero_hit_now = self.zero_hit_next;
             self.zero_hit_next = false;
-            self.sprite = W(0);
-            self.ssprite = 0;
+            self.mem_index = W(0);
+            self.smem_index = 0;
             return false;
         }
         let cycles = cycles - 1;
@@ -619,41 +619,41 @@ impl Oam {
         } else if cycles < 256 {
             // Read on even cycles
             if cycles % 2 == 0 {
-                self.read = self.mem[self.sprite.0 as usize];
+                self.read = self.mem[self.mem_index.0 as usize];
                 return false;
             }
-            if self.ssprite % 4 != 0 {
+            if self.smem_index % 4 != 0 {
                 // Copy the rest of the sprite data when previous was in range
-                self.smem[self.ssprite] = self.read;
-                self.ssprite += 1;
-                self.sprite += W(1);
-            } else if self.ssprite < 0x20 {
+                self.smem[self.smem_index] = self.read;
+                self.smem_index += 1;
+                self.mem_index += W(1);
+            } else if self.smem_index < 0x20 {
                 // Copy the Y coordinate and test if in range
-                self.smem[self.ssprite] = self.read;
+                self.smem[self.smem_index] = self.read;
                 // If sprite is in range copy the rest, else go to the next one
                 if self.in_range(scanline, big_sprites) {
                     // Sprite Zero Hit
-                    if self.ssprite == 0 {
+                    if self.smem_index == 0 {
                         self.zero_hit_next = true;
                     }
-                    self.ssprite += 1;
-                    self.sprite += W(1);
+                    self.smem_index += 1;
+                    self.mem_index += W(1);
                 } else {
-                    self.sprite += W(4);
+                    self.mem_index += W(4);
                 }
             } else {
                 // 8 sprite limit reached, look for sprite overflow
-                if self.sprite.0 % 4 != 0 && !self.next_sprite {
-                    self.sprite += W(1);
+                if self.mem_index.0 % 4 != 0 && !self.next_sprite {
+                    self.mem_index += W(1);
                 } else if self.in_range(scanline, big_sprites) {
-                    self.sprite += W(1);
+                    self.mem_index += W(1);
                     self.next_sprite = false;
                     // Sprite overflow
                     return true;
                 } else {
                     // Emulate hardware bug, add 5 instead of 4
                     // FIXME: I think there shouldn't be a carry from bit 1 to 2
-                    self.sprite += W(5);
+                    self.mem_index += W(5);
                     self.next_sprite = true;
                 }
             }
@@ -661,15 +661,15 @@ impl Oam {
             // Set index to 0 at start so we can copy to the sprite units.
             // Set also the count to the amount of sprites we have found
             if cycles == 256 {
-                self.sprite = W(0);
-                self.count = self.ssprite / 4;
+                self.count = self.smem_index / 4;
+                self.smem_index = 0;
             }
             // Fill up to eight sprite units with data
-            if cycles & 4 == 0 && (self.sprite.0 as usize) < self.ssprite {
-                let data = W(self.smem[self.sprite.0 as usize]);
-                let sprite = &mut spr_units[(self.sprite.0 / 4) as usize];
-                sprite.set_sprite_info(cycles % 4, data);
-                self.sprite += W(1);
+            if cycles & 4 == 0 && self.smem_index < self.count * 4 {
+                let data = W(self.smem[self.smem_index]);
+                let sprite = &mut spr_units[self.smem_index / 4];
+                sprite.set_sprite_info(self.smem_index % 4, data);
+                self.smem_index += 1;
             }
         }
         return false;
