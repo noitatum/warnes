@@ -276,9 +276,9 @@ impl Ppu {
         if sprite.flip_vertically() {
             y_offset = W(7) - y_offset;
         }
-        // Compose the table, and the tile address with the fine Y position
+        // Compose the table and the tile address with the fine Y position
         let address = if big_sprites {
-            (W16!(W(sprite.tile.0.rotate_right(1))) << 4) | y_offset
+            (W16!(W(sprite.tile.0.rotate_right(1))) << 5) | y_offset
         } else {
             table | (W16!(sprite.tile) << 4) | y_offset
         };
