@@ -43,7 +43,8 @@ pub struct Cpu {
 
 impl Cpu {
     pub fn reset(&mut self, memory: &mut Mem) {
-        *self = Cpu::default();
+        self.exec = Execution::default();
+        self.dma = DMA::default();
         self.regs.reset(memory);
         self.exec.load_operation(memory, &mut self.regs);
     }
@@ -252,6 +253,8 @@ impl Default for Regs {
 impl Regs {
 
     pub fn reset(&mut self, memory: &mut Mem) {
+        set_flag!(self.P, FLAG_INTERRUPT);
+        self.SP -= W(3);
         self.PC = memory.load_word(ADDRESS_RESET);
     }
 
