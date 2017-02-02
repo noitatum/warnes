@@ -12,7 +12,7 @@ const FINE_Y_MASK      : W<u16> = W(0x7000);
 const HORIZONTAL_MASK  : W<u16> = W(0x041F);
 const VERTICAL_MASK    : W<u16> = W(0x7BE0);
 const BG_OFFSET_FLAG   : W<u8>  = W(0x10);
-const INCREMENT_FLAG   : W<u8>  = W(0x40);
+const INCREMENT_FLAG   : W<u8>  = W(0x04);
 
 /* Coarse is 5 upper bits of a scroll (Byte selection)
  * Fine is 3 lower bits of a scroll (Pixel selection inside byte)
