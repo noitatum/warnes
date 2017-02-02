@@ -5,7 +5,7 @@ const NT_SIZE   : usize = 0x400;
 
 pub fn mirror(address: usize, horizontal: bool) -> usize {
     let high = (address - 0x2000) >> 10;
-    ((if horizontal {high / 2} else {high % 2}) << 10) + address & (NT_SIZE - 1)
+    ((if horizontal {high / 2} else {high % 2}) << 10) + (address & NT_SIZE - 1)
 }
 
 pub trait Mapper {
