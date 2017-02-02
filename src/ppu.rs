@@ -156,7 +156,7 @@ impl Ppu {
                     // This syncs with sprite evaluation in oam
                     self.fetch_sprite(memory);
                 }
-                // At prerender scanline we have to reset the sprite 0 hit
+                // At dot 1 of prerender we need to unset the sprite bits
                 (1, 261) => {
                     self.status &= !(STATUS_SPRITE_0_HIT |
                                      STATUS_SPRITE_OVERFLOW);
@@ -183,8 +183,9 @@ impl Ppu {
                     }
                 }
             }
+            // OAM works at rendering lines
             let big_sprites = self.sprite_big();
-            if self.scanline < 240 && self.scanline > 0 &&
+            if self.scanline < 240 &&
                self.oam.cycle(self.scycle, self.scanline as u8,
                               &mut self.sprites, big_sprites) {
                 set_flag!(self.status, STATUS_SPRITE_OVERFLOW);
@@ -409,7 +410,7 @@ impl fmt::Debug for Ppu {
 
 #[derive(Copy, Clone, Default)]
 struct Background {
-    ltile_shift      : u16,
+    ltile_shift     : u16,
     htile_shift     : u16,
     attr_shift      : u32,
     next_ltile      : W<u8>,
