@@ -142,34 +142,29 @@ impl Ppu {
         if self.render_on() {
             match (self.scycle, self.scanline) {
                 // Idle scanlines
-                (_, 240...260) => {},
+                (_, 240...260) => (),
                 // Last scanline, updates vertical scroll
-                (280...304, 261) => {
-                    self.address.copy_vertical();
-                },
+                (280...304, 261) => self.address.copy_vertical(),
                 // Dot 257 updates horizontal scroll
-                (257, _) => {
-                    self.address.copy_horizontal();
-                }
+                (257, _) => self.address.copy_horizontal(),
                 // Overlaps with above but nothing really happens in 257
                 (257...320, _) => {
                     // This syncs with sprite evaluation in oam
                     self.fetch_sprite(memory);
                 }
                 // At dot 1 of prerender we need to unset the sprite bits
-                (1, 261) => {
-                    self.status &= !(STATUS_SPRITE_0_HIT |
-                                     STATUS_SPRITE_OVERFLOW);
-                }
+                (1, 261) => self.status &= !(STATUS_SPRITE_0_HIT |
+                                             STATUS_SPRITE_OVERFLOW),
                 // Idle cycles
-                (0, _) | (337...340, _) => {},
+                (0, _) | (337...340, _) => (),
                 _ => {
+                    // These are fetching scanlines, including prerender
                     // (1...256 + 321..336, 0...239 + 261)
                     if self.scycle < 257 && self.scanline != 261 {
                         self.draw_dot();
                         // Decrement sprite counters or shift their tile data
                         for s in self.sprites.iter_mut() {
-                            s.decrement_or_shift()
+                            s.decrement_or_shift();
                         }
                     }
                     self.background.shift();
