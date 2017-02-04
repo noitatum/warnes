@@ -125,7 +125,11 @@ impl Execution {
 
     pub fn load_operation(&mut self, memory: &mut Mem, regs: &mut Regs) {
         self.operation = if let Some(interrupt) = memory.get_interrupt() {
-            Operation::from_interrupt(memory, interrupt)
+            if interrupt == Interrupt::IRQ && regs.no_irq() {
+                Operation::from_address(memory, regs.PC)
+            } else {
+                Operation::from_interrupt(memory, interrupt)
+            }
         } else {
             Operation::from_address(memory, regs.PC)
         };
@@ -263,6 +267,10 @@ impl Regs {
         self.push_word(memory, pc);
         self.push_flags(memory);
         self.PC = memory.load_word(address);
+    }
+
+    pub fn no_irq(&self) -> bool {
+        self.P & FLAG_INTERRUPT > W(0)
     }
 
     fn pop(&mut self, memory: &mut Mem) -> W<u8> {
