@@ -3,9 +3,12 @@ use std::num::Wrapping as W;
 const VRAM_SIZE : usize = 0x800;
 const NT_SIZE   : usize = 0x400;
 
-pub fn mirror(address: usize, horizontal: bool) -> usize {
-    let high = (address - 0x2000) >> 10;
-    ((if horizontal {high / 2} else {high % 2}) << 10) + (address & NT_SIZE - 1)
+pub fn hmirror(address: usize) -> usize {
+    (((address >> 11) & 1) << 10) + (address & NT_SIZE - 1)
+}
+
+pub fn vmirror(address: usize) -> usize {
+    address & VRAM_SIZE - 1
 }
 
 pub trait Mapper {
@@ -116,7 +119,7 @@ impl Mapper for Pirate225 {
     fn chr_load(&mut self, vram: &mut[u8], address: W<u16>) -> u8 {
         let addr = address.0 as usize;
         if addr >= 0x2000 {
-            vram[mirror(addr, self.hmirror)]
+            vram[if self.hmirror {hmirror(addr)} else {vmirror(addr)}]
         } else {
             self.mem.chr_rom[self.chr_bank + addr]
         }
@@ -125,7 +128,7 @@ impl Mapper for Pirate225 {
     fn chr_store(&mut self, vram: &mut[u8], address: W<u16>, value: u8) {
         let addr = address.0 as usize;
         if addr >= 0x2000 {
-            vram[mirror(addr, self.hmirror)] = value;
+            vram[if self.hmirror {hmirror(addr)} else {vmirror(addr)}] = value;
         }
     }
 
@@ -138,7 +141,7 @@ impl Mapper for Pirate225 {
 
     fn prg_store(&mut self, address: W<u16>, value: u8) {
         if address >= W(0x8000) {
-            // Select 8k bank
+            // Select PPU 8k bank and 32k or 16k
             let addr = address.0 as usize;
             self.prg_small = (addr & 0x1000) >> 12;
             self.chr_bank = (addr & 0x3F) << 13;
