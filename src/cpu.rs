@@ -246,7 +246,7 @@ impl Default for Regs {
             X   : W(0),
             Y   : W(0),
             P   : W(0x24),
-            SP  : W(0xFD),
+            SP  : W(0),
             PC  : W(0),
         }
     }
