@@ -274,13 +274,13 @@ impl Ppu {
             if let Some(index) = index {
                 let sprite = &self.sprites[index];
                 let sprite_front = sprite.get_priority();
+                // We have a sprite pixel, we should check for sprite 0 hit
+                if self.oam.sprite_zero_hit() && index == 0 &&
+                   back_index != 0 && self.scycle != 256 {
+                    self.status |= STATUS_SPRITE_0_HIT;
+                }
                 if sprite_front || back_index == 0 {
                     color_index = self.palette[sprite.get_palette_index()];
-                    // We have a sprite pixel, we should check for sprite 0 hit
-                    if self.oam.sprite_zero_hit() && index == 0 &&
-                       back_index != 0 && sprite_front && self.scycle != 256 {
-                        self.status |= STATUS_SPRITE_0_HIT;
-                    }
                 }
             }
         }
@@ -629,7 +629,7 @@ impl Oam {
                 // If sprite is in range copy the rest, else go to the next one
                 if self.in_range(scanline, big_sprites) {
                     // Sprite Zero Hit
-                    if self.smem_index == 0 {
+                    if self.mem_index == W(0) {
                         self.zero_hit_next = true;
                     }
                     self.smem_index += 1;
