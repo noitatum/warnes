@@ -228,7 +228,7 @@ pub struct Addressing {
     pub name        : &'static str,
 }
 
-#[derive(Clone, Copy)]
+#[derive(Default, Clone, Copy)]
 #[allow(non_snake_case)]
 pub struct Regs {
     pub A           : W<u8>,    // Accumulator
@@ -237,19 +237,6 @@ pub struct Regs {
     pub P           : W<u8>,    // Status
     pub SP          : W<u8>,    // Stack pointer
     pub PC          : W<u16>,   // Program counter
-}
-
-impl Default for Regs {
-    fn default() -> Regs {
-        Regs {
-            A   : W(0),
-            X   : W(0),
-            Y   : W(0),
-            P   : W(0x24),
-            SP  : W(0),
-            PC  : W(0),
-        }
-    }
 }
 
 // Util functions
@@ -265,7 +252,9 @@ impl Regs {
     pub fn int(&mut self, memory: &mut Mem, address: W<u16>) {
         let pc = self.PC;
         self.push_word(memory, pc);
-        self.push_flags(memory);
+        // FLAG_BRK not set on interrupt
+        let flags = self.P | FLAG_PUSHED;
+        self.push(memory, flags);
         self.PC = memory.load_word(address);
     }
 
@@ -294,7 +283,7 @@ impl Regs {
     }
 
     fn push_flags(&mut self, memory: &mut Mem) {
-        // Two bits are set on memory when pushing flags
+        // Two bits are set on memory when pushing flags with instructions
         let flags = self.P | FLAG_PUSHED | FLAG_BRK;
         self.push(memory, flags);
     }
