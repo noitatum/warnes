@@ -1,4 +1,4 @@
-# RNES
+# Warnes
 NES Emulator written in Rust
 
 ## How to compile

@@ -39,13 +39,13 @@ const HEIGHT : u32 = 240;
 
 fn sdl() -> Result<(Renderer<'static>, EventPump), Box<Error>> {
     let context = sdl2::init()?;
-    let window = context.video()?.window("RNES", WIDTH, HEIGHT)
+    let window = context.video()?.window("Warnes", WIDTH, HEIGHT)
                                  .position_centered().resizable().build()?;
     let renderer = window.renderer().present_vsync().build()?;
     Ok((renderer, context.event_pump()?))
 }
 
-fn rnes() -> Result<(), String> {
+fn warnes() -> Result<(), String> {
     let args: Vec<String> = env::args().collect();
     if args.len() < 2 || args.len() > 3 {
        return err!("Invalid parameter count");
@@ -88,14 +88,14 @@ fn rnes() -> Result<(), String> {
 }
 
 fn main() {
-    match rnes() {
+    match warnes() {
         Ok(()) => {
-            println!("Exiting RNES.");
+            println!("Exiting Warnes.");
             std::process::exit(0);
         },
         Err(err) => {
             println!("Error: {}", err);
-            println!("Usage: rnes ROM_FILE [debug]");
+            println!("Usage: warnes ROM_FILE [debug]");
             std::process::exit(1);
         },
     };
