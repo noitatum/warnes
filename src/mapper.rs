@@ -139,7 +139,7 @@ impl Mapper for Pirate225 {
         self.mem.prg_rom[self.prg_bank + (addr & mask)]
     }
 
-    fn prg_store(&mut self, address: W<u16>, value: u8) {
+    fn prg_store(&mut self, address: W<u16>, _: u8) {
         if address >= W(0x8000) {
             // Select PPU 8k bank and 32k or 16k
             let addr = address.0 as usize;

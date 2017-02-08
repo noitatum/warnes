@@ -5,8 +5,6 @@ use cpu::Operation;
 use std::io;
 use std::io::Write;
 
-const DEBUG_LIST_SIZE   : u32 = 5;
-
 pub fn run(nes: &mut Nes) {
     let mut command : Vec<String> = vec![String::from("")];
     nes.reset();

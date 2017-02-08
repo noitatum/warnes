@@ -1,4 +1,4 @@
-static reverse_byte_table : [u8; 256] = [
+static REVERSE_BYTE_TABLE : [u8; 256] = [
     0x00, 0x80, 0x40, 0xC0, 0x20, 0xA0, 0x60, 0xE0,
     0x10, 0x90, 0x50, 0xD0, 0x30, 0xB0, 0x70, 0xF0,
     0x08, 0x88, 0x48, 0xC8, 0x28, 0xA8, 0x68, 0xE8,
@@ -34,7 +34,7 @@ static reverse_byte_table : [u8; 256] = [
 ];
 
 pub fn reverse_byte(byte: u8) -> u8 {
-    reverse_byte_table[byte as usize]
+    REVERSE_BYTE_TABLE[byte as usize]
 }
 
 pub fn print_mem(output: &mut String, mem: &[u8]) {

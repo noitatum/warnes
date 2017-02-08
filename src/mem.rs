@@ -10,8 +10,6 @@ use std::fmt;
 
 const RAM_SIZE  : usize = 0x800;
 const VRAM_SIZE : usize = 0x800;
-const GAMEPAD1  : W<u16> = W(0x4016);
-const GAMEPAD2  : W<u16> = W(0x4017);
 
 pub struct Memory {
     ram                 : [u8; RAM_SIZE],
@@ -98,17 +96,6 @@ impl Memory {
 
     pub fn set_joy_key(&mut self, index: usize, key: u8) {
         self.joy_key[index] = key;
-    }
-
-    pub fn load_no_side_effect(&mut self, address: W<u16>) -> W<u8> {
-        let mem_load_status  = self.mem_load_status;
-        let mem_store_status = self.mem_store_status;
-        let io_load_status   = self.io_load_status;
-        let value = self.load(address);
-        self.mem_load_status  = mem_load_status;
-        self.mem_store_status = mem_store_status;
-        self.io_load_status   = io_load_status;
-        value
     }
 }
 

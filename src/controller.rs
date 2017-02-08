@@ -3,9 +3,6 @@ extern crate sdl2;
 // NES
 use mem::Memory;
 use enums::IoState;
-use loadstore::LoadStore;
-// std
-use std::num::Wrapping as W;
 
 pub struct GamePad {
     index       : usize,

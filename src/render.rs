@@ -1,4 +1,3 @@
-use sdl2::rect::Point;
 use sdl2::render::Renderer;
 use sdl2::surface::Surface;
 use sdl2::pixels::PixelFormatEnum;
@@ -40,6 +39,6 @@ pub fn render_frame(renderer: &mut Renderer, frame: &[Scanline]) {
     let surface = Surface::from_data(&mut pixels, w, h, w * PIXEL_BYTES as u32,
                                      PixelFormatEnum::RGB24).unwrap();
     let texture = renderer.create_texture_from_surface(surface).unwrap();
-    renderer.copy(&texture, None, None);
+    renderer.copy(&texture, None, None).unwrap();
     renderer.present();
 }

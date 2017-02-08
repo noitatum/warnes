@@ -1,5 +1,5 @@
 #[cfg(test)]
-mod tests {
+mod test {
     // nes
     use nes::Nes;
 
@@ -37,5 +37,4 @@ mod tests {
             nes.step();
         }
     }
-
 }

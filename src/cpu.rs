@@ -194,7 +194,7 @@ impl Operation {
         }
     }
 
-    pub fn from_interrupt(memory: &mut Mem, interrupt: Interrupt) -> Operation {
+    pub fn from_interrupt(_: &mut Mem, interrupt: Interrupt) -> Operation {
         let address = match interrupt {
             Interrupt::NMI => ADDRESS_NMI,
             Interrupt::IRQ => ADDRESS_IRQ,

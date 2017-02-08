@@ -22,15 +22,7 @@ macro_rules! tile_bit {
 }
 
 const CTRL_SPRITE_PATTERN       : u8 = 0x08;
-const CTRL_BACKGROUND_PATTERN   : u8 = 0x10;
-const CTRL_PPU_SLAVE_MASTER     : u8 = 0x40;
 const CTRL_NMI                  : u8 = 0x80;
-
-const MASK_GRAYSCALE            : u8 = 0x01;
-// set = show bacgrkound in leftmost 8 pixels of screen
-const MASK_SHOW_BACKGROUND_LEFT : u8 = 0x02;
-// set = show sprites in leftmost 8 pixels of screens
-const MASK_SHOW_SPRITES_LEFT    : u8 = 0x04;
 
 const STATUS_SPRITE_OVERFLOW    : u8 = 0x20;
 const STATUS_SPRITE_0_HIT       : u8 = 0x40;
@@ -38,8 +30,6 @@ const STATUS_VBLANK             : u8 = 0x80;
 
 const PALETTE_SIZE              : usize = 0x20;
 const PALETTE_ADDRESS           : usize = 0x3f00;
-
-const PPU_ADDRESS_SPACE         : usize = 0x4000;
 
 // Resolution
 pub const SCANLINE_WIDTH        : usize = 256;
@@ -85,26 +75,18 @@ pub struct Ppu {
     palette         : [u8; PALETTE_SIZE],
     oam             : Oam,
     address         : Scroll,
-
     // Registers
     ctrl            : u8,
     mask            : u8,
     status          : u8,
     data_buffer     : u8,
-
     // Scanline should count up until the total numbers of scanlines (262)
     scanline        : usize,
-    // while scanline width goes up to 340 and visible pixels
-    // ie drawn pixels start at 0 and go up to 256 width (240 scanlines)
+    // Each scanline has 341 cycles
     scycle          : usize,
     cycles          : u32,
-
-    // oam index for rendering
-    oam_index       : W<u16>,
-    // for sprite rendering
     sprites         : [Sprite; 0x08],
     background      : Background,
-
     frames          : u64,
     frame_data      : Box<[Scanline]>,
 }
@@ -126,7 +108,6 @@ impl Ppu {
             scycle          : 0,
             cycles          : 0,
 
-            oam_index       : W(0),
             sprites         : [Sprite::default(); 8],
             background      : Background::default(),
 
@@ -264,7 +245,7 @@ impl Ppu {
     fn draw_dot(&mut self) {
         let fine_x = self.address.get_fine_x();
         // Assume we are going to draw the background or the back color
-        let mut back_index = self.background.get_palette_index(fine_x);
+        let back_index = self.background.get_palette_index(fine_x);
         let mut color_index = self.palette[back_index];
         if self.show_sprites() {
             // Amount of sprites in this scanline
