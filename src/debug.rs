@@ -29,7 +29,7 @@ pub fn run(nes: &mut Nes) {
                 step(nes);
             },
             // Single cycle
-            "si"|"stepi"|"ni"|"nexti" => {
+            "cycle" => {
                 step_cycle(nes);
             },
             "c"|"continue" => {
@@ -141,16 +141,18 @@ fn print_list(nes: &mut Nes, count: u32) {
 }
 */
 
-fn print_reg(nes: &Nes, word: &str) {
-    println!("{}: {:x}", word.trim(), get_reg(nes, word));
+fn print_reg(nes: &Nes, reg: &str) {
+    let ureg = reg.to_uppercase();
+    println!("{}: {:x}", ureg, get_reg(nes, ureg.as_ref()));
 }
 
-fn print_reg_binary(nes: &Nes, word: &str) {
-    println!("{}: {:b}", word.trim(), get_reg(nes, word));
+fn print_reg_binary(nes: &Nes, reg: &str) {
+    let ureg = reg.to_uppercase();
+    println!("{}: {:b}", ureg, get_reg(nes, ureg.as_ref()));
 }
 
-fn get_reg(nes: &Nes, word: &str) -> u16 {
-    match word.trim().to_string().to_uppercase().as_ref() {
+fn get_reg(nes: &Nes, reg: &str) -> u16 {
+    match reg {
         "A"     => nes.cpu().registers().A.0 as u16,
         "X"     => nes.cpu().registers().X.0 as u16,
         "Y"     => nes.cpu().registers().Y.0 as u16,
@@ -164,10 +166,12 @@ fn get_reg(nes: &Nes, word: &str) -> u16 {
 fn help() {
     println!("Help commands");
     println!("'c' or 'continue' to continue the execution.");
-    println!("'n', 'next', 'step' or 'step' to do execute the next instruction or do a single cpu cycle.");
+    println!("'s', 'step', to execute next instruction");
+    println!("'n', 'next', to execute next instruction over function calls");
+    println!("'cycle', to execute a single cycle");
     println!("'b' or 'breakpoint' for breakpoints (NOT IMPLEMENTED YET).");
-    println!("'q' or 'quit' to quit.");
     println!("'l' or 'list' to show the next instructions to be executed");
     println!("'p' plus a register name to show the value of the register (ex: p A).");
     println!("'pb' to show that value in binary (ex: pb A).");
+    println!("'q' or 'quit' to quit.");
 }
