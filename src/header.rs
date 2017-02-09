@@ -17,8 +17,10 @@ const INES_BAT_RAM_SIZE     : usize = 0x2000;
 const NES2_SIGN_MASK        : u8 = 0xC0;
 const NES2_SIGNATURE        : u8 = 0x80;
 
+const FLAGS_VMIRROR         : u8 = 0x01;
 const FLAGS_BATTERY         : u8 = 0x02;
 const FLAGS_TRAINER         : u8 = 0x04;
+const FLAGS_4SCREEN         : u8 = 0x08;
 
 pub struct Header {
     rom_file     : File,
@@ -61,6 +63,7 @@ impl Header {
             chr_ram_size = INES_CHR_RAM_SIZE;
         }
         if flags & NES2_SIGN_MASK == NES2_SIGNATURE {
+            println!("Warning: iNES 2.0 header detected and not parsed");
             // TODO: NES 2.0 parsing
         }
         Ok(
@@ -106,6 +109,8 @@ impl Header {
                 chr_rom : chr_rom,
                 chr_ram : vec![0; self.chr_ram_size].into_boxed_slice(),
                 chr_bat : vec![0; self.chr_bat_size].into_boxed_slice(),
+                vmirror : is_flag_set!(self.flags, FLAGS_VMIRROR),
+                screen4 : is_flag_set!(self.flags, FLAGS_4SCREEN),
             }
         )
     }
