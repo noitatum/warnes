@@ -17,7 +17,6 @@ mod debug;
 mod enums;
 mod render;
 mod input;
-mod test;
 
 // std
 use std::env;
