@@ -28,7 +28,11 @@ impl GameMemory {
         if addr >= 0x2000 {
             vram[if self.vmirror {vmirror(addr)} else {hmirror(addr)}]
         } else {
-            self.chr_rom[bank + addr]
+            if self.chr_ram.len() > 0 {
+                self.chr_ram[bank + addr]
+            } else {
+                self.chr_rom[bank + addr]
+            }
         }
     }
 
@@ -36,6 +40,8 @@ impl GameMemory {
         let addr = addr.0 as usize;
         if addr >= 0x2000 {
             vram[if self.vmirror {vmirror(addr)} else {hmirror(addr)}] = value;
+        } else if self.chr_ram.len() > 0 {
+            self.chr_ram[addr] = value;
         }
     }
 
