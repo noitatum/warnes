@@ -243,9 +243,12 @@ impl Ppu {
     }
 
     fn draw_dot(&mut self) {
-        let fine_x = self.address.get_fine_x();
+        let mut back_index = 0;
+        if self.show_background() {
+            let fine_x = self.address.get_fine_x();
+            back_index = self.background.get_palette_index(fine_x);
+        }
         // Assume we are going to draw the background or the back color
-        let back_index = self.background.get_palette_index(fine_x);
         let mut color_index = self.palette[back_index];
         if self.show_sprites() {
             // Amount of sprites in this scanline
