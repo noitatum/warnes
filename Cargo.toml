@@ -5,5 +5,5 @@ authors = []
 
 [dependencies]
 
-sdl2 = "*"
+sdl2 = "0.29.0"
 time = "*"
